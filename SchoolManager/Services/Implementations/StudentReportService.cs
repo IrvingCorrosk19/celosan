@@ -285,7 +285,11 @@ namespace SchoolManager.Services.Implementations
                     pendingActivities = await _context.Activities
                         .Where(a => a.GroupId == studentAssignment.GroupId &&
                                     a.Trimester == selectedTrimester &&
-                                    !_context.StudentActivityScores.Any(s => s.ActivityId == a.Id && s.StudentId == studentId))
+                                    !_context.StudentActivityScores.Any(s =>
+                                        s.ActivityId == a.Id &&
+                                        s.StudentId == studentId &&
+                                        _context.StudentAssignments.Any(sa =>
+                                            sa.Id == s.StudentAssignmentId && sa.GroupId == a.GroupId)))
                         .Select(a => new PendingActivityDto
                         {
                             ActivityId = a.Id,
@@ -522,7 +526,11 @@ namespace SchoolManager.Services.Implementations
                 pendingActivities = await _context.Activities
                     .Where(a => a.GroupId == studentAssignment.GroupId &&
                                 a.Trimester == trimester &&
-                                !_context.StudentActivityScores.Any(s => s.ActivityId == a.Id && s.StudentId == studentId))
+                                !_context.StudentActivityScores.Any(s =>
+                                    s.ActivityId == a.Id &&
+                                    s.StudentId == studentId &&
+                                    _context.StudentAssignments.Any(sa =>
+                                        sa.Id == s.StudentAssignmentId && sa.GroupId == a.GroupId)))
                     .Select(a => new PendingActivityDto
                     {
                         ActivityId = a.Id,

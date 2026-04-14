@@ -54,6 +54,10 @@ namespace SchoolManager.Services.Implementations
                 {
                     assignment.IsActive = true;
                 }
+
+                if (string.IsNullOrWhiteSpace(assignment.EnrollmentType))
+                    assignment.EnrollmentType = "Regular";
+                assignment.StartDate ??= assignment.CreatedAt ?? DateTime.UtcNow;
                 
                 _context.StudentAssignments.Add(assignment);
                 Console.WriteLine($"[StudentAssignmentService] Entidad agregada al contexto");
@@ -104,7 +108,7 @@ namespace SchoolManager.Services.Implementations
                 query = query.Where(sa => sa.IsActive);
             }
             
-            return await query
+                return await query
                 .Select(sa => new StudentAssignment
                 {
                     Id = sa.Id,
@@ -114,7 +118,10 @@ namespace SchoolManager.Services.Implementations
                     ShiftId = sa.ShiftId,
                     IsActive = sa.IsActive,
                     EndDate = sa.EndDate,
-                    CreatedAt = sa.CreatedAt
+                    CreatedAt = sa.CreatedAt,
+                    AcademicYearId = sa.AcademicYearId,
+                    EnrollmentType = sa.EnrollmentType,
+                    StartDate = sa.StartDate
                 })
                 .OrderByDescending(sa => sa.CreatedAt) // Más recientes primero
                 .AsNoTracking()
@@ -147,7 +154,10 @@ namespace SchoolManager.Services.Implementations
                     ShiftId = sa.ShiftId,
                     IsActive = sa.IsActive,
                     EndDate = sa.EndDate,
-                    CreatedAt = sa.CreatedAt
+                    CreatedAt = sa.CreatedAt,
+                    AcademicYearId = sa.AcademicYearId,
+                    EnrollmentType = sa.EnrollmentType,
+                    StartDate = sa.StartDate
                 }).ToListAsync();
 
             return rows
@@ -155,27 +165,29 @@ namespace SchoolManager.Services.Implementations
                 .ToDictionary(g => g.Key, g => g.ToList());
         }
 
-        public async Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments)
+        public async Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments, bool replaceExistingActive = true)
         {
             try
             {
                 Console.WriteLine($"[StudentAssignmentService] Iniciando AssignAsync para StudentId: {studentId}");
                 
-                // MEJORADO: Inactivar solo asignaciones activas para preservar historial
-                var existing = await _context.StudentAssignments
-                    .Where(a => a.StudentId == studentId && a.IsActive)
-                    .ToListAsync();
-
-                Console.WriteLine($"[StudentAssignmentService] Encontradas {existing.Count} asignaciones activas existentes");
-
-                // Inactivar asignaciones existentes en lugar de eliminarlas
-                foreach (var assignment in existing)
+                if (replaceExistingActive)
                 {
-                    assignment.IsActive = false;
-                    assignment.EndDate = DateTime.UtcNow;
+                    // Inactivar todas las asignaciones activas (comportamiento histórico de “reemplazar matrícula”)
+                    var existing = await _context.StudentAssignments
+                        .Where(a => a.StudentId == studentId && a.IsActive)
+                        .ToListAsync();
+
+                    Console.WriteLine($"[StudentAssignmentService] Encontradas {existing.Count} asignaciones activas existentes");
+
+                    foreach (var assignment in existing)
+                    {
+                        assignment.IsActive = false;
+                        assignment.EndDate = DateTime.UtcNow;
+                    }
+
+                    _context.StudentAssignments.UpdateRange(existing);
                 }
-                
-                _context.StudentAssignments.UpdateRange(existing);
 
                 // MEJORADO: Obtener año académico activo una vez para todas las asignaciones
                 var student = await _context.Users.FindAsync(studentId);
@@ -188,6 +200,17 @@ namespace SchoolManager.Services.Implementations
                 {
                     Console.WriteLine($"[StudentAssignmentService] Agregando asignación: GradeId={item.GradeId}, GroupId={item.GroupId}");
                     
+                    if (!replaceExistingActive)
+                    {
+                        var dup = await _context.StudentAssignments.AnyAsync(sa =>
+                            sa.StudentId == studentId &&
+                            sa.GradeId == item.GradeId &&
+                            sa.GroupId == item.GroupId &&
+                            sa.IsActive);
+                        if (dup)
+                            continue;
+                    }
+
                     _context.StudentAssignments.Add(new StudentAssignment
                     {
                         Id = Guid.NewGuid(),
@@ -196,7 +219,9 @@ namespace SchoolManager.Services.Implementations
                         GroupId = item.GroupId,
                         IsActive = true, // Nueva asignación activa
                         AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTime.UtcNow,
+                        EnrollmentType = "Regular",
+                        StartDate = DateTime.UtcNow
                     });
                 }
 
@@ -218,12 +243,14 @@ namespace SchoolManager.Services.Implementations
             }
         }
 
-        public async Task RemoveAssignmentsAsync(Guid studentId)
+        public async Task RemoveAssignmentsAsync(Guid studentId, Guid? onlyAssignmentId = null)
         {
             // MEJORADO: Inactivar en lugar de eliminar para preservar historial
-            var activeAssignments = await _context.StudentAssignments
-                .Where(a => a.StudentId == studentId && a.IsActive)
-                .ToListAsync();
+            var query = _context.StudentAssignments.Where(a => a.StudentId == studentId && a.IsActive);
+            if (onlyAssignmentId.HasValue)
+                query = query.Where(a => a.Id == onlyAssignmentId.Value);
+
+            var activeAssignments = await query.ToListAsync();
 
             if (activeAssignments.Any())
             {
@@ -287,7 +314,9 @@ namespace SchoolManager.Services.Implementations
                     GroupId = groupId,
                     IsActive = true,
                     AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    EnrollmentType = "Regular",
+                    StartDate = DateTime.UtcNow
                 };
 
                 Console.WriteLine($"[StudentAssignmentService] Nueva asignación creada con CreatedAt: {assignment.CreatedAt}");
@@ -348,12 +377,52 @@ namespace SchoolManager.Services.Implementations
                         GroupId = group.Id,
                         IsActive = true,
                         AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTime.UtcNow,
+                        EnrollmentType = "Regular",
+                        StartDate = DateTime.UtcNow
                     });
                 }
             }
 
             await _context.SaveChangesAsync();
+        }
+
+        public async Task<bool> AddEnrollmentAsync(Guid studentId, Guid gradeId, Guid groupId, string enrollmentType = "Nocturno")
+        {
+            if (string.IsNullOrWhiteSpace(enrollmentType))
+                enrollmentType = "Nocturno";
+
+            var exists = await _context.StudentAssignments.AnyAsync(sa =>
+                sa.StudentId == studentId &&
+                sa.GradeId == gradeId &&
+                sa.GroupId == groupId &&
+                sa.IsActive);
+            if (exists)
+                return false;
+
+            var student = await _context.Users.FindAsync(studentId);
+            var schoolId = student?.SchoolId;
+            var activeAcademicYear = schoolId.HasValue
+                ? await _academicYearService.GetActiveAcademicYearAsync(schoolId.Value)
+                : null;
+
+            var group = await _context.Groups.FindAsync(groupId);
+
+            _context.StudentAssignments.Add(new StudentAssignment
+            {
+                Id = Guid.NewGuid(),
+                StudentId = studentId,
+                GradeId = gradeId,
+                GroupId = groupId,
+                ShiftId = group?.ShiftId,
+                IsActive = true,
+                AcademicYearId = activeAcademicYear?.Id,
+                CreatedAt = DateTime.UtcNow,
+                EnrollmentType = enrollmentType.Trim(),
+                StartDate = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+            return true;
         }
 
     }

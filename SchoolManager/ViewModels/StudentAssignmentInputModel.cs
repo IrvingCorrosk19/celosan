@@ -11,5 +11,8 @@
         public string Grupo { get; set; } = string.Empty;      // Nombre del grupo
         public string? Jornada { get; set; }  // Jornada: Mañana, Tarde, Noche
         public bool? Inclusivo { get; set; }  // Inclusivo (true, false, null)
+
+        /// <summary>Tipo de matrícula (Regular, Nocturno, Refuerzo, Libre). Opcional; por defecto Regular.</summary>
+        public string? TipoMatricula { get; set; }
     }
 }

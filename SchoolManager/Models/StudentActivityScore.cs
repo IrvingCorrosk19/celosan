@@ -11,6 +11,9 @@ public partial class StudentActivityScore
 
     public Guid StudentId { get; set; }
 
+    /// <summary>Matrícula (student_assignments) a la que pertenece la nota en este grupo/contexto.</summary>
+    public Guid StudentAssignmentId { get; set; }
+
     public Guid ActivityId { get; set; }
 
     public decimal? Score { get; set; }
@@ -30,6 +33,8 @@ public partial class StudentActivityScore
     public virtual School? School { get; set; }
 
     public virtual User Student { get; set; } = null!;
+
+    public virtual StudentAssignment? StudentAssignment { get; set; }
 
     public virtual AcademicYear? AcademicYear { get; set; }
 

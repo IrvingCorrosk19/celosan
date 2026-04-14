@@ -33,21 +33,65 @@ namespace SchoolManager.Services
             _documentStorage = documentStorage;
         }
 
+        private async Task<Guid?> ResolveStudentAssignmentIdAsync(Guid studentId, Guid? activityGroupId, Guid? activityGradeLevelId)
+        {
+            var q = _context.StudentAssignments.Where(sa => sa.StudentId == studentId && sa.IsActive);
+            if (activityGroupId.HasValue && activityGroupId.Value != Guid.Empty)
+                q = q.Where(sa => sa.GroupId == activityGroupId.Value);
+            if (activityGradeLevelId.HasValue && activityGradeLevelId.Value != Guid.Empty)
+                q = q.Where(sa => sa.GradeId == activityGradeLevelId.Value);
+            return await q
+                .OrderByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
+                .Select(sa => (Guid?)sa.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        private async Task<Guid> ResolveStudentAssignmentIdForGroupAsync(Guid studentId, Guid groupId, Guid gradeLevelId)
+        {
+            var id = await _context.StudentAssignments
+                .Where(sa => sa.StudentId == studentId && sa.IsActive && sa.GroupId == groupId && sa.GradeId == gradeLevelId)
+                .OrderByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
+                .Select(sa => (Guid?)sa.Id)
+                .FirstOrDefaultAsync();
+            if (!id.HasValue)
+                throw new InvalidOperationException(
+                    $"No hay matrícula activa para el estudiante {studentId} en el grado/grupo indicado (grupo {groupId}).");
+            return id.Value;
+        }
+
         /* ------------ 1. Guardar / actualizar notas ------------ */
         public async Task SaveAsync(IEnumerable<StudentActivityScoreCreateDto> scores)
         {
             foreach (var dto in scores)
             {
-                // Validar trimestre activo
-                await _trimesterService.ValidateTrimesterActiveAsync(dto.Trimester);
+                if (!string.IsNullOrEmpty(dto.Trimester))
+                    await _trimesterService.ValidateTrimesterActiveAsync(dto.Trimester);
+
+                Activity? activity = dto.ActivityId != Guid.Empty
+                    ? await _context.Activities.AsNoTracking().FirstOrDefaultAsync(a => a.Id == dto.ActivityId)
+                    : null;
+
+                Guid assignmentId;
+                if (dto.StudentAssignmentId.HasValue && dto.StudentAssignmentId.Value != Guid.Empty)
+                    assignmentId = dto.StudentAssignmentId.Value;
+                else if (activity != null)
+                {
+                    var rid = await ResolveStudentAssignmentIdAsync(dto.StudentId, activity.GroupId, activity.GradeLevelId);
+                    if (!rid.HasValue)
+                        throw new InvalidOperationException(
+                            $"No hay matrícula activa para el estudiante {dto.StudentId} en el contexto de la actividad {dto.ActivityId}.");
+                    assignmentId = rid.Value;
+                }
+                else
+                    throw new InvalidOperationException("Se requiere ActivityId o StudentAssignmentId para guardar la nota.");
 
                 var entity = await _context.StudentActivityScores
-                    .FirstOrDefaultAsync(s => s.StudentId == dto.StudentId &&
-                                              s.ActivityId == dto.ActivityId);
+                    .FirstOrDefaultAsync(s =>
+                        s.ActivityId == dto.ActivityId &&
+                        s.StudentAssignmentId == assignmentId);
 
                 if (entity is null)
                 {
-                    // MEJORADO: Obtener año académico activo para la nueva nota
                     var currentUserSchool = await _currentUserService.GetCurrentUserSchoolAsync();
                     var activeAcademicYear = currentUserSchool != null
                         ? await _academicYearService.GetActiveAcademicYearAsync(currentUserSchool.Id)
@@ -57,21 +101,20 @@ namespace SchoolManager.Services
                     {
                         Id = Guid.NewGuid(),
                         StudentId = dto.StudentId,
+                        StudentAssignmentId = assignmentId,
                         ActivityId = dto.ActivityId,
                         Score = dto.Score,
-                        AcademicYearId = activeAcademicYear?.Id // Asignar año académico si existe
+                        AcademicYearId = activeAcademicYear?.Id
                     };
-                    
-                    // Configurar campos de auditoría y SchoolId
+
                     await AuditHelper.SetAuditFieldsForCreateAsync(newScore, _currentUserService);
                     await AuditHelper.SetSchoolIdAsync(newScore, _currentUserService);
-                    
+
                     _context.StudentActivityScores.Add(newScore);
                 }
                 else
                 {
                     entity.Score = dto.Score;
-                    // Configurar campos de auditoría para actualización
                     await AuditHelper.SetAuditFieldsForUpdateAsync(entity, _currentUserService);
                 }
             }
@@ -116,20 +159,25 @@ namespace SchoolManager.Services
             var activityIds = headers.Select(h => h.Id).ToList();
 
             /* 2.2 Estudiantes asignados a ese grupo (StudentAssignments) */
+            var assignmentIdsInGroup = await _context.StudentAssignments
+                .Where(sa => sa.GroupId == groupId && sa.IsActive)
+                .Select(sa => sa.Id)
+                .ToListAsync();
+
             var studentIds = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == groupId)
+                .Where(sa => sa.GroupId == groupId && sa.IsActive)
                 .Select(sa => sa.StudentId)
                 .Distinct()
                 .ToListAsync();
 
-            var students = await _context.Students
-                .Where(s => studentIds.Contains(s.Id))
-                .Select(s => new { s.Id, s.Name })
+            var students = await _context.Users
+                .Where(u => studentIds.Contains(u.Id))
+                .Select(u => new { u.Id, Name = (u.Name ?? "").Trim() + " " + (u.LastName ?? "").Trim() })
                 .ToListAsync();
 
-            /* 2.3 Notas existentes */
+            /* 2.3 Notas existentes (por matrícula en este grupo) */
             var scores = await _context.StudentActivityScores
-                .Where(s => activityIds.Contains(s.ActivityId))
+                .Where(s => activityIds.Contains(s.ActivityId) && assignmentIdsInGroup.Contains(s.StudentAssignmentId))
                 .ToListAsync();
 
             /* 2.4 Pivotar alumnos × actividades */
@@ -146,7 +194,7 @@ namespace SchoolManager.Services
                 return new StudentGradeRowDto
                 {
                     StudentId = stu.Id,
-                    StudentName = stu.Name,
+                    StudentName = stu.Name.Trim(),
                     ScoresByActivity = dict
                 };
             });
@@ -260,30 +308,39 @@ namespace SchoolManager.Services
                 var activityIds = activityByKey.Values.Select(a => a.Id).Distinct().ToList();
                 var studentIds = registros.Select(r => r.StudentId).Distinct().ToList();
 
+                var assignmentCache = new Dictionary<(Guid StudentId, Guid GroupId, Guid GradeLevelId), Guid>();
+                foreach (var key in registros.Select(r => (r.StudentId, r.GroupId, r.GradeLevelId)).Distinct())
+                {
+                    var aid = await ResolveStudentAssignmentIdForGroupAsync(key.StudentId, key.GroupId, key.GradeLevelId);
+                    assignmentCache[key] = aid;
+                }
+
                 var existingScores = await _context.StudentActivityScores
                     .Where(s => activityIds.Contains(s.ActivityId) && studentIds.Contains(s.StudentId))
                     .ToListAsync();
 
-                var scoreByStudentActivity = existingScores.ToDictionary(s => (s.StudentId, s.ActivityId));
+                var scoreByAssignmentActivity = existingScores.ToDictionary(s => (s.StudentAssignmentId, s.ActivityId));
 
                 foreach (var dto in registros)
                 {
                     var activity = activityByKey[ActivityKey(dto)];
-                    var pair = (dto.StudentId, activity.Id);
+                    var assignmentId = assignmentCache[(dto.StudentId, dto.GroupId, dto.GradeLevelId)];
+                    var pair = (assignmentId, activity.Id);
 
-                    if (!scoreByStudentActivity.TryGetValue(pair, out var row))
+                    if (!scoreByAssignmentActivity.TryGetValue(pair, out var row))
                     {
                         row = new StudentActivityScore
                         {
                             Id = Guid.NewGuid(),
                             StudentId = dto.StudentId,
+                            StudentAssignmentId = assignmentId,
                             ActivityId = activity.Id,
                             Score = dto.Score,
                             AcademicYearId = activeAcademicYear?.Id,
                             CreatedAt = DateTime.UtcNow
                         };
                         _context.StudentActivityScores.Add(row);
-                        scoreByStudentActivity[pair] = row;
+                        scoreByAssignmentActivity[pair] = row;
                     }
                     else
                     {
@@ -310,11 +367,17 @@ namespace SchoolManager.Services
             if (notes.SubjectId == Guid.Empty || notes.GradeLevelId == Guid.Empty)
                 return new List<StudentNotaDto>();
 
-            // Obtener las notas existentes con información del estudiante
+            var enrollmentIds = await _context.StudentAssignments
+                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive)
+                .Select(sa => sa.Id)
+                .ToListAsync();
+
+            // Notas de matrículas activas en este grupo+grado (evita mezclar otro grupo del mismo estudiante)
             var notas = await _context.StudentActivityScores
                 .Include(sa => sa.Activity)
                 .Include(sa => sa.Student)
                 .Where(sa =>
+                    enrollmentIds.Contains(sa.StudentAssignmentId) &&
                     sa.Activity.TeacherId == notes.TeacherId &&
                     sa.Activity.SubjectId == notes.SubjectId &&
                     sa.Activity.GroupId == notes.GroupId &&
@@ -370,24 +433,37 @@ namespace SchoolManager.Services
 
             // 1. Obtener todos los estudiantes del grupo y grado usando solo User y StudentAssignment
             // Ordenar alfabéticamente por apellido primero, luego por nombre
+            var assignmentsInScope = await _context.StudentAssignments
+                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive)
+                .Select(sa => new { sa.Id, sa.StudentId })
+                .ToListAsync();
+            var enrollmentIds = assignmentsInScope.Select(a => a.Id).ToHashSet();
+            var assignmentIdsByStudent = assignmentsInScope
+                .GroupBy(a => a.StudentId)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToHashSet());
+
             var students = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId)
+                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive)
                 .Join(_context.Users,
                     sa => sa.StudentId,
                     u => u.Id,
                     (sa, u) => new { u.Id, u.Name, u.LastName, u.DocumentId })
+                .GroupBy(s => s.Id)
+                .Select(g => g.First())
                 .OrderBy(s => s.LastName)
                 .ThenBy(s => s.Name)
                 .ToListAsync();
 
-            // 2. Obtener todas las notas del grupo, materia, grado y docente
+            // 2. Notas del grupo/materia/docente restringidas a matrículas de este grupo+grado
             var notasPorTrimestre = await _context.StudentActivityScores
+                .Where(s => enrollmentIds.Contains(s.StudentAssignmentId))
                 .Join(_context.Activities,
                     score => score.ActivityId,
                     activity => activity.Id,
                     (score, activity) => new
                     {
                         StudentId = score.StudentId,
+                        StudentAssignmentId = score.StudentAssignmentId,
                         Score = score.Score,
                         Trimester = activity.Trimester,
                         ActivityType = activity.Type,
@@ -412,8 +488,9 @@ namespace SchoolManager.Services
             {
                 foreach (var trimestre in trimestres)
                 {
+                    var idsForStudent = assignmentIdsByStudent.GetValueOrDefault(student.Id) ?? new HashSet<Guid>();
                     var notasEstudianteTrimestre = notasPorTrimestre
-                        .Where(x => x.StudentId == student.Id && x.Trimester == trimestre)
+                        .Where(x => x.StudentId == student.Id && idsForStudent.Contains(x.StudentAssignmentId) && x.Trimester == trimestre)
                         .ToList();
 
                     var notasValidas = notasEstudianteTrimestre.Where(x => x.Score.HasValue).ToList();

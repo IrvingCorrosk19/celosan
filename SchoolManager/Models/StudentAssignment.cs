@@ -23,6 +23,12 @@ public partial class StudentAssignment
 
     public Guid? AcademicYearId { get; set; }
 
+    /// <summary>Tipo de matrícula: Regular, Nocturno, Refuerzo, Libre.</summary>
+    public string EnrollmentType { get; set; } = "Regular";
+
+    /// <summary>Inicio efectivo de esta matrícula (por defecto alineado con <see cref="CreatedAt"/>).</summary>
+    public DateTime? StartDate { get; set; }
+
     public virtual GradeLevel Grade { get; set; } = null!;
 
     public virtual Group Group { get; set; } = null!;

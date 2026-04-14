@@ -48,7 +48,7 @@ namespace SchoolManager.Controllers
         }
 
         [HttpPost("/StudentAssignment/UpdateGroupAndGrade")]
-        public async Task<IActionResult> UpdateGroupAndGrade(Guid studentId, Guid gradeId, Guid groupId)
+        public async Task<IActionResult> UpdateGroupAndGrade(Guid studentId, Guid gradeId, Guid groupId, bool additive = false)
         {
             if (studentId == Guid.Empty || gradeId == Guid.Empty || groupId == Guid.Empty)
                 return Json(new { success = false, message = "Datos inválidos para la asignación." });
@@ -70,10 +70,17 @@ namespace SchoolManager.Controllers
             if (group == null)
                 return Json(new { success = false, message = "Grupo no válido." });
 
-            // 1. Inactivar asignaciones activas (historial)
-            await _studentAssignmentService.RemoveAssignmentsAsync(studentId);
+            if (!additive)
+            {
+                await _studentAssignmentService.RemoveAssignmentsAsync(studentId);
+            }
+            else
+            {
+                var already = await _studentAssignmentService.ExistsAsync(studentId, gradeId, groupId);
+                if (already)
+                    return Json(new { success = true, message = "El estudiante ya tiene matrícula activa en ese grado y grupo." });
+            }
 
-            // 2. Nueva asignación (jornada alineada al grupo, como en carga masiva)
             var newAssignment = new StudentAssignment
             {
                 Id = Guid.NewGuid(),
@@ -82,11 +89,40 @@ namespace SchoolManager.Controllers
                 GroupId = groupId,
                 ShiftId = group.ShiftId,
                 CreatedAt = DateTime.UtcNow,
-                IsActive = true
+                IsActive = true,
+                EnrollmentType = additive ? "Nocturno" : "Regular",
+                StartDate = DateTime.UtcNow
             };
             await _studentAssignmentService.InsertAsync(newAssignment);
 
-            return Json(new { success = true, message = "Asignación actualizada correctamente." });
+            return Json(new { success = true, message = additive ? "Matrícula adicional agregada." : "Asignación actualizada correctamente." });
+        }
+
+        /// <summary>Agrega una matrícula activa sin quitar las demás (p. ej. estudiante nocturno en dos grupos).</summary>
+        [HttpPost("/StudentAssignment/AddEnrollment")]
+        public async Task<IActionResult> AddEnrollment(Guid studentId, Guid gradeId, Guid groupId, string? enrollmentType = null)
+        {
+            if (studentId == Guid.Empty || gradeId == Guid.Empty || groupId == Guid.Empty)
+                return Json(new { success = false, message = "Datos inválidos." });
+
+            var currentUser = await _currentUserService.GetCurrentUserAsync();
+            if (currentUser == null)
+                return Json(new { success = false, message = "Sesión no válida." });
+
+            var student = await _userService.GetByIdAsync(studentId);
+            if (student == null)
+                return Json(new { success = false, message = "Estudiante no encontrado." });
+
+            if (currentUser.SchoolId.HasValue && student.SchoolId.HasValue &&
+                currentUser.SchoolId != student.SchoolId)
+                return Json(new { success = false, message = "No puede modificar estudiantes de otra institución." });
+
+            var type = string.IsNullOrWhiteSpace(enrollmentType) ? "Nocturno" : enrollmentType.Trim();
+            var added = await _studentAssignmentService.AddEnrollmentAsync(studentId, gradeId, groupId, type);
+            if (!added)
+                return Json(new { success = false, message = "Ya existe una matrícula activa para ese grado y grupo." });
+
+            return Json(new { success = true, message = "Matrícula agregada correctamente." });
         }
 
         [HttpGet("/StudentAssignment/GetAvailableGradeGroups")]
@@ -204,8 +240,9 @@ namespace SchoolManager.Controllers
                         else
                             shiftName = "Sin jornada";
 
-                        // Formato: Grado - Grupo | Jornada: [Mañana/Tarde/Noche]
-                        return $"{gradeName} - {groupName} | Jornada: {shiftName}";
+                        var tipo = string.IsNullOrWhiteSpace(a.EnrollmentType) ? "Regular" : a.EnrollmentType;
+                        // Formato: Grado - Grupo | Jornada | Tipo de matrícula
+                        return $"{gradeName} - {groupName} | Jornada: {shiftName} | Matrícula: {tipo}";
                     })
                     .Distinct()
                     .ToList();
@@ -450,6 +487,7 @@ namespace SchoolManager.Controllers
                         continue;
                     }
 
+                    var tipoMatricula = string.IsNullOrWhiteSpace(item.TipoMatricula) ? "Regular" : item.TipoMatricula.Trim();
                     var assignment = new StudentAssignment
                     {
                         Id = Guid.NewGuid(),
@@ -457,7 +495,9 @@ namespace SchoolManager.Controllers
                         GradeId = grade.Id,
                         GroupId = group.Id,
                         ShiftId = shift?.Id, // Asignar jornada directamente a la asignación (similar a grado y grupo)
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTime.UtcNow,
+                        EnrollmentType = tipoMatricula,
+                        StartDate = DateTime.UtcNow
                     };
 
                     Console.WriteLine($"[SaveAssignments] Creando nueva asignación");

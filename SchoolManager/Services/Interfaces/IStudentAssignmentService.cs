@@ -11,11 +11,15 @@ public interface IStudentAssignmentService
     /// </summary>
     Task<Dictionary<Guid, List<StudentAssignment>>> GetActiveAssignmentsForCurrentSchoolAsync();
 
-    Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments);
+    Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments, bool replaceExistingActive = true);
 
     Task<bool> AssignStudentAsync(Guid studentId, Guid subjectId, Guid gradeId, Guid groupId); // ← NUEVO
 
-    Task RemoveAssignmentsAsync(Guid studentId);
+    /// <param name="onlyAssignmentId">Si tiene valor, solo se inactiva esa matrícula; si es null, todas las activas del estudiante.</param>
+    Task RemoveAssignmentsAsync(Guid studentId, Guid? onlyAssignmentId = null);
+
+    /// <summary>Agrega una matrícula activa sin inactivar las demás (estudiante en varios grupos).</summary>
+    Task<bool> AddEnrollmentAsync(Guid studentId, Guid gradeId, Guid groupId, string enrollmentType = "Nocturno");
 
     Task BulkAssignFromFileAsync(List<(string StudentEmail, string SubjectCode, string GradeName, string GroupName)> rows);
     Task<bool> ExistsAsync(Guid studentId, Guid gradeId, Guid groupId);

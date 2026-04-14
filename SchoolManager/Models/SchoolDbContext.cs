@@ -111,7 +111,7 @@ public partial class SchoolDbContext : DbContext
     {
         optionsBuilder.AddInterceptors(new DateTimeInterceptor());
         if (optionsBuilder.IsConfigured) return;
-        optionsBuilder.UseNpgsql("Host=dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com;Database=schoolmanagement_xqks;Username=admin;Password=2c2GygJl2ArUP5fKuFDsRtWFYC4NJdtk;Port=5432;SSL Mode=Require;Trust Server Certificate=true");
+        optionsBuilder.UseNpgsql("Host=dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com;Database=schoolmanager_daqf;Username=admin;Password=iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r;Port=5432;SSL Mode=Require;Trust Server Certificate=true");
     }
 
 
@@ -871,7 +871,7 @@ public partial class SchoolDbContext : DbContext
 
             entity.HasIndex(e => e.StudentId, "idx_scores_student");
 
-            entity.HasIndex(e => new { e.StudentId, e.ActivityId }, "uq_scores").IsUnique();
+            entity.HasIndex(e => new { e.StudentAssignmentId, e.ActivityId }, "uq_scores_assignment_activity").IsUnique();
 
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("gen_random_uuid()")
@@ -885,6 +885,12 @@ public partial class SchoolDbContext : DbContext
                 .HasPrecision(2, 1)
                 .HasColumnName("score");
             entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.StudentAssignmentId).HasColumnName("student_assignment_id");
+
+            entity.HasOne(d => d.StudentAssignment).WithMany()
+                .HasForeignKey(d => d.StudentAssignmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("student_activity_scores_student_assignment_id_fkey");
 
             entity.HasOne(d => d.Activity).WithMany(p => p.StudentActivityScores)
                 .HasForeignKey(d => d.ActivityId)
@@ -971,6 +977,15 @@ public partial class SchoolDbContext : DbContext
                 .HasConstraintName("fk_student");
 
             entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+
+            entity.Property(e => e.EnrollmentType)
+                .HasMaxLength(20)
+                .HasDefaultValue("Regular")
+                .HasColumnName("enrollment_type");
+            entity.Property(e => e.StartDate)
+                .HasColumnType("timestamp with time zone")
+                .HasColumnName("start_date");
+
             entity.HasIndex(e => e.AcademicYearId, "IX_student_assignments_academic_year_id");
             entity.HasIndex(e => new { e.StudentId, e.IsActive }, "IX_student_assignments_student_active");
             entity.HasIndex(e => new { e.StudentId, e.AcademicYearId }, "IX_student_assignments_student_academic_year");
