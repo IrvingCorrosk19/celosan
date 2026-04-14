@@ -1,6 +1,9 @@
 # Windows reserved device name (Git cannot index)
 SchoolManager/nul
 
+# Local DB dumps (do not commit)
+SchoolManager/backups/
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -361,6 +364,12 @@ FodyWeavers.xsd
 
 # Uploads directory (contains user uploaded files)
 wwwroot/uploads/
+SchoolManager/wwwroot/uploads/
+
+# Local tooling / artifacts under SchoolManager
+SchoolManager/.claude/settings.local.json
+SchoolManager/compile_verify_out/
+SchoolManager/Docs/*.dump
 
 # Environment specific files
 appsettings.Production.json
