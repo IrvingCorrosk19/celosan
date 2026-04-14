@@ -23,11 +23,11 @@ if (-not $psqlPath) {
 }
 
 # Datos de conexión a Render (mismos que en TestRenderConnection.ps1 / SchoolDbContext)
-$dbHost = "dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com"
+$dbHost = "dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com"
 $port = "5432"
-$database = "schoolmanagement_xqks"
+$database = "schoolmanager_daqf"
 $username = "admin"
-$password = "2c2GygJl2ArUP5fKuFDsRtWFYC4NJdtk"
+$password = "iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r"
 
 $env:PGPASSWORD = $password
 

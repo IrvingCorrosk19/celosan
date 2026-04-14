@@ -1,6 +1,6 @@
 -- =============================================================================
 -- Índices faltantes en RENDER (homologar con LOCAL)
--- Ejecutar en la base de datos de Render (schoolmanagement_xqks).
+-- Ejecutar en la base de datos de Render (schoolmanager_daqf).
 -- Usar CONCURRENTLY para no bloquear escrituras durante la creación.
 --
 -- IMPORTANTE: Cada CREATE INDEX CONCURRENTLY debe ejecutarse fuera de una

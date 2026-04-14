@@ -132,17 +132,17 @@ Celular: 6793-6212 / 6652-2823
 
 1,a2bFn852933
 
-host name dpg-d3jfdcb3fgac73cblbag-a
+host name dpg-d7erln5ckfvc73en9obg-a
 
-db schoolmanagement_xqks
+db schoolmanager_daqf
 
 user admin
 
-password 2c2GygJl2ArUP5fKuFDsRtWFYC4NJdtk
+password iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r
 
-internal postgresql://admin:2c2GygJl2ArUP5fKuFDsRtWFYC4NJdtk@dpg-d3jfdcb3fgac73cblbag-a/schoolmanagement_xqks
+internal postgresql://admin:iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r@dpg-d7erln5ckfvc73en9obg-a/schoolmanager_daqf
 
-external  postgresql://admin:2c2GygJl2ArUP5fKuFDsRtWFYC4NJdtk@dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com/schoolmanagement_xqks
+external  postgresql://admin:iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r@dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com/schoolmanager_daqf
 
 
 https://eduplaneriic-22ol.onrender.com/Home/Index
@@ -155,7 +155,7 @@ https://github.com/IrvingCorrosk19/EduplanerIIC
 https://eduplaneriic-22ol.onrender.com/Home/Index
 
 
-https://dashboard.render.com/d/dpg-d3jfdcb3fgac73cblbag-a
+https://dashboard.render.com/d/dpg-d7erln5ckfvc73en9obg-a
 
 https://dashboard.render.com/web/srv-d3jfsab3fgac73cbu6ug/deploys/dep-d3jfsaj3fgac73cbu760
 

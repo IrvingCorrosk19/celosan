@@ -17,7 +17,7 @@ Ejecutar el script en **ambas** bases (local y Render):
 psql "Host=localhost;Database=schoolmanagement;Username=postgres;Password=Panama2020$" -f Scripts/SyncEfMigrationsHistory.sql
 
 # Render (usa la cadena de conexión de Render)
-psql "Host=dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com;Database=schoolmanagement_xqks;Username=admin;Password=...;Port=5432;SSL Mode=Require" -f Scripts/SyncEfMigrationsHistory.sql
+psql "Host=dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com;Database=schoolmanager_daqf;Username=admin;Password=...;Port=5432;SSL Mode=Require" -f Scripts/SyncEfMigrationsHistory.sql
 ```
 
 O desde pgAdmin/DBeaver: abrir `Scripts/SyncEfMigrationsHistory.sql` y ejecutarlo contra cada base.

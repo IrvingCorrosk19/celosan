@@ -5,11 +5,11 @@ $psqlPath = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
 $pgDumpPath = "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe"
 
 # Datos de conexion a Render (PRODUCCION)
-$renderHost = "dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com"
+$renderHost = "dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com"
 $renderPort = "5432"
-$renderDatabase = "schoolmanagement_xqks"
+$renderDatabase = "schoolmanager_daqf"
 $renderUsername = "admin"
-$renderPassword = "2c2GygJl2ArUP5fKuFDsRtWFYC4NJdtk"
+$renderPassword = "iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r"
 
 # Datos de conexion LOCAL
 $localHost = "localhost"

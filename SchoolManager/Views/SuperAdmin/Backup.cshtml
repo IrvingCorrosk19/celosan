@@ -81,8 +81,8 @@
                     <h6 class="mb-3">Comando para crear respaldo:</h6>
                     <div class="bg-dark text-white p-3 rounded mb-3" style="font-family: monospace; font-size: 0.9rem;">
                         <code style="color: #00ff00;">
-                            pg_dump -h dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com<br>
-                            -U admin -d schoolmanagement_xqks<br>
+                            pg_dump -h dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com<br>
+                            -U admin -d schoolmanager_daqf<br>
                             -f backup_$(date +%Y%m%d_%H%M%S).sql
                         </code>
                     </div>
@@ -90,8 +90,8 @@
                     <h6 class="mt-4 mb-3">Para restaurar un respaldo:</h6>
                     <div class="bg-dark text-white p-3 rounded" style="font-family: monospace; font-size: 0.9rem;">
                         <code style="color: #00ff00;">
-                            psql -h dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com<br>
-                            -U admin -d schoolmanagement_xqks<br>
+                            psql -h dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com<br>
+                            -U admin -d schoolmanager_daqf<br>
                             -f backup_20241016_120000.sql
                         </code>
                     </div>
@@ -113,7 +113,7 @@
                             <h6 class="mb-3">Para crear un respaldo:</h6>
                             <ol>
                                 <li class="mb-2">Abre pgAdmin y conecta al servidor de Render</li>
-                                <li class="mb-2">Haz clic derecho en la base de datos <strong>schoolmanagement_xqks</strong></li>
+                                <li class="mb-2">Haz clic derecho en la base de datos <strong>schoolmanager_daqf</strong></li>
                                 <li class="mb-2">Selecciona <strong>Backup...</strong></li>
                                 <li class="mb-2">Elige la ubicación y nombre del archivo</li>
                                 <li class="mb-2">Selecciona el formato (Plain, Custom, Tar, Directory)</li>
@@ -147,8 +147,8 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <p><strong>Host:</strong> <code>dpg-d3jfdcb3fgac73cblbag-a.oregon-postgres.render.com</code></p>
-                            <p><strong>Base de Datos:</strong> <code>schoolmanagement_xqks</code></p>
+                            <p><strong>Host:</strong> <code>dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com</code></p>
+                            <p><strong>Base de Datos:</strong> <code>schoolmanager_daqf</code></p>
                             <p><strong>Usuario:</strong> <code>admin</code></p>
                         </div>
                         <div class="col-md-6">
