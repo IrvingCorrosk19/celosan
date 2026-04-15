@@ -23,6 +23,10 @@ public interface IStudentAssignmentService
 
     Task BulkAssignFromFileAsync(List<(string StudentEmail, string SubjectCode, string GradeName, string GroupName)> rows);
     Task<bool> ExistsAsync(Guid studentId, Guid gradeId, Guid groupId);
+
+    /// <summary>Matrícula activa mismo grado/grupo y misma jornada (null solo coincide con null).</summary>
+    Task<bool> ExistsWithShiftAsync(Guid studentId, Guid gradeId, Guid groupId, Guid? shiftId);
+
     Task InsertAsync(StudentAssignment assignment);
 
 

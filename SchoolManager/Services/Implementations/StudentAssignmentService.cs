@@ -95,6 +95,19 @@ namespace SchoolManager.Services.Implementations
                 sa.IsActive);
         }
 
+        public async Task<bool> ExistsWithShiftAsync(Guid studentId, Guid gradeId, Guid groupId, Guid? shiftId)
+        {
+            if (studentId == Guid.Empty || gradeId == Guid.Empty || groupId == Guid.Empty)
+                return false;
+
+            return await _context.StudentAssignments.AnyAsync(sa =>
+                sa.StudentId == studentId &&
+                sa.GradeId == gradeId &&
+                sa.GroupId == groupId &&
+                sa.IsActive &&
+                sa.ShiftId == shiftId);
+        }
+
 
         public async Task<List<StudentAssignment>> GetAssignmentsByStudentIdAsync(Guid studentId, bool activeOnly = true)
         {
@@ -392,14 +405,6 @@ namespace SchoolManager.Services.Implementations
             if (string.IsNullOrWhiteSpace(enrollmentType))
                 enrollmentType = "Nocturno";
 
-            var exists = await _context.StudentAssignments.AnyAsync(sa =>
-                sa.StudentId == studentId &&
-                sa.GradeId == gradeId &&
-                sa.GroupId == groupId &&
-                sa.IsActive);
-            if (exists)
-                return false;
-
             var student = await _context.Users.FindAsync(studentId);
             var schoolId = student?.SchoolId;
             var activeAcademicYear = schoolId.HasValue
@@ -407,6 +412,11 @@ namespace SchoolManager.Services.Implementations
                 : null;
 
             var group = await _context.Groups.FindAsync(groupId);
+            var shiftId = group?.ShiftId;
+
+            var exists = await ExistsWithShiftAsync(studentId, gradeId, groupId, shiftId);
+            if (exists)
+                return false;
 
             _context.StudentAssignments.Add(new StudentAssignment
             {

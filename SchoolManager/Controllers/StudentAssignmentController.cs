@@ -76,9 +76,9 @@ namespace SchoolManager.Controllers
             }
             else
             {
-                var already = await _studentAssignmentService.ExistsAsync(studentId, gradeId, groupId);
+                var already = await _studentAssignmentService.ExistsWithShiftAsync(studentId, gradeId, groupId, group.ShiftId);
                 if (already)
-                    return Json(new { success = true, message = "El estudiante ya tiene matrícula activa en ese grado y grupo." });
+                    return Json(new { success = true, message = "El estudiante ya tiene matrícula activa en ese grado, grupo y jornada." });
             }
 
             var newAssignment = new StudentAssignment
@@ -120,7 +120,7 @@ namespace SchoolManager.Controllers
             var type = string.IsNullOrWhiteSpace(enrollmentType) ? "Nocturno" : enrollmentType.Trim();
             var added = await _studentAssignmentService.AddEnrollmentAsync(studentId, gradeId, groupId, type);
             if (!added)
-                return Json(new { success = false, message = "Ya existe una matrícula activa para ese grado y grupo." });
+                return Json(new { success = false, message = "Ya existe una matrícula activa para ese grado, grupo y jornada del grupo." });
 
             return Json(new { success = true, message = "Matrícula agregada correctamente." });
         }
@@ -479,7 +479,7 @@ namespace SchoolManager.Controllers
 
                     Console.WriteLine($"[SaveAssignments] Verificando si existe asignación: StudentId={student.Id}, GradeId={grade.Id}, GroupId={group.Id}, ShiftId={shift?.Id}");
                     
-                    bool exists = await _studentAssignmentService.ExistsAsync(student.Id, grade.Id, group.Id);
+                    bool exists = await _studentAssignmentService.ExistsWithShiftAsync(student.Id, grade.Id, group.Id, shift?.Id);
                     if (exists)
                     {
                         Console.WriteLine($"[SaveAssignments] Asignación ya existe, saltando");

@@ -319,10 +319,6 @@
                 const asignaciones = [];
                 const errores = [];
                 let rowNumber = 1;
-                
-                // Arrays para validar duplicados
-                const emails = [];
-                const documentos = [];
 
                 $('#excelTable tbody tr').each(function () {
                     rowNumber++;
@@ -382,22 +378,6 @@
                         const emailRegex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
                         if (!emailRegex.test(estudiante)) {
                             camposFaltantes.push("Estudiante (Email con formato inválido)");
-                        } else {
-                            // Verificar correo duplicado
-                            if (emails.includes(estudiante.toLowerCase())) {
-                                camposFaltantes.push("Estudiante (Email duplicado)");
-                            } else {
-                                emails.push(estudiante.toLowerCase());
-                            }
-                        }
-                    }
-                    
-                    // Validar documento ID duplicado
-                    if (documentoId && documentoId.trim() !== "") {
-                        if (documentos.includes(documentoId.trim())) {
-                            camposFaltantes.push("Documento ID (duplicado)");
-                        } else {
-                            documentos.push(documentoId.trim());
                         }
                     }
 
