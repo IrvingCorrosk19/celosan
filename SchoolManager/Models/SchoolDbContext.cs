@@ -328,7 +328,14 @@ public partial class SchoolDbContext : DbContext
 
             entity.HasIndex(e => e.StudentId, "IX_attendance_student_id");
 
+            entity.HasIndex(e => e.StudentAssignmentId, "IX_attendance_student_assignment_id");
+
             entity.HasIndex(e => e.TeacherId, "IX_attendance_teacher_id");
+
+            entity.HasIndex(e => e.ShiftId, "IX_attendance_shift_id");
+
+            entity.HasIndex(e => new { e.StudentId, e.Date, e.GroupId, e.GradeId, e.ShiftId }, "ix_attendance_student_date_group_grade_shift")
+                .IsUnique();
 
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")
@@ -340,10 +347,12 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.Date).HasColumnName("date");
             entity.Property(e => e.GradeId).HasColumnName("grade_id");
             entity.Property(e => e.GroupId).HasColumnName("group_id");
+            entity.Property(e => e.ShiftId).HasColumnName("shift_id");
             entity.Property(e => e.Status)
                 .HasMaxLength(10)
                 .HasColumnName("status");
             entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.StudentAssignmentId).HasColumnName("student_assignment_id");
             entity.Property(e => e.TeacherId).HasColumnName("teacher_id");
 
             entity.HasOne(d => d.Grade).WithMany(p => p.Attendances)
@@ -357,6 +366,16 @@ public partial class SchoolDbContext : DbContext
             entity.HasOne(d => d.Student).WithMany(p => p.AttendanceStudents)
                 .HasForeignKey(d => d.StudentId)
                 .HasConstraintName("attendance_student_id_fkey");
+
+            entity.HasOne(d => d.StudentAssignment).WithMany()
+                .HasForeignKey(d => d.StudentAssignmentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("attendance_student_assignment_id_fkey");
+
+            entity.HasOne(d => d.Shift).WithMany()
+                .HasForeignKey(d => d.ShiftId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("attendance_shift_id_fkey");
 
             entity.HasOne(d => d.Teacher).WithMany(p => p.AttendanceTeachers)
                 .HasForeignKey(d => d.TeacherId)
@@ -2809,6 +2828,11 @@ public partial class SchoolDbContext : DbContext
                 .HasColumnName("afternoon_start_time");
             entity.Property(e => e.AfternoonBlockDurationMinutes).HasColumnName("afternoon_block_duration_minutes");
             entity.Property(e => e.AfternoonBlockCount).HasColumnName("afternoon_block_count");
+            entity.Property(e => e.NightStartTime)
+                .HasColumnType("time")
+                .HasColumnName("night_start_time");
+            entity.Property(e => e.NightBlockDurationMinutes).HasColumnName("night_block_duration_minutes");
+            entity.Property(e => e.NightBlockCount).HasColumnName("night_block_count");
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp with time zone")
                 .HasColumnName("created_at");

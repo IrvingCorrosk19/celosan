@@ -7,6 +7,6 @@ public interface IGroupService
     Task UpdateAsync(Group group);
     Task DeleteAsync(Guid id);
     Task<Group> GetOrCreateAsync(string name);
-    Task<Group?> GetByNameAndGradeAsync(string groupName);
+    Task<Group?> GetByNameAndGradeAsync(string groupName, Guid? schoolId = null, Guid? shiftId = null);
 
 }

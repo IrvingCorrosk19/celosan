@@ -367,10 +367,11 @@ namespace SchoolManager.Services
             if (notes.SubjectId == Guid.Empty || notes.GradeLevelId == Guid.Empty)
                 return new List<StudentNotaDto>();
 
-            var enrollmentIds = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive)
-                .Select(sa => sa.Id)
-                .ToListAsync();
+            var enrollmentQuery = _context.StudentAssignments
+                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive);
+            if (notes.ShiftId.HasValue && notes.ShiftId.Value != Guid.Empty)
+                enrollmentQuery = enrollmentQuery.Where(sa => sa.ShiftId == notes.ShiftId.Value);
+            var enrollmentIds = await enrollmentQuery.Select(sa => sa.Id).ToListAsync();
 
             // Notas de matrículas activas en este grupo+grado (evita mezclar otro grupo del mismo estudiante)
             var notas = await _context.StudentActivityScores
@@ -433,8 +434,11 @@ namespace SchoolManager.Services
 
             // 1. Obtener todos los estudiantes del grupo y grado usando solo User y StudentAssignment
             // Ordenar alfabéticamente por apellido primero, luego por nombre
-            var assignmentsInScope = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive)
+            var assignmentsQuery = _context.StudentAssignments
+                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive);
+            if (notes.ShiftId.HasValue && notes.ShiftId.Value != Guid.Empty)
+                assignmentsQuery = assignmentsQuery.Where(sa => sa.ShiftId == notes.ShiftId.Value);
+            var assignmentsInScope = await assignmentsQuery
                 .Select(sa => new { sa.Id, sa.StudentId })
                 .ToListAsync();
             var enrollmentIds = assignmentsInScope.Select(a => a.Id).ToHashSet();
@@ -442,8 +446,7 @@ namespace SchoolManager.Services
                 .GroupBy(a => a.StudentId)
                 .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToHashSet());
 
-            var students = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive)
+            var students = await assignmentsQuery
                 .Join(_context.Users,
                     sa => sa.StudentId,
                     u => u.Id,
@@ -479,8 +482,17 @@ namespace SchoolManager.Services
                            && (string.IsNullOrEmpty(notes.Trimester) || x.Trimester == notes.Trimester))
                 .ToListAsync();
 
-            // 3. Usar siempre los tres trimestres estándar
-            var trimestres = new List<string> { "1T", "2T", "3T" };
+            // 3. Tomar trimestres reales del período académico para evitar rigidez 1T/2T/3T
+            var trimestres = notasPorTrimestre
+                .Select(x => x.Trimester)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct()
+                .OrderBy(t => t)
+                .ToList();
+            if (trimestres.Count == 0 && !string.IsNullOrWhiteSpace(notes.Trimester))
+                trimestres.Add(notes.Trimester);
+            if (trimestres.Count == 0)
+                trimestres.AddRange(new[] { "1T", "2T", "3T" });
 
             // 4. Construir la lista de promedios por estudiante y trimestre
             var promedios = new List<PromedioFinalDto>();

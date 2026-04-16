@@ -84,6 +84,7 @@ public class OrientationReportController : Controller
                    {
                        GroupId = x.SubjectAssignment.GroupId,
                        GradeLevelId = x.SubjectAssignment.GradeLevelId,
+                       ShiftId = x.SubjectAssignment.Group != null ? x.SubjectAssignment.Group.ShiftId : null,
                        GroupName = x.SubjectAssignment.Group?.Name ?? "(Grupo)",
                        GradeLevelName = x.SubjectAssignment.GradeLevel?.Name ?? "(Grado)"
                    })

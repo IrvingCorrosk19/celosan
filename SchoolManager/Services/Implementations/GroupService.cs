@@ -14,11 +14,23 @@ public class GroupService : IGroupService
         _context = context;
         _currentUserService = currentUserService;
     }
-    public async Task<Group?> GetByNameAndGradeAsync(string groupName)
+    public async Task<Group?> GetByNameAndGradeAsync(string groupName, Guid? schoolId = null, Guid? shiftId = null)
     {
-        return await _context.Groups
-            .FirstOrDefaultAsync(g =>
-                g.Name.ToLower() == groupName.ToLower());
+        var normalized = groupName.Trim().ToLower();
+        var query = _context.Groups.Where(g => g.Name.ToLower() == normalized);
+        if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+            query = query.Where(g => g.SchoolId == schoolId.Value);
+        if (shiftId.HasValue && shiftId.Value != Guid.Empty)
+            query = query.Where(g => g.ShiftId == shiftId.Value);
+
+        var group = await query.FirstOrDefaultAsync();
+        if (group != null)
+            return group;
+
+        if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+            return await _context.Groups.FirstOrDefaultAsync(g => g.Name.ToLower() == normalized && g.SchoolId == schoolId.Value);
+
+        return await _context.Groups.FirstOrDefaultAsync(g => g.Name.ToLower() == normalized);
     }
         public async Task<Group> GetOrCreateAsync(string name)
         {

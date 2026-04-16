@@ -58,7 +58,7 @@ public class AttendanceService : IAttendanceService
             .ToListAsync();
     }
 
-    public async Task<List<Attendance>> GetHistorialAsync(Guid groupId, Guid gradeId, DateOnly? fechaInicio, DateOnly? fechaFin, Guid? studentId = null)
+    public async Task<List<Attendance>> GetHistorialAsync(Guid groupId, Guid gradeId, DateOnly? fechaInicio, DateOnly? fechaFin, Guid? studentId = null, Guid? shiftId = null)
     {
         var query = _context.Attendances
             .Where(a => a.GroupId == groupId && a.GradeId == gradeId);
@@ -72,16 +72,22 @@ public class AttendanceService : IAttendanceService
             query = query.Where(a => a.StudentId == studentId);
         }
 
+        if (shiftId.HasValue && shiftId.Value != Guid.Empty)
+        {
+            query = query.Where(a => a.ShiftId == shiftId);
+        }
+
         return await query
             .Include(a => a.Student)
             .Include(a => a.Group)
             .Include(a => a.Grade)
+            .Include(a => a.Shift)
             .OrderBy(a => a.Date)
             .ThenBy(a => a.Student.Name)
             .ToListAsync();
     }
 
-    public async Task<EstadisticasAsistenciaDto> GetEstadisticasAsync(Guid groupId, Guid gradeId, string trimestre, DateTime fechaInicio, DateTime fechaFin)
+    public async Task<EstadisticasAsistenciaDto> GetEstadisticasAsync(Guid groupId, Guid gradeId, string trimestre, DateTime fechaInicio, DateTime fechaFin, Guid? shiftId = null)
     {
         var fechaInicioOnly = DateOnly.FromDateTime(fechaInicio);
         var fechaFinOnly = DateOnly.FromDateTime(fechaFin);
@@ -94,6 +100,9 @@ public class AttendanceService : IAttendanceService
                 && a.Date >= fechaInicioOnly
                 && a.Date <= fechaFinOnly)
             .ToListAsync();
+
+        if (shiftId.HasValue && shiftId.Value != Guid.Empty)
+            asistencias = asistencias.Where(a => a.ShiftId == shiftId).ToList();
 
         var total = asistencias.Count;
         var totalPresentes = asistencias.Count(a => a.Status == "present");
@@ -146,6 +155,54 @@ public class AttendanceService : IAttendanceService
 
         foreach (var dto in attendances)
         {
+            StudentAssignment? matchedAssignment = null;
+            if (dto.StudentAssignmentId.HasValue && dto.StudentAssignmentId.Value != Guid.Empty)
+            {
+                matchedAssignment = await _context.StudentAssignments
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(sa => sa.Id == dto.StudentAssignmentId.Value && sa.IsActive);
+            }
+
+            if (matchedAssignment == null)
+            {
+                var assignmentsQuery = _context.StudentAssignments
+                    .AsNoTracking()
+                    .Where(sa =>
+                        sa.StudentId == dto.StudentId &&
+                        sa.GroupId == dto.GroupId &&
+                        sa.GradeId == dto.GradeId &&
+                        sa.IsActive);
+
+                if (dto.ShiftId.HasValue && dto.ShiftId.Value != Guid.Empty)
+                    assignmentsQuery = assignmentsQuery.Where(sa => sa.ShiftId == dto.ShiftId.Value);
+
+                matchedAssignment = await assignmentsQuery
+                    .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
+                    .FirstOrDefaultAsync();
+            }
+
+            var effectiveShiftId = dto.ShiftId;
+            if ((!effectiveShiftId.HasValue || effectiveShiftId == Guid.Empty) && matchedAssignment?.ShiftId != null)
+                effectiveShiftId = matchedAssignment.ShiftId;
+
+            var existingAttendance = await _context.Attendances.FirstOrDefaultAsync(a =>
+                a.StudentId == dto.StudentId &&
+                a.GroupId == dto.GroupId &&
+                a.GradeId == dto.GradeId &&
+                a.Date == dto.Date &&
+                a.ShiftId == effectiveShiftId);
+
+            if (existingAttendance != null)
+            {
+                existingAttendance.Status = dto.Status;
+                existingAttendance.TeacherId = dto.TeacherId;
+                existingAttendance.ShiftId = effectiveShiftId;
+                existingAttendance.StudentAssignmentId = matchedAssignment?.Id;
+                existingAttendance.UpdatedAt = DateTime.UtcNow;
+                await AuditHelper.SetAuditFieldsForUpdateAsync(existingAttendance, _currentUserService);
+                continue;
+            }
+
             var attendance = new Attendance
             {
                 Id = Guid.NewGuid(),
@@ -153,19 +210,28 @@ public class AttendanceService : IAttendanceService
                 TeacherId = dto.TeacherId,
                 GroupId = dto.GroupId,
                 GradeId = dto.GradeId,
+                ShiftId = effectiveShiftId,
+                StudentAssignmentId = matchedAssignment?.Id,
                 Date = dto.Date,
                 Status = dto.Status,
                 CreatedAt = DateTime.UtcNow
             };
+            await AuditHelper.SetAuditFieldsForCreateAsync(attendance, _currentUserService);
+            await AuditHelper.SetSchoolIdAsync(attendance, _currentUserService);
             _context.Attendances.Add(attendance);
         }
         await _context.SaveChangesAsync();
     }
 
-    public async Task<List<AttendanceResponseDto>> GetAttendancesByDateAsync(Guid groupId, Guid gradeId, DateOnly date)
+    public async Task<List<AttendanceResponseDto>> GetAttendancesByDateAsync(Guid groupId, Guid gradeId, DateOnly date, Guid? shiftId = null)
     {
-        return await _context.Attendances
-            .Where(a => a.GroupId == groupId && a.GradeId == gradeId && a.Date == date)
+        var query = _context.Attendances
+            .Where(a => a.GroupId == groupId && a.GradeId == gradeId && a.Date == date);
+
+        if (shiftId.HasValue && shiftId.Value != Guid.Empty)
+            query = query.Where(a => a.ShiftId == shiftId);
+
+        return await query
             .Include(a => a.Student)
             .Select(a => new AttendanceResponseDto
             {
@@ -188,7 +254,8 @@ public class AttendanceService : IAttendanceService
             filtro.GradeId,
             filtro.FechaInicio,
             filtro.FechaFin,
-            studentId
+            studentId,
+            filtro.ShiftId
         );
 
         var resultado = lista.Select(a => new {

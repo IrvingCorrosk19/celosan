@@ -386,6 +386,7 @@ namespace SchoolManager.Controllers
             if (asignaciones == null || asignaciones.Count == 0)
                 return BadRequest(new { success = false, message = "No se recibieron asignaciones." });
 
+            var currentSchoolId = await GetCurrentUserSchoolId();
             int insertadas = 0;
             int duplicadas = 0;
             int estudiantesCreados = 0;
@@ -419,7 +420,7 @@ namespace SchoolManager.Controllers
                             Status = "active",
                             CreatedAt = DateTime.UtcNow,
                             UpdatedAt = DateTime.UtcNow,
-                            SchoolId = await GetCurrentUserSchoolId(),
+                            SchoolId = currentSchoolId,
                             PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"), // Contraseña temporal por defecto hasheada
                             TwoFactorEnabled = false,
                             LastLogin = null,
@@ -451,7 +452,6 @@ namespace SchoolManager.Controllers
                     }
 
                     var grade = await _gradeLevelService.GetByNameAsync(item.Grado);
-                    var group = await _groupService.GetByNameAndGradeAsync(item.Grupo);
                     
                     // Buscar o crear jornada si se proporcionó (similar a grado y grupo)
                     Shift? shift = null;
@@ -460,15 +460,17 @@ namespace SchoolManager.Controllers
                         var jornadaNombre = item.Jornada.Trim();
                         shift = await _shiftService.GetOrCreateAsync(jornadaNombre);
                         
-                        // Si el grupo existe y no tiene jornada, asignarla al grupo
-                        if (group != null && (group.ShiftId == null || group.ShiftId != shift.Id))
-                        {
-                            group.ShiftId = shift.Id;
-                            group.Shift = shift.Name; // Mantener por compatibilidad
-                            group.UpdatedAt = DateTime.UtcNow;
-                            await _groupService.UpdateAsync(group);
-                            Console.WriteLine($"[SaveAssignments] Jornada '{shift.Name}' (ID: {shift.Id}) asignada al grupo {group.Name}");
-                        }
+                    }
+
+                    var group = await _groupService.GetByNameAndGradeAsync(item.Grupo, currentSchoolId, shift?.Id);
+                    // Si el grupo existe y no tiene jornada, asignarla al grupo
+                    if (group != null && shift != null && (group.ShiftId == null || group.ShiftId != shift.Id))
+                    {
+                        group.ShiftId = shift.Id;
+                        group.Shift = shift.Name; // Mantener por compatibilidad
+                        group.UpdatedAt = DateTime.UtcNow;
+                        await _groupService.UpdateAsync(group);
+                        Console.WriteLine($"[SaveAssignments] Jornada '{shift.Name}' (ID: {shift.Id}) asignada al grupo {group.Name}");
                     }
 
                     if (grade == null || group == null)

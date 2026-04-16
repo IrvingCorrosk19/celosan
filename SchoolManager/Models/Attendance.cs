@@ -17,6 +17,10 @@ public partial class Attendance
 
     public Guid? GradeId { get; set; }
 
+    public Guid? ShiftId { get; set; }
+
+    public Guid? StudentAssignmentId { get; set; }
+
     public DateOnly Date { get; set; }
 
     public string Status { get; set; } = null!;
@@ -35,7 +39,11 @@ public partial class Attendance
 
     public virtual School? School { get; set; }
 
+    public virtual Shift? Shift { get; set; }
+
     public virtual User? Student { get; set; }
+
+    public virtual StudentAssignment? StudentAssignment { get; set; }
 
     public virtual User? Teacher { get; set; }
 

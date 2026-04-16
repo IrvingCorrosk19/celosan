@@ -116,6 +116,32 @@
                         <div id="afternoonCalc" class="alert alert-secondary py-2 small mb-0 mt-2"></div>
 
                         <hr class="my-4" />
+                        <h5 class="mb-3">Noche (opcional)</h5>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label asp-for="NightStartTime" class="control-label">Hora de inicio</label>
+                                    <input asp-for="NightStartTime" type="text" class="form-control" value="@(Model.NightStartTime?.ToString("HH:mm"))" placeholder="18:00" pattern="([01]?[0-9]|2[0-3]):[0-5][0-9]" maxlength="5" />
+                                    <span asp-validation-for="NightStartTime" class="text-danger"></span>
+                                    <small class="form-text text-muted">Formato 24 h (ej. 18:00, 19:30)</small>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-group">
+                                    <label asp-for="NightBlockDurationMinutes" class="control-label">Duración (min)</label>
+                                    <input asp-for="NightBlockDurationMinutes" type="number" min="1" max="120" class="form-control" placeholder="45" />
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-group">
+                                    <label asp-for="NightBlockCount" class="control-label">Cantidad de bloques</label>
+                                    <input asp-for="NightBlockCount" type="number" min="0" max="20" class="form-control" placeholder="0" />
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-muted small">Deje vacío o 0 si no utiliza jornada nocturna.</p>
+
+                        <hr class="my-4" />
                         <div class="form-group">
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input" id="forceRegenerate" name="forceRegenerate" value="true" />
@@ -164,6 +190,9 @@
                 var aftStartEl = document.querySelector('input[name="AfternoonStartTime"]');
                 var aftDurEl = document.querySelector('input[name="AfternoonBlockDurationMinutes"]');
                 var aftCntEl = document.querySelector('input[name="AfternoonBlockCount"]');
+                var nightStartEl = document.querySelector('input[name="NightStartTime"]');
+                var nightDurEl = document.querySelector('input[name="NightBlockDurationMinutes"]');
+                var nightCntEl = document.querySelector('input[name="NightBlockCount"]');
                 var aftRecessHidden = document.querySelector('input[name="RecessAfterAfternoonBlockNumber"]');
                 if (!startInput || !durationInput || !countInput || !morningDiv) return;
                 var recessMin = Math.max(1, parseInt(recessInput && recessInput.value, 10) || 30);
@@ -215,9 +244,17 @@
                         afternoonExtra = '<br/><strong>Sin recreo entre clases de tarde</strong> (el número supera la cantidad de bloques de tarde o es igual). Fin de la última clase: <strong>' + formatMinutes(lastAftEndMin) + '</strong>.';
                     }
                 }
-                afternoonDiv.innerHTML = baseAfternoonLine + afternoonExtra;
+                var nightInfo = '';
+                var nCnt = parseInt(nightCntEl && nightCntEl.value, 10) || 0;
+                var nDur = parseInt(nightDurEl && nightDurEl.value, 10) || 0;
+                var nightStartMin = parseTime(nightStartEl && nightStartEl.value);
+                if (nightStartMin != null && nCnt > 0 && nDur > 0) {
+                    var nightEnd = nightStartMin + (nCnt * nDur) + ((Math.min(k, nCnt) < nCnt) ? recessMin : 0);
+                    nightInfo = '<br/><strong>Nocturna:</strong> inicia <strong>' + formatMinutes(nightStartMin) + '</strong> y finaliza aprox. <strong>' + formatMinutes(nightEnd) + '</strong>.';
+                }
+                afternoonDiv.innerHTML = baseAfternoonLine + afternoonExtra + nightInfo;
             }
-            document.querySelectorAll('input[name="MorningStartTime"], input[name="MorningBlockDurationMinutes"], input[name="MorningBlockCount"], input[name="RecessDurationMinutes"], input[name="RecessAfterMorningBlockNumber"], input[name="AfternoonStartTime"], input[name="AfternoonBlockDurationMinutes"], input[name="AfternoonBlockCount"]').forEach(function (el) {
+            document.querySelectorAll('input[name="MorningStartTime"], input[name="MorningBlockDurationMinutes"], input[name="MorningBlockCount"], input[name="RecessDurationMinutes"], input[name="RecessAfterMorningBlockNumber"], input[name="AfternoonStartTime"], input[name="AfternoonBlockDurationMinutes"], input[name="AfternoonBlockCount"], input[name="NightStartTime"], input[name="NightBlockDurationMinutes"], input[name="NightBlockCount"]').forEach(function (el) {
                 el.addEventListener('change', updateCalc);
                 el.addEventListener('input', updateCalc);
             });

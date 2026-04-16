@@ -52,6 +52,9 @@ public class ScheduleConfigurationService : IScheduleConfigurationService
         var afternoonActive = model.AfternoonStartTime.HasValue
             && (model.AfternoonBlockCount ?? 0) > 0
             && (model.AfternoonBlockDurationMinutes ?? 0) > 0;
+        var nightActive = model.NightStartTime.HasValue
+            && (model.NightBlockCount ?? 0) > 0
+            && (model.NightBlockDurationMinutes ?? 0) > 0;
 
         if (!afternoonActive)
         {
@@ -73,6 +76,16 @@ public class ScheduleConfigurationService : IScheduleConfigurationService
                 return (false, "Si configura jornada tarde, complete duración (min) y cantidad de bloques con valores mayores a 0.");
         }
 
+        // Noche: si pone hora de inicio, duración y cantidad deben ser ambas positivas
+        var hasNightStart = model.NightStartTime.HasValue;
+        var nightCount = model.NightBlockCount ?? 0;
+        var nightDuration = model.NightBlockDurationMinutes ?? 0;
+        if (hasNightStart && (nightCount > 0 || nightDuration > 0))
+        {
+            if (nightCount < 1 || nightDuration < 1)
+                return (false, "Si configura jornada nocturna, complete duración (min) y cantidad de bloques con valores mayores a 0.");
+        }
+
         // Tarde usa el mismo "después del bloque n.º" que mañana (misma duración de recreo), acotado a la cantidad de bloques de tarde.
         if (afternoonActive)
             model.RecessAfterAfternoonBlockNumber = model.RecessAfterMorningBlockNumber;
@@ -90,6 +103,16 @@ public class ScheduleConfigurationService : IScheduleConfigurationService
                 return (false,
                     $"Entre el fin de la última clase de mañana ({lastMorningClassEnd:HH:mm}) y el inicio de tarde debe haber al menos {model.RecessDurationMinutes} min de recreo (ahora hay {gapMinutes} min). Ajuste la hora de inicio de tarde o la configuración de bloques.");
             }
+        }
+
+        if (nightActive)
+        {
+            var nightStart = model.NightStartTime!.Value;
+            var comparisonStart = afternoonActive
+                ? model.AfternoonStartTime!.Value.AddMinutes((model.AfternoonBlockCount!.Value * model.AfternoonBlockDurationMinutes!.Value) + model.RecessDurationMinutes)
+                : lastMorningClassEnd;
+            if (nightStart <= comparisonStart)
+                return (false, "La jornada nocturna debe iniciar después de la jornada previa (mañana/tarde) para evitar solapamientos.");
         }
 
         var slotIds = await _context.TimeSlots
@@ -135,6 +158,9 @@ public class ScheduleConfigurationService : IScheduleConfigurationService
                 existing.AfternoonStartTime = model.AfternoonStartTime;
                 existing.AfternoonBlockDurationMinutes = model.AfternoonBlockDurationMinutes;
                 existing.AfternoonBlockCount = model.AfternoonBlockCount;
+                existing.NightStartTime = model.NightStartTime;
+                existing.NightBlockDurationMinutes = model.NightBlockDurationMinutes;
+                existing.NightBlockCount = model.NightBlockCount;
                 existing.UpdatedAt = now;
             }
             else
@@ -152,6 +178,9 @@ public class ScheduleConfigurationService : IScheduleConfigurationService
                     AfternoonStartTime = model.AfternoonStartTime,
                     AfternoonBlockDurationMinutes = model.AfternoonBlockDurationMinutes,
                     AfternoonBlockCount = model.AfternoonBlockCount,
+                    NightStartTime = model.NightStartTime,
+                    NightBlockDurationMinutes = model.NightBlockDurationMinutes,
+                    NightBlockCount = model.NightBlockCount,
                     CreatedAt = now,
                     UpdatedAt = now
                 });
@@ -169,6 +198,9 @@ public class ScheduleConfigurationService : IScheduleConfigurationService
             Shift? shiftTarde = null;
             if (afternoonActive)
                 shiftTarde = await _shiftService.GetOrCreateBySchoolAndNameAsync(schoolId, "Tarde");
+            Shift? shiftNoche = null;
+            if (nightActive)
+                shiftNoche = await _shiftService.GetOrCreateBySchoolAndNameAsync(schoolId, "Noche");
 
             var displayOrder = 0;
             var start = model.MorningStartTime;
@@ -292,6 +324,60 @@ public class ScheduleConfigurationService : IScheduleConfigurationService
                 {
                     for (var i = 1; i <= count; i++)
                         AddAfternoonClassBlock(i);
+                }
+            }
+
+            if (shiftNoche != null && model.NightStartTime.HasValue && (model.NightBlockCount ?? 0) > 0 && (model.NightBlockDurationMinutes ?? 0) > 0)
+            {
+                start = model.NightStartTime.Value;
+                var count = model.NightBlockCount!.Value;
+                var duration = model.NightBlockDurationMinutes!.Value;
+                var kNight = Math.Clamp(model.RecessAfterMorningBlockNumber, 1, count);
+
+                void AddNightClassBlock(int blockIndex1Based)
+                {
+                    var end = start.AddMinutes(duration);
+                    _context.TimeSlots.Add(new TimeSlot
+                    {
+                        Id = Guid.NewGuid(),
+                        SchoolId = schoolId,
+                        ShiftId = shiftNoche.Id,
+                        Name = $"Bloque {blockIndex1Based}",
+                        StartTime = start,
+                        EndTime = end,
+                        DisplayOrder = displayOrder++,
+                        IsActive = true,
+                        CreatedAt = now
+                    });
+                    start = end;
+                }
+
+                if (kNight < count)
+                {
+                    for (var i = 1; i <= kNight; i++)
+                        AddNightClassBlock(i);
+
+                    var recessEndNight = start.AddMinutes(recMin);
+                    _context.TimeSlots.Add(new TimeSlot
+                    {
+                        Id = Guid.NewGuid(),
+                        SchoolId = schoolId,
+                        ShiftId = shiftNoche.Id,
+                        Name = "Recreo",
+                        StartTime = start,
+                        EndTime = recessEndNight,
+                        DisplayOrder = displayOrder++,
+                        IsActive = true,
+                        CreatedAt = now
+                    });
+                    start = recessEndNight;
+                    for (var i = kNight + 1; i <= count; i++)
+                        AddNightClassBlock(i);
+                }
+                else
+                {
+                    for (var i = 1; i <= count; i++)
+                        AddNightClassBlock(i);
                 }
             }
 

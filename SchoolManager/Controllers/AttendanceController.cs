@@ -108,7 +108,7 @@ public class AttendanceController : Controller
             return BadRequest("Faltan datos para la consulta.");
 
         var estadisticas = await _attendanceService.GetEstadisticasAsync(
-            filtro.GroupId, filtro.GradeId, filtro.Trimestre, filtro.FechaInicio, filtro.FechaFin
+            filtro.GroupId, filtro.GradeId, filtro.Trimestre, filtro.FechaInicio, filtro.FechaFin, filtro.ShiftId
         );
         return Json(estadisticas);
     }

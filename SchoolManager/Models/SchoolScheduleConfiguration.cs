@@ -46,6 +46,12 @@ public class SchoolScheduleConfiguration
     public int? AfternoonBlockDurationMinutes { get; set; }
     public int? AfternoonBlockCount { get; set; }
 
+    /// <summary>Hora de inicio de la jornada nocturna (formato 24 h, ej. 18:00); null si no aplica.</summary>
+    [DisplayFormat(DataFormatString = "{0:HH:mm}", ApplyFormatInEditMode = true)]
+    public TimeOnly? NightStartTime { get; set; }
+    public int? NightBlockDurationMinutes { get; set; }
+    public int? NightBlockCount { get; set; }
+
     public DateTime? CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

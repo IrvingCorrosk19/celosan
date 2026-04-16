@@ -43,7 +43,10 @@ public class ScheduleConfigurationController : Controller
             RecessAfterAfternoonBlockNumber = 4,
             AfternoonStartTime = null,
             AfternoonBlockDurationMinutes = null,
-            AfternoonBlockCount = null
+            AfternoonBlockCount = null,
+            NightStartTime = null,
+            NightBlockDurationMinutes = null,
+            NightBlockCount = null
         };
         return View(model);
     }
@@ -67,6 +70,11 @@ public class ScheduleConfigurationController : Controller
             model.AfternoonStartTime = afternoonTime;
         else if (string.IsNullOrEmpty(afternoonStr))
             model.AfternoonStartTime = null;
+        var nightStr = Request.Form["NightStartTime"].ToString().Trim();
+        if (!string.IsNullOrEmpty(nightStr) && TimeOnly.TryParse(nightStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var nightTime))
+            model.NightStartTime = nightTime;
+        else if (string.IsNullOrEmpty(nightStr))
+            model.NightStartTime = null;
 
         var recessStr = Request.Form["RecessDurationMinutes"].ToString().Trim();
         if (!string.IsNullOrEmpty(recessStr) && int.TryParse(recessStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var recessMin))

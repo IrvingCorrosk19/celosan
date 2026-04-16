@@ -777,7 +777,7 @@
                                 {
                                     foreach (var group in subject.GroupGradePairs)
                                     {
-                                        var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}";
+                                        var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}|{group.ShiftId}";
                                         <option value="@value">@subject.SubjectName - @group.GradeLevelName @group.GroupName</option>
                                     }
                                 }
@@ -900,7 +900,7 @@
                                 {
                                     foreach (var group in subject.GroupGradePairs)
                                     {
-                                        var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}";
+                                        var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}|{group.ShiftId}";
                                         <option value="@value">@subject.SubjectName - @group.GradeLevelName @group.GroupName</option>
                                     }
                                 }
@@ -979,7 +979,7 @@
                                         {
                                             foreach (var group in subject.GroupGradePairs)
                                             {
-                                                var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}";
+                                                var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}|{group.ShiftId}";
                                                 var text = $"{subject.SubjectName} - {group.GradeLevelName} - {group.GroupName}";
                                                 <option value="@value">@text</option>
                                             }
@@ -1038,7 +1038,7 @@
                                         {
                                             foreach (var group in subject.GroupGradePairs)
                                             {
-                                                var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}";
+                                                var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}|{group.ShiftId}";
                                                 var text = $"{subject.SubjectName} - {group.GradeLevelName} - {group.GroupName}";
                                                 <option value="@value">@text</option>
                                             }
@@ -1174,7 +1174,7 @@
                                                     {
                                                         foreach (var group in subject.GroupGradePairs)
                                                         {
-                                                            var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}";
+                                                            var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}|{group.ShiftId}";
                                                             var text = $"{subject.SubjectName} - {group.GradeLevelName} - {group.GroupName}";
                                                             <option value="@value">@text</option>
                                                         }
@@ -1421,7 +1421,7 @@
                                         {
                                             foreach (var group in subject.GroupGradePairs)
                                             {
-                                                var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}";
+                                                var value = $"{subject.SubjectId}|{group.GroupId}|{group.GradeLevelId}|{group.ShiftId}";
                                                 var text = $"{subject.SubjectName} - {group.GradeLevelName} - {group.GroupName}";
                                                 <option value="@value">@text</option>
                                             }
@@ -2266,7 +2266,7 @@
                 const combo = $('#selGroupResumen').val();
                 if (!combo) return;
 
-                const [subjectId, groupId, gradeLevelId] = combo.split('|');
+                const [subjectId, groupId, gradeLevelId, shiftId] = combo.split('|');
 
                 $.ajax({
                     url: '/TeacherGradebook/GetPromediosFinales',
@@ -2839,7 +2839,7 @@
                     fecha ? $.ajax({
                         url: '/TeacherGradebook/GetAttendancesByDate',
                         method: 'GET',
-                        data: { groupId: groupId, gradeId: gradeLevelId, date: fecha }
+                        data: { groupId: groupId, gradeId: gradeLevelId, date: fecha, shiftId: shiftId || null }
                     }) : Promise.resolve([])
                 ]).then(([students, attendances]) => {
                     const asistenciaBody = $('#asistenciaBody');
@@ -2986,7 +2986,7 @@
                     return;
                 }
 
-                const [subjectId, groupId, gradeLevelId] = combo.split('|');
+                const [subjectId, groupId, gradeLevelId, shiftId] = combo.split('|');
                 const fecha = $('#fecha').val();
 
                 if (!fecha) {
@@ -3008,6 +3008,7 @@
                         teacherId: teacherId,
                         groupId: groupId,
                         gradeId: gradeLevelId,
+                        shiftId: shiftId || null,
                         date: fecha,
                         status: status
                     });
@@ -3089,6 +3090,7 @@
                     const parts = combo.split('|');
                     groupId = parts[1];
                     gradeId = parts[2];
+                    const shiftId = parts.length > 3 && parts[3] ? parts[3] : null;
                 if (!groupId || !gradeId) {
                     Swal.fire({
                         icon: 'error',
@@ -3111,6 +3113,7 @@
                     data: JSON.stringify({
                         groupId: groupId,
                         gradeId: gradeId,
+                        shiftId: shiftId,
                         fechaInicio: fechaInicio ? fechaInicio : null,
                         fechaFin: fechaFin ? fechaFin : null,
                         studentId: estudiante
@@ -3174,6 +3177,7 @@
                     const parts = combo.split('|');
                     groupId = parts[1];
                     gradeId = parts[2];
+                    const shiftId = parts.length > 3 && parts[3] ? parts[3] : null;
                 }
                 if (!groupId || !gradeId || !trimestre) {
                     Swal.fire({
@@ -3204,6 +3208,7 @@
                     data: JSON.stringify({
                         groupId: groupId,
                         gradeId: gradeId,
+                        shiftId: shiftId,
                         trimestre: trimestre,
                         fechaInicio: fechaInicio,
                         fechaFin: fechaFin

@@ -317,6 +317,7 @@ namespace SchoolManager.Controllers
                        {
                            GroupId = x.SubjectAssignment.GroupId,
                            GradeLevelId = x.SubjectAssignment.GradeLevelId,
+                           ShiftId = x.SubjectAssignment.Group != null ? x.SubjectAssignment.Group.ShiftId : null,
                            GroupName = x.SubjectAssignment.Group?.Name ?? "(Grupo)",
                            GradeLevelName = x.SubjectAssignment.GradeLevel?.Name ?? "(Grado)"
                        })
@@ -537,11 +538,11 @@ namespace SchoolManager.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAttendancesByDate(Guid groupId, Guid gradeId, DateOnly date)
+        public async Task<IActionResult> GetAttendancesByDate(Guid groupId, Guid gradeId, DateOnly date, Guid? shiftId = null)
         {
             try
             {
-                var attendances = await _attendanceService.GetAttendancesByDateAsync(groupId, gradeId, date);
+                var attendances = await _attendanceService.GetAttendancesByDateAsync(groupId, gradeId, date, shiftId);
                 return Ok(attendances);
             }
             catch (Exception ex)
