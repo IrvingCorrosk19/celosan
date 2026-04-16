@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 
@@ -49,7 +50,7 @@ public class QlServicesCarnetService : IQlServicesCarnetService
 
         return list.Select(a =>
         {
-            var active = a.Student.StudentAssignments.FirstOrDefault(sa => sa.IsActive);
+            var active = ActiveStudentAssignmentHelper.PickForDisplay(a.Student.StudentAssignments);
             return new PendingPrintItemDto
             {
                 StudentId = a.StudentId,

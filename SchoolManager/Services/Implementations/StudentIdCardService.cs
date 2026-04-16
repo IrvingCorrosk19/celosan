@@ -71,9 +71,22 @@ public class StudentIdCardService : IStudentIdCardService
                 x.LastName,
                 x.PhotoUrl,
                 HasActiveAssignment = x.StudentAssignments.Any(a => a.IsActive),
-                Grade = x.StudentAssignments.Where(a => a.IsActive).Select(a => a.Grade.Name).FirstOrDefault(),
-                Group = x.StudentAssignments.Where(a => a.IsActive).Select(a => a.Group.Name).FirstOrDefault(),
+                Grade = x.StudentAssignments.Where(a => a.IsActive)
+                    .OrderByDescending(a => a.EnrollmentType != null && a.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(a => a.Shift != null && a.Shift.Name != null && a.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
+                    .Select(a => a.Grade.Name)
+                    .FirstOrDefault(),
+                Group = x.StudentAssignments.Where(a => a.IsActive)
+                    .OrderByDescending(a => a.EnrollmentType != null && a.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(a => a.Shift != null && a.Shift.Name != null && a.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
+                    .Select(a => a.Group.Name)
+                    .FirstOrDefault(),
                 ShiftName = x.StudentAssignments.Where(a => a.IsActive)
+                    .OrderByDescending(a => a.EnrollmentType != null && a.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(a => a.Shift != null && a.Shift.Name != null && a.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
                     .Select(a => a.Shift != null ? a.Shift.Name : null)
                     .FirstOrDefault()
             })
@@ -163,7 +176,7 @@ public class StudentIdCardService : IStudentIdCardService
                 throw new Exception("El estudiante no ha pagado el carnet.");
             }
 
-            var activeAssignment = student.StudentAssignments.FirstOrDefault(x => x.IsActive);
+            var activeAssignment = ActiveStudentAssignmentHelper.PickForDisplay(student.StudentAssignments);
             if (activeAssignment == null)
             {
                 _logger.LogWarning(
@@ -297,12 +310,14 @@ public class StudentIdCardService : IStudentIdCardService
         }
 
         // SCALE-1: Query separada y filtrada para obtener solo la asignación activa con Grade/Group
-        var assignment = await _context.StudentAssignments
+        var assignmentCandidates = await _context.StudentAssignments
             .Include(a => a.Grade)
             .Include(a => a.Group)
             .Include(a => a.Shift)
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.StudentId == tokenRecord.StudentId && a.IsActive);
+            .Where(a => a.StudentId == tokenRecord.StudentId && a.IsActive)
+            .ToListAsync();
+        var assignment = ActiveStudentAssignmentHelper.PickForDisplay(assignmentCandidates);
 
         var studentAccountActive = string.Equals(
             tokenRecord.Student.Status?.Trim(),

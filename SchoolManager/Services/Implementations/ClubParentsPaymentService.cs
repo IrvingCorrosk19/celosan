@@ -59,8 +59,22 @@ public class ClubParentsPaymentService : IClubParentsPaymentService
             {
                 u.Id,
                 FullName = u.Name + " " + u.LastName,
-                Grade = u.StudentAssignments.Where(sa => sa.IsActive).Select(sa => sa.Grade.Name).FirstOrDefault() ?? "Sin asignar",
-                Group = u.StudentAssignments.Where(sa => sa.IsActive).Select(sa => sa.Group.Name).FirstOrDefault() ?? "Sin asignar"
+                Grade = u.StudentAssignments.Where(sa => sa.IsActive)
+                    .OrderByDescending(sa => gradeId.HasValue && sa.GradeId == gradeId.Value)
+                    .ThenByDescending(sa => groupId.HasValue && sa.GroupId == groupId.Value)
+                    .ThenByDescending(sa => sa.EnrollmentType != null && sa.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(sa => sa.Shift != null && sa.Shift.Name != null && sa.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
+                    .Select(sa => sa.Grade.Name)
+                    .FirstOrDefault() ?? "Sin asignar",
+                Group = u.StudentAssignments.Where(sa => sa.IsActive)
+                    .OrderByDescending(sa => gradeId.HasValue && sa.GradeId == gradeId.Value)
+                    .ThenByDescending(sa => groupId.HasValue && sa.GroupId == groupId.Value)
+                    .ThenByDescending(sa => sa.EnrollmentType != null && sa.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(sa => sa.Shift != null && sa.Shift.Name != null && sa.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
+                    .Select(sa => sa.Group.Name)
+                    .FirstOrDefault() ?? "Sin asignar"
             })
             .ToListAsync();
 

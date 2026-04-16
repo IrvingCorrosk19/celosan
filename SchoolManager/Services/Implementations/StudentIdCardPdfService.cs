@@ -204,7 +204,7 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
             .FirstOrDefaultAsync(u => u.Id == studentId)
             ?? throw new Exception("Estudiante no encontrado.");
 
-        var assignment = student.StudentAssignments.FirstOrDefault(a => a.IsActive)
+        var assignment = ActiveStudentAssignmentHelper.PickForDisplay(student.StudentAssignments)
             ?? throw new Exception("El estudiante no tiene asignación activa.");
 
         // PAY-GATE (última línea de defensa)

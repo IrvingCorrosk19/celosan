@@ -111,6 +111,9 @@ public class StudentIdCardController : Controller
                         .Count(x => x.SchoolId == s.Id && x.IsEnabled),
                     AcademicYearName = _context.StudentAssignments
                         .Where(a => a.StudentId == studentId && a.IsActive)
+                        .OrderByDescending(a => a.EnrollmentType != null && a.EnrollmentType.ToLower() == "nocturno")
+                        .ThenByDescending(a => a.Shift != null && a.Shift.Name != null && a.Shift.Name.ToLower().Contains("noche"))
+                        .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
                         .Select(a => a.AcademicYear == null ? null : a.AcademicYear.Name)
                         .FirstOrDefault()
                 })
@@ -188,6 +191,9 @@ public class StudentIdCardController : Controller
 
         var assign = await _context.StudentAssignments.AsNoTracking()
             .Where(sa => sa.StudentId == studentId && sa.IsActive)
+            .OrderByDescending(sa => sa.EnrollmentType != null && sa.EnrollmentType.ToLower() == "nocturno")
+            .ThenByDescending(sa => sa.Shift != null && sa.Shift.Name != null && sa.Shift.Name.ToLower().Contains("noche"))
+            .ThenByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
             .Select(sa => new
             {
                 Grade = sa.Grade.Name,
@@ -534,14 +540,32 @@ public class StudentIdCardController : Controller
                 photoUrl = u.PhotoUrl,
                 grade = u.StudentAssignments
                     .Where(sa => sa.IsActive)
+                    .OrderByDescending(sa => shiftFilter != null && sa.Shift != null && sa.Shift.Name == shiftFilter)
+                    .ThenByDescending(sa => gradeFilter != null && sa.Grade != null && sa.Grade.Name == gradeFilter)
+                    .ThenByDescending(sa => groupFilter != null && sa.Group != null && sa.Group.Name == groupFilter)
+                    .ThenByDescending(sa => sa.EnrollmentType != null && sa.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(sa => sa.Shift != null && sa.Shift.Name != null && sa.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
                     .Select(sa => sa.Grade.Name)
                     .FirstOrDefault() ?? "Sin asignar",
                 group = u.StudentAssignments
                     .Where(sa => sa.IsActive)
+                    .OrderByDescending(sa => shiftFilter != null && sa.Shift != null && sa.Shift.Name == shiftFilter)
+                    .ThenByDescending(sa => gradeFilter != null && sa.Grade != null && sa.Grade.Name == gradeFilter)
+                    .ThenByDescending(sa => groupFilter != null && sa.Group != null && sa.Group.Name == groupFilter)
+                    .ThenByDescending(sa => sa.EnrollmentType != null && sa.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(sa => sa.Shift != null && sa.Shift.Name != null && sa.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
                     .Select(sa => sa.Group.Name)
                     .FirstOrDefault() ?? "Sin asignar",
                 shift = u.StudentAssignments
                     .Where(sa => sa.IsActive)
+                    .OrderByDescending(sa => shiftFilter != null && sa.Shift != null && sa.Shift.Name == shiftFilter)
+                    .ThenByDescending(sa => gradeFilter != null && sa.Grade != null && sa.Grade.Name == gradeFilter)
+                    .ThenByDescending(sa => groupFilter != null && sa.Group != null && sa.Group.Name == groupFilter)
+                    .ThenByDescending(sa => sa.EnrollmentType != null && sa.EnrollmentType.ToLower() == "nocturno")
+                    .ThenByDescending(sa => sa.Shift != null && sa.Shift.Name != null && sa.Shift.Name.ToLower().Contains("noche"))
+                    .ThenByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
                     .Select(sa => sa.Shift != null ? sa.Shift.Name : null)
                     .FirstOrDefault() ?? "Sin jornada",
                 cardPrint = _context.StudentIdCards
