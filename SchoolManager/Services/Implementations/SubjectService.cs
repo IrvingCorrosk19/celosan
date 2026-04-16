@@ -33,6 +33,24 @@ public class SubjectService : ISubjectService
             .ToListAsync();
     }
 
+    public async Task<List<SubjectAssignment>> GetSubjectAssignmentsByStudentAsync(Guid studentId)
+    {
+        var subjectAssignmentIds = await _context.StudentSubjectAssignments
+            .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
+            .Select(ssa => ssa.SubjectAssignmentId)
+            .Distinct()
+            .ToListAsync();
+
+        return await _context.SubjectAssignments
+            .Include(sa => sa.Subject)
+            .Include(sa => sa.GradeLevel)
+            .Include(sa => sa.Group)
+            .Include(sa => sa.Area)
+            .Include(sa => sa.Specialty)
+            .Where(sa => subjectAssignmentIds.Contains(sa.Id))
+            .ToListAsync();
+    }
+
 
     public async Task<Subject> GetOrCreateAsync(string name)
     {

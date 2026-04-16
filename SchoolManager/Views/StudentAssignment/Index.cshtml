@@ -189,6 +189,7 @@
                             <th>Correo</th>
                             <th>Estado</th>
                             <th>Grado/Grupo/Jornada</th>
+                            <th>Asignaturas Individuales</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
@@ -250,6 +251,9 @@
                                         <em class="text-muted">Sin asignaciones</em>
                                     }
                                 </td>
+                                <td class="text-start subject-enrollments-cell">
+                                    <div class="text-muted small">Cargando...</div>
+                                </td>
                                 <td>
                                     <button type="button" class="btn btn-primary btn-md me-2 px-3 py-1"
                                             data-bs-toggle="modal" data-bs-target="#gradeGroupModal"
@@ -279,11 +283,31 @@
                     <h6 class="mb-2 text-secondary">Asignación Actual:</h6>
                     <div class="current-assignment fs-5"></div>
                 </div>
+                <div id="subjectEnrollmentInfo" class="mb-4 p-3 bg-light rounded">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0 text-secondary">Asignaturas del Estudiante:</h6>
+                        <button type="button" class="btn btn-success btn-sm" id="btnAddSubjectEnrollment">
+                            <i class="bi bi-plus-circle me-1"></i> Agregar materia
+                        </button>
+                    </div>
+                    <div class="subject-enrollment-list"></div>
+                </div>
                 <div class="form-group">
                     <label class="form-label">Nueva Asignación:</label>
                     <select id="gradeGroupSelect" class="form-select form-select-lg">
                         <option value="">-- Seleccione Grado/Grupo --</option>
                     </select>
+                </div>
+                <div class="form-group mt-4 d-none" id="subjectCatalogWrapper">
+                    <label class="form-label">Catálogo de asignaturas disponibles:</label>
+                    <select id="subjectCatalogSelect" class="form-select form-select-lg">
+                        <option value="">-- Seleccione asignatura --</option>
+                    </select>
+                    <div class="mt-3 d-flex justify-content-end">
+                        <button type="button" class="btn btn-success" id="btnGuardarMateriaIndividual">
+                            <i class="bi bi-check-circle me-1"></i> Guardar Materia
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -370,9 +394,100 @@
             $('#customSearch').on('keyup', function () {
                 table.search(this.value).draw();
             });
+
+            $('tr[data-student-id]').each(function () {
+                const studentId = $(this).data('student-id');
+                const cell = $(this).find('.subject-enrollments-cell');
+                cell.html('<div class="text-muted small">Cargando asignaturas...</div>');
+                $.get(`/StudentAssignment/GetSubjectEnrollmentsByStudent/${studentId}`)
+                    .done(function (res) {
+                        if (!res.success || !res.data || !res.data.length) {
+                            cell.html('<em class="text-muted">Sin asignaturas individuales</em>');
+                            return;
+                        }
+
+                        const html = res.data.map(item => `
+                            <div class="mb-2 p-2 bg-light rounded">
+                                <div class="fw-bold text-primary">${item.subjectName}</div>
+                                <small class="text-muted">${item.gradeName} - ${item.groupName}</small>
+                            </div>
+                        `).join('');
+                        cell.html(html);
+                    })
+                    .fail(function () {
+                        cell.html('<div class="text-danger small">Error al cargar.</div>');
+                    });
+            });
         });
 
         let currentStudentId = null;
+
+        function loadSubjectEnrollmentsIntoModal() {
+            const target = $('#subjectEnrollmentInfo .subject-enrollment-list');
+            target.html('<div class="text-center"><div class="spinner-border text-primary" role="status"></div></div>');
+
+            $.get(`/StudentAssignment/GetSubjectEnrollmentsByStudent/${currentStudentId}`)
+                .done(function (res) {
+                    if (!res.success || !res.data || !res.data.length) {
+                        target.html('<em class="text-muted">Sin asignaturas individuales</em>');
+                        return;
+                    }
+
+                    const html = res.data.map(item => `
+                        <div class="mb-2 p-2 bg-light rounded d-flex justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="fw-bold text-primary">${item.subjectName}</div>
+                                <small class="text-muted">${item.gradeName} - ${item.groupName}</small>
+                            </div>
+                            <button type="button" class="btn btn-outline-danger btn-sm btn-remove-subject-enrollment" data-enrollment-id="${item.enrollmentId}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    `).join('');
+
+                    target.html(html);
+                })
+                .fail(function () {
+                    target.html('<div class="text-danger small">Error al cargar asignaturas.</div>');
+                });
+        }
+
+        function refreshSubjectEnrollmentsCell(studentId) {
+            const cell = $(`tr[data-student-id="${studentId}"]`).find('.subject-enrollments-cell');
+            cell.html('<div class="text-muted small">Cargando asignaturas...</div>');
+            $.get(`/StudentAssignment/GetSubjectEnrollmentsByStudent/${studentId}`)
+                .done(function (res) {
+                    if (!res.success || !res.data || !res.data.length) {
+                        cell.html('<em class="text-muted">Sin asignaturas individuales</em>');
+                        return;
+                    }
+
+                    const html = res.data.map(item => `
+                        <div class="mb-2 p-2 bg-light rounded">
+                            <div class="fw-bold text-primary">${item.subjectName}</div>
+                            <small class="text-muted">${item.gradeName} - ${item.groupName}</small>
+                        </div>
+                    `).join('');
+                    cell.html(html);
+                })
+                .fail(function () {
+                    cell.html('<div class="text-danger small">Error al cargar.</div>');
+                });
+        }
+
+        function loadSubjectCatalog() {
+            const dropdown = $('#subjectCatalogSelect');
+            dropdown.empty().append('<option value="">-- Seleccione asignatura --</option>');
+            $.get('/StudentAssignment/GetAvailableSubjectCatalog', { studentId: currentStudentId })
+                .done(function (res) {
+                    (res.data || []).forEach(function (item) {
+                        dropdown.append(`<option value="${item.subjectAssignmentId}">${item.display}</option>`);
+                    });
+                })
+                .fail(function () {
+                    dropdown.html('<option value="">Error al cargar catálogo</option>');
+                });
+        }
 
         // Manejo del Modal
         $('#gradeGroupModal').on('show.bs.modal', function (event) {
@@ -384,10 +499,13 @@
             $('#modalStudentName').text(studentName);
             const infoContainer = $('#gradeGroupInfo .current-assignment');
             const dropdown = $('#gradeGroupSelect');
+            $('#subjectCatalogWrapper').addClass('d-none');
+            $('#subjectCatalogSelect').empty().append(`<option value="">-- Seleccione asignatura --</option>`);
 
             // Limpiar y mostrar carga
             infoContainer.html(`<div class="text-center"><div class="spinner-border text-primary" role="status"></div></div>`);
             dropdown.empty().append(`<option value="">-- Seleccione Grado/Grupo --</option>`);
+            loadSubjectEnrollmentsIntoModal();
 
             // Cargar asignación actual
             $.get(`/StudentAssignment/GetGradeGroupByStudent/${currentStudentId}`)
@@ -451,9 +569,63 @@
         $('#gradeGroupModal').on('hidden.bs.modal', function () {
             currentStudentId = null;
             $('#gradeGroupSelect').empty();
+            $('#subjectCatalogWrapper').addClass('d-none');
+            $('#subjectCatalogSelect').empty();
             $('#gradeGroupInfo .current-assignment').empty();
+            $('#subjectEnrollmentInfo .subject-enrollment-list').empty();
             cleanupSweetAlert();
             resetBodyIfNoOpenModal();
+        });
+
+        $('#btnAddSubjectEnrollment').on('click', function () {
+            if (!currentStudentId) return;
+            $('#subjectCatalogWrapper').toggleClass('d-none');
+            if (!$('#subjectCatalogWrapper').hasClass('d-none')) {
+                loadSubjectCatalog();
+            }
+        });
+
+        $('#btnGuardarMateriaIndividual').on('click', function () {
+            const subjectAssignmentId = $('#subjectCatalogSelect').val();
+            if (!currentStudentId || !subjectAssignmentId) {
+                Swal.fire({ icon: 'warning', title: 'Atención', text: 'Seleccione una asignatura.' });
+                return;
+            }
+
+            $.post('/StudentAssignment/AddSubjectEnrollment', { studentId: currentStudentId, subjectAssignmentId: subjectAssignmentId })
+                .done(function (resp) {
+                    if (!resp.success) {
+                        Swal.fire({ icon: 'error', title: 'Error', text: resp.message || 'No se pudo agregar la asignatura.' });
+                        return;
+                    }
+
+                    loadSubjectEnrollmentsIntoModal();
+                    loadSubjectCatalog();
+                    refreshSubjectEnrollmentsCell(currentStudentId);
+                    Swal.fire({ icon: 'success', title: 'Éxito', text: resp.message, timer: 1500, showConfirmButton: false });
+                })
+                .fail(function () {
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo agregar la asignatura.' });
+                });
+        });
+
+        $(document).on('click', '.btn-remove-subject-enrollment', function () {
+            const enrollmentId = $(this).data('enrollment-id');
+            $.post('/StudentAssignment/RemoveSubjectEnrollment', { enrollmentId: enrollmentId })
+                .done(function (resp) {
+                    if (!resp.success) {
+                        Swal.fire({ icon: 'error', title: 'Error', text: resp.message || 'No se pudo remover la asignatura.' });
+                        return;
+                    }
+
+                    loadSubjectEnrollmentsIntoModal();
+                    loadSubjectCatalog();
+                    refreshSubjectEnrollmentsCell(currentStudentId);
+                    Swal.fire({ icon: 'success', title: 'Éxito', text: resp.message, timer: 1500, showConfirmButton: false });
+                })
+                .fail(function () {
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo remover la asignatura.' });
+                });
         });
 
         // Guardar cambios

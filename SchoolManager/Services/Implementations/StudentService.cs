@@ -80,30 +80,28 @@ namespace SchoolManager.Services
 
         public async Task<IEnumerable<StudentBasicDto>> GetBySubjectGroupAndGradeAsync(Guid subjectId, Guid groupId, Guid gradeId)
         {
-            // Misma lógica que GetByGroupAndGradeAsync, pero solo si existe al menos una asignación de
-            // la materia a ese grupo/grado. Se usa EXISTS en lugar de JOIN a subject_assignments: varias
-            // filas (p. ej. distinto area_id) duplicaban cada estudiante en el resultado.
-            var result = await (from sa in _context.StudentAssignments
-                                join student in _context.Users on sa.StudentId equals student.Id
-                                join grade in _context.GradeLevels on sa.GradeId equals grade.Id
-                                join grupo in _context.Groups on sa.GroupId equals grupo.Id
+            var subjectAssignmentIds = await _context.SubjectAssignments
+                .Where(suj => suj.SubjectId == subjectId && suj.GroupId == groupId && suj.GradeLevelId == gradeId)
+                .Select(suj => suj.Id)
+                .ToListAsync();
+
+            var result = await (from ssa in _context.StudentSubjectAssignments
+                                join student in _context.Users on ssa.StudentId equals student.Id
+                                join suj in _context.SubjectAssignments on ssa.SubjectAssignmentId equals suj.Id
+                                join grade in _context.GradeLevels on suj.GradeLevelId equals grade.Id
+                                join grupo in _context.Groups on suj.GroupId equals grupo.Id
                                 where (student.Role == "estudiante" || student.Role == "student" || student.Role == "alumno")
-                                      && sa.GroupId == groupId
-                                      && sa.GradeId == gradeId
-                                      && sa.IsActive
-                                      && _context.SubjectAssignments.Any(suj =>
-                                          suj.SubjectId == subjectId
-                                          && suj.GroupId == groupId
-                                          && suj.GradeLevelId == gradeId)
+                                      && ssa.IsActive
+                                      && subjectAssignmentIds.Contains(ssa.SubjectAssignmentId)
                                 orderby student.LastName, student.Name
                                 select new StudentBasicDto
                                 {
                                     StudentId = student.Id,
-                                    FullName = $"{student.LastName}, {student.Name}",  // Apellido, Nombre
+                                    FullName = $"{student.LastName}, {student.Name}",
                                     GradeName = grade.Name,
                                     GroupName = grupo.Name,
                                     DocumentId = student.DocumentId ?? ""
-                                }).ToListAsync();
+                                }).Distinct().ToListAsync();
 
             return result;
         }

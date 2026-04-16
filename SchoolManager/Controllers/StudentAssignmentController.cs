@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SchoolManager.Application.Interfaces;
 using SchoolManager.Models;
+using SchoolManager.Services.Implementations;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
 using System;
@@ -24,6 +26,7 @@ namespace SchoolManager.Controllers
         private readonly IDateTimeHomologationService _dateTimeHomologationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly IShiftService _shiftService;
+        private readonly SchoolDbContext _context;
 
         public StudentAssignmentController(
             IUserService userService,
@@ -34,7 +37,8 @@ namespace SchoolManager.Controllers
             ISubjectAssignmentService subjectAssignmentService,
             IDateTimeHomologationService dateTimeHomologationService,
             ICurrentUserService currentUserService,
-            IShiftService shiftService)
+            IShiftService shiftService,
+            SchoolDbContext context)
         {
             _userService = userService;
             _subjectService = subjectService;
@@ -45,6 +49,7 @@ namespace SchoolManager.Controllers
             _dateTimeHomologationService = dateTimeHomologationService;
             _currentUserService = currentUserService;
             _shiftService = shiftService;
+            _context = context;
         }
 
         [HttpPost("/StudentAssignment/UpdateGroupAndGrade")]
@@ -182,13 +187,7 @@ namespace SchoolManager.Controllers
 
             var studentAssignments = await _studentAssignmentService.GetAssignmentsByStudentIdAsync(id);
 
-            var subjectAssignments = new List<SubjectAssignment>();
-
-            foreach (var sa in studentAssignments)
-            {
-                var matches = await _subjectService.GetSubjectAssignmentsByGradeAndGroupAsync(sa.GradeId, sa.GroupId);
-                subjectAssignments.AddRange(matches);
-            }
+            var subjectAssignments = await _subjectService.GetSubjectAssignmentsByStudentAsync(id);
 
             var response = subjectAssignments.Select(a => new
             {
@@ -200,6 +199,158 @@ namespace SchoolManager.Controllers
             }).Distinct();
 
             return Json(response);
+        }
+
+        [HttpGet("/StudentAssignment/GetSubjectEnrollmentsByStudent/{studentId}")]
+        public async Task<IActionResult> GetSubjectEnrollmentsByStudent(Guid studentId)
+        {
+            var data = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
+                .Join(_context.SubjectAssignments,
+                    ssa => ssa.SubjectAssignmentId,
+                    sa => sa.Id,
+                    (ssa, sa) => new { ssa, sa })
+                .Join(_context.Subjects,
+                    x => x.sa.SubjectId,
+                    s => s.Id,
+                    (x, s) => new { x.ssa, x.sa, subject = s })
+                .Join(_context.GradeLevels,
+                    x => x.sa.GradeLevelId,
+                    g => g.Id,
+                    (x, g) => new { x.ssa, x.sa, x.subject, grade = g })
+                .Join(_context.Groups,
+                    x => x.sa.GroupId,
+                    g => g.Id,
+                    (x, g) => new
+                    {
+                        enrollmentId = x.ssa.Id,
+                        subjectAssignmentId = x.sa.Id,
+                        subjectName = x.subject.Name,
+                        gradeName = x.grade.Name,
+                        groupName = g.Name,
+                        status = x.ssa.Status,
+                        enrollmentType = x.ssa.EnrollmentType
+                    })
+                .OrderBy(x => x.subjectName)
+                .ThenBy(x => x.gradeName)
+                .ThenBy(x => x.groupName)
+                .ToListAsync();
+
+            return Json(new { success = true, data });
+        }
+
+        [HttpGet("/StudentAssignment/GetAvailableSubjectCatalog")]
+        public async Task<IActionResult> GetAvailableSubjectCatalog(Guid studentId)
+        {
+            var activeAssignments = await _studentAssignmentService.GetAssignmentsByStudentIdAsync(studentId);
+            if (activeAssignments == null || !activeAssignments.Any())
+                return Json(new { success = true, data = Array.Empty<object>() });
+
+            var gradeIds = activeAssignments.Select(x => x.GradeId).Distinct().ToList();
+            var groupIds = activeAssignments.Select(x => x.GroupId).Distinct().ToList();
+
+            var currentEnrollmentIds = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
+                .Select(ssa => ssa.SubjectAssignmentId)
+                .ToListAsync();
+
+            var catalog = await _context.SubjectAssignments
+                .Where(sa => gradeIds.Contains(sa.GradeLevelId) || groupIds.Contains(sa.GroupId))
+                .Where(sa => !currentEnrollmentIds.Contains(sa.Id))
+                .Join(_context.Subjects, sa => sa.SubjectId, s => s.Id, (sa, s) => new { sa, subject = s })
+                .Join(_context.GradeLevels, x => x.sa.GradeLevelId, g => g.Id, (x, g) => new { x.sa, x.subject, grade = g })
+                .Join(_context.Groups, x => x.sa.GroupId, g => g.Id, (x, g) => new
+                {
+                    subjectAssignmentId = x.sa.Id,
+                    subjectName = x.subject.Name,
+                    gradeName = x.grade.Name,
+                    groupName = g.Name,
+                    display = $"{x.subject.Name} | {x.grade.Name} - {g.Name}"
+                })
+                .OrderBy(x => x.subjectName)
+                .ThenBy(x => x.gradeName)
+                .ThenBy(x => x.groupName)
+                .ToListAsync();
+
+            return Json(new { success = true, data = catalog });
+        }
+
+        [HttpPost("/StudentAssignment/AddSubjectEnrollment")]
+        public async Task<IActionResult> AddSubjectEnrollment(Guid studentId, Guid subjectAssignmentId)
+        {
+            if (studentId == Guid.Empty || subjectAssignmentId == Guid.Empty)
+                return Json(new { success = false, message = "Datos inválidos." });
+
+            var subjectAssignment = await _context.SubjectAssignments.FirstOrDefaultAsync(sa => sa.Id == subjectAssignmentId);
+            if (subjectAssignment == null)
+                return Json(new { success = false, message = "La asignatura seleccionada no existe." });
+
+            var baseAssignment = await _context.StudentAssignments
+                .Where(sa => sa.StudentId == studentId && sa.IsActive &&
+                             sa.GradeId == subjectAssignment.GradeLevelId &&
+                             sa.GroupId == subjectAssignment.GroupId)
+                .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (baseAssignment == null)
+            {
+                baseAssignment = await _context.StudentAssignments
+                    .Where(sa => sa.StudentId == studentId && sa.IsActive)
+                    .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (baseAssignment == null)
+                return Json(new { success = false, message = "El estudiante necesita al menos una matrícula activa antes de asignar materias." });
+
+            var exists = await _context.StudentSubjectAssignments.AnyAsync(ssa =>
+                ssa.StudentId == studentId &&
+                ssa.SubjectAssignmentId == subjectAssignmentId &&
+                ssa.IsActive &&
+                ssa.AcademicYearId == baseAssignment.AcademicYearId);
+
+            if (exists)
+                return Json(new { success = false, message = "La materia ya está asignada al estudiante." });
+
+            var enrollment = new StudentSubjectAssignment
+            {
+                Id = Guid.NewGuid(),
+                StudentId = studentId,
+                SubjectAssignmentId = subjectAssignmentId,
+                StudentAssignmentId = baseAssignment.Id,
+                AcademicYearId = baseAssignment.AcademicYearId,
+                ShiftId = baseAssignment.ShiftId,
+                EnrollmentType = string.IsNullOrWhiteSpace(baseAssignment.EnrollmentType) ? "Regular" : baseAssignment.EnrollmentType,
+                Status = "Active",
+                IsActive = true,
+                StartDate = DateTime.UtcNow
+            };
+
+            await AuditHelper.SetAuditFieldsForCreateAsync(enrollment, _currentUserService);
+            await AuditHelper.SetSchoolIdAsync(enrollment, _currentUserService);
+            _context.StudentSubjectAssignments.Add(enrollment);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true, message = "Materia asignada correctamente." });
+        }
+
+        [HttpPost("/StudentAssignment/RemoveSubjectEnrollment")]
+        public async Task<IActionResult> RemoveSubjectEnrollment(Guid enrollmentId)
+        {
+            if (enrollmentId == Guid.Empty)
+                return Json(new { success = false, message = "Asignación inválida." });
+
+            var enrollment = await _context.StudentSubjectAssignments.FirstOrDefaultAsync(ssa => ssa.Id == enrollmentId && ssa.IsActive);
+            if (enrollment == null)
+                return Json(new { success = false, message = "La asignación no existe o ya fue removida." });
+
+            enrollment.IsActive = false;
+            enrollment.Status = "Inactive";
+            enrollment.EndDate = DateTime.UtcNow;
+            await AuditHelper.SetAuditFieldsForUpdateAsync(enrollment, _currentUserService);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true, message = "Materia removida correctamente." });
         }
 
         public async Task<IActionResult> Index()
@@ -266,6 +417,300 @@ namespace SchoolManager.Controllers
         public IActionResult Upload()
         {
             return View();
+        }
+
+        [HttpGet("/StudentAssignment/UploadSubjectEnrollments")]
+        public IActionResult UploadSubjectEnrollments()
+        {
+            // Vista dedicada a cargar el subconjunto de materias por estudiante (eje flexible para nocturna).
+            return View();
+        }
+
+        private static string NormalizeToken(string? input)
+        {
+            input ??= string.Empty;
+            input = input.Trim();
+            input = input.Normalize(System.Text.NormalizationForm.FormD);
+            input = new string(input.Where(ch => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
+            return input;
+        }
+
+        [HttpPost("/StudentAssignment/BulkSaveSubjectEnrollments")]
+        public async Task<IActionResult> BulkSaveSubjectEnrollments([FromBody] List<StudentSubjectEnrollmentInputModel> rows)
+        {
+            if (rows == null || rows.Count == 0)
+                return BadRequest(new { success = false, message = "No se recibieron filas." });
+
+            var currentSchoolId = await GetCurrentUserSchoolId();
+            if (currentSchoolId == null)
+                return BadRequest(new { success = false, message = "No se pudo determinar la escuela actual." });
+
+            var now = DateTime.UtcNow;
+            var errors = new List<string>();
+
+            // Resolución previa: convertimos cada fila a ids reales.
+            // Además, construimos el “keepSet” (materias a mantener activas) por estudiante + (nivel, grupo, jornada/shift).
+            var resolvedRows = new List<(Guid StudentId, Guid GradeId, Guid GroupId, Guid? ShiftId, Guid SubjectAssignmentId, bool Inscrito)>();
+            var keepSetByKey = new Dictionary<string, HashSet<Guid>>();
+            var enrollmentTypeByKey = new Dictionary<string, string>();
+
+            foreach (var row in rows)
+            {
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(row.EstudianteEmail))
+                    {
+                        errors.Add("EstudianteEmail es requerido.");
+                        continue;
+                    }
+                    if (string.IsNullOrWhiteSpace(row.Asignatura) || string.IsNullOrWhiteSpace(row.Nivel) || string.IsNullOrWhiteSpace(row.GrupoAcademico))
+                    {
+                        errors.Add($"Fila inválida para {row.EstudianteEmail}: Asignatura/Nivel/GrupoAcadémico requeridos.");
+                        continue;
+                    }
+
+                    // Crear/obtener usuario.
+                    var student = await _userService.GetByEmailAsync(row.EstudianteEmail.Trim());
+                    if (student == null)
+                    {
+                        student = new User
+                        {
+                            Id = Guid.NewGuid(),
+                            Email = row.EstudianteEmail.Trim(),
+                            Name = !string.IsNullOrWhiteSpace(row.Nombre) ? row.Nombre.Trim() : row.EstudianteEmail.Split('@')[0],
+                            LastName = !string.IsNullOrWhiteSpace(row.Apellido) ? row.Apellido.Trim() : "Estudiante",
+                            DocumentId = !string.IsNullOrWhiteSpace(row.DocumentoId)
+                                ? row.DocumentoId.Trim()
+                                : $"EST-{Guid.NewGuid().ToString("N")[..8]}",
+                            DateOfBirth = null,
+                            Role = "estudiante",
+                            Status = "active",
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                            SchoolId = currentSchoolId,
+                            PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"),
+                            TwoFactorEnabled = false,
+                            LastLogin = null,
+                            Inclusivo = null
+                        };
+
+                        await _userService.CreateAsync(student, new List<Guid>(), new List<Guid>());
+                    }
+
+                    var grade = await _gradeLevelService.GetByNameAsync(row.Nivel.Trim());
+                    if (grade == null)
+                    {
+                        errors.Add($"Grado no encontrado: {row.Nivel} (estudiante {row.EstudianteEmail})");
+                        continue;
+                    }
+
+                    Shift? shift = null;
+                    if (!string.IsNullOrWhiteSpace(row.Jornada))
+                    {
+                        shift = await _shiftService.GetOrCreateAsync(row.Jornada.Trim());
+                    }
+
+                    var group = await _groupService.GetByNameAndGradeAsync(row.GrupoAcademico.Trim(), currentSchoolId, shift?.Id);
+                    if (group == null)
+                    {
+                        errors.Add($"Grupo no encontrado: {row.GrupoAcademico} (estudiante {row.EstudianteEmail})");
+                        continue;
+                    }
+
+                    // Alinear jornada al grupo si aplica (evita que AddEnrollmentAsync cree con shift distinto).
+                    if (shift != null && (group.ShiftId == null || group.ShiftId != shift.Id))
+                    {
+                        group.ShiftId = shift.Id;
+                        group.Shift = shift.Name;
+                        group.UpdatedAt = now;
+                        await _groupService.UpdateAsync(group);
+                    }
+
+                    // Materia (por Name o Code).
+                    var normalizedSubject = NormalizeToken(row.Asignatura).ToUpperInvariant();
+                    var subject = await _context.Subjects
+                        .FirstOrDefaultAsync(s =>
+                            (s.Name != null && NormalizeToken(s.Name).ToUpperInvariant() == normalizedSubject) ||
+                            (s.Code != null && NormalizeToken(s.Code).ToUpperInvariant() == normalizedSubject));
+
+                    if (subject == null)
+                    {
+                        errors.Add($"Materia no encontrada: {row.Asignatura} (estudiante {row.EstudianteEmail})");
+                        continue;
+                    }
+
+                    // SubjectAssignment = (Subject + GradeLevel + Group)
+                    var subjectAssignment = await _context.SubjectAssignments
+                        .FirstOrDefaultAsync(sa =>
+                            sa.SubjectId == subject.Id &&
+                            sa.GradeLevelId == grade.Id &&
+                            sa.GroupId == group.Id);
+
+                    if (subjectAssignment == null)
+                    {
+                        errors.Add($"No existe SubjectAssignment para {row.Asignatura} | {row.Nivel} | {row.GrupoAcademico} (estudiante {row.EstudianteEmail}).");
+                        continue;
+                    }
+
+                    var shiftId = group.ShiftId ?? shift?.Id;
+                    var key = $"{student.Id}::{grade.Id}::{group.Id}::{shiftId?.ToString() ?? "null"}";
+                    if (!keepSetByKey.TryGetValue(key, out var keepSet))
+                    {
+                        keepSet = new HashSet<Guid>();
+                        keepSetByKey[key] = keepSet;
+                    }
+
+                    if (!enrollmentTypeByKey.ContainsKey(key))
+                    {
+                        var tipoMatricula = "Regular";
+                        var jornadaNormalized = row.Jornada?.Trim().ToUpperInvariant() ?? string.Empty;
+                        if (!string.IsNullOrEmpty(jornadaNormalized) && (jornadaNormalized.Contains("NOCHE") || jornadaNormalized.Contains("NOCTURNO")))
+                            tipoMatricula = "Nocturno";
+                        enrollmentTypeByKey[key] = tipoMatricula;
+                    }
+
+                    if (row.Inscrito)
+                        keepSet.Add(subjectAssignment.Id);
+
+                    resolvedRows.Add((student.Id, grade.Id, group.Id, shiftId, subjectAssignment.Id, row.Inscrito));
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Error procesando fila ({row.EstudianteEmail}): {ex.Message}");
+                }
+            }
+
+            if (resolvedRows.Count == 0)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    insertadas = 0,
+                    desactivadas = 0,
+                    errors,
+                    message = "No se procesaron filas válidas."
+                });
+            }
+
+            int activadas = 0;
+            int desactivadas = 0;
+
+            // Para cada “matrícula base” (estudiante + grado + grupo + shift), garantizamos:
+            // 1) existe StudentAssignment
+            // 2) StudentSubjectAssignments coincide con el keepSet (activar lo indicado, desactivar el resto)
+            foreach (var kvp in keepSetByKey)
+            {
+                var key = kvp.Key;
+                var keepSet = kvp.Value;
+
+                // Parse key
+                var parts = key.Split("::");
+                var studentId = Guid.Parse(parts[0]);
+                var gradeId = Guid.Parse(parts[1]);
+                var groupId = Guid.Parse(parts[2]);
+                Guid? shiftId = parts[3] == "null" ? null : Guid.Parse(parts[3]);
+
+                var enrollmentType = enrollmentTypeByKey.TryGetValue(key, out var t) ? t : "Regular";
+
+                // Asegurar StudentAssignment existente
+                var shiftFilter = shiftId;
+                var existsAssignment = await _studentAssignmentService.ExistsWithShiftAsync(studentId, gradeId, groupId, shiftFilter);
+                if (!existsAssignment)
+                {
+                    // AddEnrollmentAsync disparará SyncStudentSubjectAssignmentsAsync (crea todas y luego afinamos con keepSet).
+                    await _studentAssignmentService.AddEnrollmentAsync(studentId, gradeId, groupId, enrollmentType);
+                }
+
+                var baseAssignment = await _context.StudentAssignments
+                    .Where(sa =>
+                        sa.StudentId == studentId &&
+                        sa.GradeId == gradeId &&
+                        sa.GroupId == groupId &&
+                        sa.IsActive)
+                    .Where(sa => shiftId.HasValue ? sa.ShiftId == shiftId.Value : true)
+                    .OrderByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
+                    .FirstOrDefaultAsync();
+
+                if (baseAssignment == null)
+                {
+                    errors.Add($"No se pudo determinar StudentAssignment base para el estudiante {studentId} | grado {gradeId} | grupo {groupId}.");
+                    continue;
+                }
+
+                var academicYearId = baseAssignment.AcademicYearId;
+                if (!academicYearId.HasValue)
+                {
+                    errors.Add($"AcademicYearId nulo para StudentAssignment base (student {studentId}, grade {gradeId}, group {groupId}).");
+                    continue;
+                }
+
+                // Desactivar todo lo que no esté en keepSet (aunque falte StudentAssignmentId por datos históricos).
+                var currentEnrollments = await _context.StudentSubjectAssignments
+                    .Where(ssa => ssa.StudentId == studentId && ssa.IsActive && ssa.AcademicYearId == academicYearId.Value)
+                    .Join(_context.SubjectAssignments,
+                        ssa => ssa.SubjectAssignmentId,
+                        sa => sa.Id,
+                        (ssa, sa) => new { ssa, sa })
+                    .Where(x => x.sa.GradeLevelId == gradeId && x.sa.GroupId == groupId)
+                    .Select(x => x.ssa)
+                    .ToListAsync();
+
+                foreach (var enrollment in currentEnrollments)
+                {
+                    if (!keepSet.Contains(enrollment.SubjectAssignmentId))
+                    {
+                        enrollment.IsActive = false;
+                        enrollment.Status = "Inactive";
+                        enrollment.EndDate = now;
+                        await AuditHelper.SetAuditFieldsForUpdateAsync(enrollment, _currentUserService);
+                        desactivadas++;
+                    }
+                }
+
+                // Activar (o asegurar) las materias del keepSet.
+                foreach (var subjectAssignmentId in keepSet)
+                {
+                    var exists = await _context.StudentSubjectAssignments.AnyAsync(ssa =>
+                        ssa.StudentId == studentId &&
+                        ssa.SubjectAssignmentId == subjectAssignmentId &&
+                        ssa.AcademicYearId == academicYearId.Value &&
+                        ssa.IsActive);
+
+                    if (exists)
+                        continue;
+
+                    var enrollment = new StudentSubjectAssignment
+                    {
+                        Id = Guid.NewGuid(),
+                        StudentId = studentId,
+                        SubjectAssignmentId = subjectAssignmentId,
+                        StudentAssignmentId = baseAssignment.Id,
+                        AcademicYearId = academicYearId.Value,
+                        ShiftId = baseAssignment.ShiftId,
+                        EnrollmentType = string.IsNullOrWhiteSpace(baseAssignment.EnrollmentType) ? "Regular" : baseAssignment.EnrollmentType,
+                        Status = "Active",
+                        IsActive = true,
+                        StartDate = now,
+                        CreatedAt = now
+                    };
+
+                    await AuditHelper.SetAuditFieldsForCreateAsync(enrollment, _currentUserService);
+                    await AuditHelper.SetSchoolIdAsync(enrollment, _currentUserService);
+                    _context.StudentSubjectAssignments.Add(enrollment);
+                    activadas++;
+                }
+
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new
+            {
+                success = true,
+                insertadas = activadas,
+                desactivadas,
+                errors,
+                message = "Carga de asignaturas individuales completada."
+            });
         }
 
         [HttpGet]

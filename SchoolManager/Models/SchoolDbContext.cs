@@ -57,6 +57,8 @@ public partial class SchoolDbContext : DbContext
 
     public virtual DbSet<StudentAssignment> StudentAssignments { get; set; }
 
+    public virtual DbSet<StudentSubjectAssignment> StudentSubjectAssignments { get; set; }
+
     public virtual DbSet<Subject> Subjects { get; set; }
 
     public virtual DbSet<SubjectAssignment> SubjectAssignments { get; set; }
@@ -892,6 +894,8 @@ public partial class SchoolDbContext : DbContext
 
             entity.HasIndex(e => new { e.StudentAssignmentId, e.ActivityId }, "uq_scores_assignment_activity").IsUnique();
 
+            entity.HasIndex(e => new { e.StudentSubjectAssignmentId, e.ActivityId }, "uq_scores_subject_enrollment_activity").IsUnique();
+
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("id");
@@ -905,11 +909,17 @@ public partial class SchoolDbContext : DbContext
                 .HasColumnName("score");
             entity.Property(e => e.StudentId).HasColumnName("student_id");
             entity.Property(e => e.StudentAssignmentId).HasColumnName("student_assignment_id");
+            entity.Property(e => e.StudentSubjectAssignmentId).HasColumnName("student_subject_assignment_id");
 
             entity.HasOne(d => d.StudentAssignment).WithMany()
                 .HasForeignKey(d => d.StudentAssignmentId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("student_activity_scores_student_assignment_id_fkey");
+
+            entity.HasOne(d => d.StudentSubjectAssignment).WithMany()
+                .HasForeignKey(d => d.StudentSubjectAssignmentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_activity_scores_student_subject_assignment_id_fkey");
 
             entity.HasOne(d => d.Activity).WithMany(p => p.StudentActivityScores)
                 .HasForeignKey(d => d.ActivityId)
@@ -1013,6 +1023,63 @@ public partial class SchoolDbContext : DbContext
                 .HasForeignKey(d => d.AcademicYearId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("student_assignments_academic_year_id_fkey");
+        });
+
+        modelBuilder.Entity<StudentSubjectAssignment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_subject_assignments_pkey");
+
+            entity.ToTable("student_subject_assignments");
+
+            entity.HasIndex(e => e.StudentId, "IX_student_subject_assignments_student_id");
+            entity.HasIndex(e => e.SubjectAssignmentId, "IX_student_subject_assignments_subject_assignment_id");
+            entity.HasIndex(e => e.StudentAssignmentId, "IX_student_subject_assignments_student_assignment_id");
+            entity.HasIndex(e => e.AcademicYearId, "IX_student_subject_assignments_academic_year_id");
+            entity.HasIndex(e => e.ShiftId, "IX_student_subject_assignments_shift_id");
+            entity.HasIndex(e => new { e.StudentId, e.SubjectAssignmentId, e.AcademicYearId }, "ix_student_subject_assignments_active_unique")
+                .HasFilter("is_active = true")
+                .IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.SubjectAssignmentId).HasColumnName("subject_assignment_id");
+            entity.Property(e => e.StudentAssignmentId).HasColumnName("student_assignment_id");
+            entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.ShiftId).HasColumnName("shift_id");
+            entity.Property(e => e.EnrollmentType).HasMaxLength(20).HasDefaultValue("Regular").HasColumnName("enrollment_type");
+            entity.Property(e => e.Status).HasMaxLength(20).HasDefaultValue("Active").HasColumnName("status");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.StartDate).HasColumnType("timestamp with time zone").HasColumnName("start_date");
+            entity.Property(e => e.EndDate).HasColumnType("timestamp with time zone").HasColumnName("end_date");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.Student).WithMany()
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("student_subject_assignments_student_id_fkey");
+            entity.HasOne(d => d.SubjectAssignment).WithMany()
+                .HasForeignKey(d => d.SubjectAssignmentId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("student_subject_assignments_subject_assignment_id_fkey");
+            entity.HasOne(d => d.StudentAssignment).WithMany()
+                .HasForeignKey(d => d.StudentAssignmentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_subject_assignments_student_assignment_id_fkey");
+            entity.HasOne(d => d.AcademicYear).WithMany()
+                .HasForeignKey(d => d.AcademicYearId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_subject_assignments_academic_year_id_fkey");
+            entity.HasOne(d => d.Shift).WithMany()
+                .HasForeignKey(d => d.ShiftId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_subject_assignments_shift_id_fkey");
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId);
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy);
+            entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy);
         });
 
         modelBuilder.Entity<Subject>(entity =>

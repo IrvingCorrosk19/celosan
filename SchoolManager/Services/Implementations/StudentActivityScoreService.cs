@@ -46,6 +46,27 @@ namespace SchoolManager.Services
                 .FirstOrDefaultAsync();
         }
 
+        private async Task<Guid?> ResolveStudentSubjectAssignmentIdAsync(Guid studentId, Guid subjectId, Guid? activityGroupId, Guid? activityGradeLevelId)
+        {
+            var subjectAssignmentId = await _context.SubjectAssignments
+                .Where(sa => sa.SubjectId == subjectId
+                    && (!activityGroupId.HasValue || sa.GroupId == activityGroupId.Value)
+                    && (!activityGradeLevelId.HasValue || sa.GradeLevelId == activityGradeLevelId.Value))
+                .Select(sa => (Guid?)sa.Id)
+                .FirstOrDefaultAsync();
+
+            if (!subjectAssignmentId.HasValue)
+                return null;
+
+            return await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.StudentId == studentId &&
+                              ssa.SubjectAssignmentId == subjectAssignmentId.Value &&
+                              ssa.IsActive)
+                .OrderByDescending(ssa => ssa.CreatedAt ?? DateTime.MinValue)
+                .Select(ssa => (Guid?)ssa.Id)
+                .FirstOrDefaultAsync();
+        }
+
         private async Task<Guid> ResolveStudentAssignmentIdForGroupAsync(Guid studentId, Guid groupId, Guid gradeLevelId)
         {
             var id = await _context.StudentAssignments
@@ -72,6 +93,7 @@ namespace SchoolManager.Services
                     : null;
 
                 Guid assignmentId;
+                Guid? subjectEnrollmentId = null;
                 if (dto.StudentAssignmentId.HasValue && dto.StudentAssignmentId.Value != Guid.Empty)
                     assignmentId = dto.StudentAssignmentId.Value;
                 else if (activity != null)
@@ -81,6 +103,9 @@ namespace SchoolManager.Services
                         throw new InvalidOperationException(
                             $"No hay matrícula activa para el estudiante {dto.StudentId} en el contexto de la actividad {dto.ActivityId}.");
                     assignmentId = rid.Value;
+                    subjectEnrollmentId = dto.StudentSubjectAssignmentId.HasValue && dto.StudentSubjectAssignmentId.Value != Guid.Empty
+                        ? dto.StudentSubjectAssignmentId.Value
+                        : await ResolveStudentSubjectAssignmentIdAsync(dto.StudentId, activity.SubjectId ?? Guid.Empty, activity.GroupId, activity.GradeLevelId);
                 }
                 else
                     throw new InvalidOperationException("Se requiere ActivityId o StudentAssignmentId para guardar la nota.");
@@ -102,6 +127,7 @@ namespace SchoolManager.Services
                         Id = Guid.NewGuid(),
                         StudentId = dto.StudentId,
                         StudentAssignmentId = assignmentId,
+                        StudentSubjectAssignmentId = subjectEnrollmentId,
                         ActivityId = dto.ActivityId,
                         Score = dto.Score,
                         AcademicYearId = activeAcademicYear?.Id
@@ -115,6 +141,8 @@ namespace SchoolManager.Services
                 else
                 {
                     entity.Score = dto.Score;
+                    if (subjectEnrollmentId.HasValue)
+                        entity.StudentSubjectAssignmentId = subjectEnrollmentId;
                     await AuditHelper.SetAuditFieldsForUpdateAsync(entity, _currentUserService);
                 }
             }
@@ -158,17 +186,24 @@ namespace SchoolManager.Services
 
             var activityIds = headers.Select(h => h.Id).ToList();
 
-            /* 2.2 Estudiantes asignados a ese grupo (StudentAssignments) */
-            var assignmentIdsInGroup = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == groupId && sa.IsActive)
+            var subjectAssignmentIds = await _context.SubjectAssignments
+                .Where(sa => sa.SubjectId == subjectId && sa.GroupId == groupId && sa.GradeLevelId == gradeLevelId)
                 .Select(sa => sa.Id)
                 .ToListAsync();
 
-            var studentIds = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == groupId && sa.IsActive)
-                .Select(sa => sa.StudentId)
-                .Distinct()
+            /* 2.2 Estudiantes inscritos a esta asignatura ofertada */
+            var subjectEnrollments = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.IsActive && subjectAssignmentIds.Contains(ssa.SubjectAssignmentId))
+                .Select(ssa => new { ssa.Id, ssa.StudentId, ssa.StudentAssignmentId })
                 .ToListAsync();
+
+            var assignmentIdsInGroup = subjectEnrollments
+                .Where(x => x.StudentAssignmentId.HasValue)
+                .Select(x => x.StudentAssignmentId!.Value)
+                .Distinct()
+                .ToList();
+
+            var studentIds = subjectEnrollments.Select(x => x.StudentId).Distinct().ToList();
 
             var students = await _context.Users
                 .Where(u => studentIds.Contains(u.Id))
@@ -176,8 +211,11 @@ namespace SchoolManager.Services
                 .ToListAsync();
 
             /* 2.3 Notas existentes (por matrícula en este grupo) */
+            var subjectEnrollmentIds = subjectEnrollments.Select(x => x.Id).ToList();
             var scores = await _context.StudentActivityScores
-                .Where(s => activityIds.Contains(s.ActivityId) && assignmentIdsInGroup.Contains(s.StudentAssignmentId))
+                .Where(s => activityIds.Contains(s.ActivityId) &&
+                    ((s.StudentSubjectAssignmentId.HasValue && subjectEnrollmentIds.Contains(s.StudentSubjectAssignmentId.Value))
+                     || assignmentIdsInGroup.Contains(s.StudentAssignmentId)))
                 .ToListAsync();
 
             /* 2.4 Pivotar alumnos × actividades */
@@ -309,11 +347,14 @@ namespace SchoolManager.Services
                 var studentIds = registros.Select(r => r.StudentId).Distinct().ToList();
 
                 var assignmentCache = new Dictionary<(Guid StudentId, Guid GroupId, Guid GradeLevelId), Guid>();
+                var subjectEnrollmentCache = new Dictionary<(Guid StudentId, Guid SubjectId, Guid GroupId, Guid GradeLevelId), Guid?>();
                 foreach (var key in registros.Select(r => (r.StudentId, r.GroupId, r.GradeLevelId)).Distinct())
                 {
                     var aid = await ResolveStudentAssignmentIdForGroupAsync(key.StudentId, key.GroupId, key.GradeLevelId);
                     assignmentCache[key] = aid;
                 }
+                foreach (var key in registros.Select(r => (r.StudentId, r.SubjectId, r.GroupId, r.GradeLevelId)).Distinct())
+                    subjectEnrollmentCache[key] = await ResolveStudentSubjectAssignmentIdAsync(key.StudentId, key.SubjectId, key.GroupId, key.GradeLevelId);
 
                 var existingScores = await _context.StudentActivityScores
                     .Where(s => activityIds.Contains(s.ActivityId) && studentIds.Contains(s.StudentId))
@@ -325,6 +366,7 @@ namespace SchoolManager.Services
                 {
                     var activity = activityByKey[ActivityKey(dto)];
                     var assignmentId = assignmentCache[(dto.StudentId, dto.GroupId, dto.GradeLevelId)];
+                    var subjectEnrollmentId = subjectEnrollmentCache[(dto.StudentId, dto.SubjectId, dto.GroupId, dto.GradeLevelId)];
                     var pair = (assignmentId, activity.Id);
 
                     if (!scoreByAssignmentActivity.TryGetValue(pair, out var row))
@@ -334,6 +376,7 @@ namespace SchoolManager.Services
                             Id = Guid.NewGuid(),
                             StudentId = dto.StudentId,
                             StudentAssignmentId = assignmentId,
+                            StudentSubjectAssignmentId = subjectEnrollmentId,
                             ActivityId = activity.Id,
                             Score = dto.Score,
                             AcademicYearId = activeAcademicYear?.Id,
@@ -345,6 +388,7 @@ namespace SchoolManager.Services
                     else
                     {
                         row.Score = dto.Score;
+                        row.StudentSubjectAssignmentId = subjectEnrollmentId;
                     }
                 }
 
@@ -367,18 +411,27 @@ namespace SchoolManager.Services
             if (notes.SubjectId == Guid.Empty || notes.GradeLevelId == Guid.Empty)
                 return new List<StudentNotaDto>();
 
-            var enrollmentQuery = _context.StudentAssignments
-                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive);
+            var subjectAssignmentIds = await _context.SubjectAssignments
+                .Where(sa => sa.SubjectId == notes.SubjectId && sa.GroupId == notes.GroupId && sa.GradeLevelId == notes.GradeLevelId)
+                .Select(sa => sa.Id)
+                .ToListAsync();
+            var subjectEnrollmentsQuery = _context.StudentSubjectAssignments
+                .Where(ssa => ssa.IsActive && subjectAssignmentIds.Contains(ssa.SubjectAssignmentId));
             if (notes.ShiftId.HasValue && notes.ShiftId.Value != Guid.Empty)
-                enrollmentQuery = enrollmentQuery.Where(sa => sa.ShiftId == notes.ShiftId.Value);
-            var enrollmentIds = await enrollmentQuery.Select(sa => sa.Id).ToListAsync();
+                subjectEnrollmentsQuery = subjectEnrollmentsQuery.Where(ssa => ssa.ShiftId == notes.ShiftId.Value);
+            var subjectEnrollments = await subjectEnrollmentsQuery
+                .Select(ssa => new { ssa.Id, ssa.StudentId, ssa.StudentAssignmentId })
+                .ToListAsync();
+            var enrollmentIds = subjectEnrollments.Where(x => x.StudentAssignmentId.HasValue).Select(x => x.StudentAssignmentId!.Value).ToList();
+            var subjectEnrollmentIds = subjectEnrollments.Select(x => x.Id).ToList();
 
             // Notas de matrículas activas en este grupo+grado (evita mezclar otro grupo del mismo estudiante)
             var notas = await _context.StudentActivityScores
                 .Include(sa => sa.Activity)
                 .Include(sa => sa.Student)
                 .Where(sa =>
-                    enrollmentIds.Contains(sa.StudentAssignmentId) &&
+                    ((sa.StudentSubjectAssignmentId.HasValue && subjectEnrollmentIds.Contains(sa.StudentSubjectAssignmentId.Value))
+                        || enrollmentIds.Contains(sa.StudentAssignmentId)) &&
                     sa.Activity.TeacherId == notes.TeacherId &&
                     sa.Activity.SubjectId == notes.SubjectId &&
                     sa.Activity.GroupId == notes.GroupId &&
@@ -434,23 +487,26 @@ namespace SchoolManager.Services
 
             // 1. Obtener todos los estudiantes del grupo y grado usando solo User y StudentAssignment
             // Ordenar alfabéticamente por apellido primero, luego por nombre
-            var assignmentsQuery = _context.StudentAssignments
-                .Where(sa => sa.GroupId == notes.GroupId && sa.GradeId == notes.GradeLevelId && sa.IsActive);
-            if (notes.ShiftId.HasValue && notes.ShiftId.Value != Guid.Empty)
-                assignmentsQuery = assignmentsQuery.Where(sa => sa.ShiftId == notes.ShiftId.Value);
-            var assignmentsInScope = await assignmentsQuery
-                .Select(sa => new { sa.Id, sa.StudentId })
+            var scopedSubjectAssignments = await _context.SubjectAssignments
+                .Where(sa => sa.SubjectId == notes.SubjectId && sa.GroupId == notes.GroupId && sa.GradeLevelId == notes.GradeLevelId)
+                .Select(sa => sa.Id)
                 .ToListAsync();
-            var enrollmentIds = assignmentsInScope.Select(a => a.Id).ToHashSet();
+            var studentSubjectAssignmentsQuery = _context.StudentSubjectAssignments
+                .Where(ssa => ssa.IsActive && scopedSubjectAssignments.Contains(ssa.SubjectAssignmentId));
+            if (notes.ShiftId.HasValue && notes.ShiftId.Value != Guid.Empty)
+                studentSubjectAssignmentsQuery = studentSubjectAssignmentsQuery.Where(ssa => ssa.ShiftId == notes.ShiftId.Value);
+            var assignmentsInScope = await studentSubjectAssignmentsQuery
+                .Select(ssa => new { SubjectEnrollmentId = ssa.Id, ssa.StudentId, ssa.StudentAssignmentId })
+                .ToListAsync();
+            var enrollmentIds = assignmentsInScope.Where(a => a.StudentAssignmentId.HasValue).Select(a => a.StudentAssignmentId!.Value).ToHashSet();
+            var subjectEnrollmentIdsForScope = assignmentsInScope.Select(a => a.SubjectEnrollmentId).ToHashSet();
             var assignmentIdsByStudent = assignmentsInScope
                 .GroupBy(a => a.StudentId)
-                .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToHashSet());
-
-            var students = await assignmentsQuery
-                .Join(_context.Users,
-                    sa => sa.StudentId,
-                    u => u.Id,
-                    (sa, u) => new { u.Id, u.Name, u.LastName, u.DocumentId })
+                .ToDictionary(g => g.Key, g => g.Select(x => x.SubjectEnrollmentId).ToHashSet());
+            var studentIdsScoped = assignmentsInScope.Select(a => a.StudentId).Distinct().ToList();
+            var students = await _context.Users
+                .Where(u => studentIdsScoped.Contains(u.Id))
+                .Select(u => new { u.Id, u.Name, u.LastName, u.DocumentId })
                 .GroupBy(s => s.Id)
                 .Select(g => g.First())
                 .OrderBy(s => s.LastName)
@@ -459,7 +515,8 @@ namespace SchoolManager.Services
 
             // 2. Notas del grupo/materia/docente restringidas a matrículas de este grupo+grado
             var notasPorTrimestre = await _context.StudentActivityScores
-                .Where(s => enrollmentIds.Contains(s.StudentAssignmentId))
+                .Where(s => (s.StudentSubjectAssignmentId.HasValue && subjectEnrollmentIdsForScope.Contains(s.StudentSubjectAssignmentId.Value))
+                    || enrollmentIds.Contains(s.StudentAssignmentId))
                 .Join(_context.Activities,
                     score => score.ActivityId,
                     activity => activity.Id,
@@ -467,6 +524,7 @@ namespace SchoolManager.Services
                     {
                         StudentId = score.StudentId,
                         StudentAssignmentId = score.StudentAssignmentId,
+                        StudentSubjectAssignmentId = score.StudentSubjectAssignmentId,
                         Score = score.Score,
                         Trimester = activity.Trimester,
                         ActivityType = activity.Type,
@@ -502,7 +560,7 @@ namespace SchoolManager.Services
                 {
                     var idsForStudent = assignmentIdsByStudent.GetValueOrDefault(student.Id) ?? new HashSet<Guid>();
                     var notasEstudianteTrimestre = notasPorTrimestre
-                        .Where(x => x.StudentId == student.Id && idsForStudent.Contains(x.StudentAssignmentId) && x.Trimester == trimestre)
+                        .Where(x => x.StudentId == student.Id && x.StudentSubjectAssignmentId.HasValue && idsForStudent.Contains(x.StudentSubjectAssignmentId.Value) && x.Trimester == trimestre)
                         .ToList();
 
                     var notasValidas = notasEstudianteTrimestre.Where(x => x.Score.HasValue).ToList();

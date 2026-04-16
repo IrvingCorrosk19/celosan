@@ -141,18 +141,28 @@ namespace SchoolManager.Services.Implementations
                 _logger.LogInformation("Calificaciones encontradas: {ScoresCount}", studentScores?.Count ?? 0);
                 Console.WriteLine($"Calificaciones encontradas: {studentScores?.Count ?? 0}");
 
-                // Obtener el Grado y Grupo del estudiante
+                // Obtener matrículas activas y asignaturas activas del estudiante (modelo flexible nocturno)
                 var studentAssignment = await _context.StudentAssignments
-                    .Where(sa => sa.StudentId == studentId)
+                    .Where(sa => sa.StudentId == studentId && sa.IsActive)
+                    .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
                     .Join(_context.GradeLevels,
                           sa => sa.GradeId,
                           gl => gl.Id,
-                          (sa, gl) => new { sa.GroupId, sa.GradeId, GradeName = gl.Name })
+                          (sa, gl) => new { sa.GroupId, sa.GradeId, GradeName = gl.Name, sa.Id })
                     .Join(_context.Groups,
                           sa => sa.GroupId,
                           g => g.Id,
-                          (sa, g) => new { sa.GroupId, GradeName = sa.GradeName, GroupName = g.Name })
+                          (sa, g) => new { sa.Id, sa.GroupId, GradeName = sa.GradeName, GroupName = g.Name })
                     .FirstOrDefaultAsync();
+
+                var activeSubjectAssignments = await _context.StudentSubjectAssignments
+                    .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
+                    .Join(_context.SubjectAssignments,
+                          ssa => ssa.SubjectAssignmentId,
+                          sa => sa.Id,
+                          (ssa, sa) => new { ssa.Id, ssa.SubjectAssignmentId, sa.GroupId, sa.GradeLevelId })
+                    .Distinct()
+                    .ToListAsync();
 
                 _logger.LogInformation("Asignación encontrada: {Assignment}", studentAssignment != null ? $"Grado: {studentAssignment.GradeName}, Grupo: {studentAssignment.GroupName}" : "NULL");
                 Console.WriteLine($"Asignación encontrada: {(studentAssignment != null ? $"Grado: {studentAssignment.GradeName}, Grupo: {studentAssignment.GroupName}" : "NULL")}");
@@ -278,18 +288,22 @@ namespace SchoolManager.Services.Implementations
             // Obtener las actividades pendientes
             List<PendingActivityDto> pendingActivities = new();
 
-            if (studentAssignment != null)
+            if (activeSubjectAssignments.Any())
             {
                 try
                 {
+                    var scopedSubjectAssignmentIds = activeSubjectAssignments.Select(x => x.SubjectAssignmentId).Distinct().ToList();
                     pendingActivities = await _context.Activities
-                        .Where(a => a.GroupId == studentAssignment.GroupId &&
-                                    a.Trimester == selectedTrimester &&
-                                    !_context.StudentActivityScores.Any(s =>
-                                        s.ActivityId == a.Id &&
-                                        s.StudentId == studentId &&
-                                        _context.StudentAssignments.Any(sa =>
-                                            sa.Id == s.StudentAssignmentId && sa.GroupId == a.GroupId)))
+                        .Where(a => a.Trimester == selectedTrimester &&
+                            _context.SubjectAssignments.Any(sa => scopedSubjectAssignmentIds.Contains(sa.Id)
+                                && sa.SubjectId == a.SubjectId
+                                && sa.GroupId == a.GroupId
+                                && sa.GradeLevelId == a.GradeLevelId) &&
+                            !_context.StudentActivityScores.Any(s =>
+                                s.ActivityId == a.Id &&
+                                s.StudentId == studentId &&
+                                ((s.StudentSubjectAssignmentId.HasValue && activeSubjectAssignments.Select(x => x.Id).Contains(s.StudentSubjectAssignmentId.Value))
+                                    || _context.StudentAssignments.Any(sa => sa.Id == s.StudentAssignmentId && sa.StudentId == studentId))))
                         .Select(a => new PendingActivityDto
                         {
                             ActivityId = a.Id,
@@ -411,17 +425,18 @@ namespace SchoolManager.Services.Implementations
                 return null;
             }
 
-            // Obtener el Grado y Grupo del estudiante
+            // Obtener el Grado y Grupo principal del estudiante (activa más reciente)
             var studentAssignment = await _context.StudentAssignments
-                .Where(sa => sa.StudentId == studentId)
+                .Where(sa => sa.StudentId == studentId && sa.IsActive)
+                .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
                 .Join(_context.GradeLevels,
                       sa => sa.GradeId,
                       gl => gl.Id,
-                      (sa, gl) => new { sa.GroupId, sa.GradeId, GradeName = gl.Name })
+                      (sa, gl) => new { sa.GroupId, sa.GradeId, GradeName = gl.Name, sa.Id })
                 .Join(_context.Groups,
                       sa => sa.GroupId,
                       g => g.Id,
-                      (sa, g) => new { sa.GroupId, GradeName = sa.GradeName, GroupName = g.Name })
+                      (sa, g) => new { sa.Id, sa.GroupId, GradeName = sa.GradeName, GroupName = g.Name })
                 .FirstOrDefaultAsync();
 
             if (studentAssignment == null)
@@ -521,16 +536,30 @@ namespace SchoolManager.Services.Implementations
             // Obtener las actividades pendientes
             List<PendingActivityDto> pendingActivities = new();
 
+            var activeSubjectAssignments = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
+                .Join(_context.SubjectAssignments,
+                      ssa => ssa.SubjectAssignmentId,
+                      sa => sa.Id,
+                      (ssa, sa) => new { ssa.Id, ssa.SubjectAssignmentId, sa.GroupId, sa.GradeLevelId })
+                .Distinct()
+                .ToListAsync();
+
             try
             {
+                var scopedSubjectAssignmentIds = activeSubjectAssignments.Select(x => x.SubjectAssignmentId).Distinct().ToList();
                 pendingActivities = await _context.Activities
-                    .Where(a => a.GroupId == studentAssignment.GroupId &&
-                                a.Trimester == trimester &&
+                    .Where(a => a.Trimester == trimester &&
+                                _context.SubjectAssignments.Any(sa => scopedSubjectAssignmentIds.Contains(sa.Id)
+                                    && sa.SubjectId == a.SubjectId
+                                    && sa.GroupId == a.GroupId
+                                    && sa.GradeLevelId == a.GradeLevelId) &&
                                 !_context.StudentActivityScores.Any(s =>
                                     s.ActivityId == a.Id &&
                                     s.StudentId == studentId &&
-                                    _context.StudentAssignments.Any(sa =>
-                                        sa.Id == s.StudentAssignmentId && sa.GroupId == a.GroupId)))
+                                    ((s.StudentSubjectAssignmentId.HasValue && activeSubjectAssignments.Select(x => x.Id).Contains(s.StudentSubjectAssignmentId.Value))
+                                     || _context.StudentAssignments.Any(sa =>
+                                            sa.Id == s.StudentAssignmentId && sa.StudentId == studentId))))
                     .Select(a => new PendingActivityDto
                     {
                         ActivityId = a.Id,

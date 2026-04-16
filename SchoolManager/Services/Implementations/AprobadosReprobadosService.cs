@@ -151,11 +151,26 @@ namespace SchoolManager.Services.Implementations
         {
             _logger.LogInformation("Calculando estadísticas para grupo {GrupoId}, trimestre {Trimestre}", grupoId, trimestre);
 
-            var estudiantesDelGrupo = await _context.StudentAssignments
-                .Where(sa => sa.GroupId == grupoId && sa.IsActive)
-                .Select(sa => sa.StudentId)
+            var subjectAssignmentIdsDelGrupo = await _context.SubjectAssignments
+                .Where(sa => sa.GroupId == grupoId)
+                .Select(sa => sa.Id)
+                .ToListAsync();
+
+            var estudiantesDelGrupo = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.IsActive && subjectAssignmentIdsDelGrupo.Contains(ssa.SubjectAssignmentId))
+                .Select(ssa => ssa.StudentId)
                 .Distinct()
                 .ToListAsync();
+
+            if (!estudiantesDelGrupo.Any())
+            {
+                // Compatibilidad hacia atrás: si aún no hay inscripciones por asignatura, usar matrícula por grupo.
+                estudiantesDelGrupo = await _context.StudentAssignments
+                    .Where(sa => sa.GroupId == grupoId && sa.IsActive)
+                    .Select(sa => sa.StudentId)
+                    .Distinct()
+                    .ToListAsync();
+            }
 
             int total = estudiantesDelGrupo.Count;
             if (total == 0)

@@ -10,5 +10,6 @@ public interface ISubjectService
     Task<Subject> GetOrCreateAsync(string name);
     Task<Subject?> GetByCodeAsync(string code);
     Task<List<SubjectAssignment>> GetSubjectAssignmentsByGradeAndGroupAsync(Guid gradeId, Guid groupId);
+    Task<List<SubjectAssignment>> GetSubjectAssignmentsByStudentAsync(Guid studentId);
 
 }

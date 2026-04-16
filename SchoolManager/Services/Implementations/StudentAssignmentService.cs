@@ -21,6 +21,50 @@ namespace SchoolManager.Services.Implementations
             _currentUserService = currentUserService;
             _academicYearService = academicYearService;
         }
+
+        private async Task SyncStudentSubjectAssignmentsAsync(StudentAssignment assignment, Guid? explicitSubjectId = null)
+        {
+            var subjectAssignmentsQuery = _context.SubjectAssignments
+                .Where(sa => sa.GradeLevelId == assignment.GradeId && sa.GroupId == assignment.GroupId);
+
+            if (explicitSubjectId.HasValue && explicitSubjectId.Value != Guid.Empty)
+                subjectAssignmentsQuery = subjectAssignmentsQuery.Where(sa => sa.SubjectId == explicitSubjectId.Value);
+
+            var subjectAssignments = await subjectAssignmentsQuery
+                .Select(sa => new { sa.Id, sa.SubjectId })
+                .ToListAsync();
+
+            foreach (var subjectAssignment in subjectAssignments)
+            {
+                var exists = await _context.StudentSubjectAssignments.AnyAsync(ssa =>
+                    ssa.StudentId == assignment.StudentId &&
+                    ssa.SubjectAssignmentId == subjectAssignment.Id &&
+                    ssa.IsActive &&
+                    ssa.AcademicYearId == assignment.AcademicYearId);
+
+                if (exists)
+                    continue;
+
+                var enrollment = new StudentSubjectAssignment
+                {
+                    Id = Guid.NewGuid(),
+                    StudentId = assignment.StudentId,
+                    SubjectAssignmentId = subjectAssignment.Id,
+                    StudentAssignmentId = assignment.Id,
+                    AcademicYearId = assignment.AcademicYearId,
+                    ShiftId = assignment.ShiftId,
+                    EnrollmentType = string.IsNullOrWhiteSpace(assignment.EnrollmentType) ? "Regular" : assignment.EnrollmentType,
+                    Status = "Active",
+                    IsActive = true,
+                    StartDate = assignment.StartDate ?? assignment.CreatedAt ?? DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await AuditHelper.SetAuditFieldsForCreateAsync(enrollment, _currentUserService);
+                await AuditHelper.SetSchoolIdAsync(enrollment, _currentUserService);
+                _context.StudentSubjectAssignments.Add(enrollment);
+            }
+        }
         public async Task InsertAsync(StudentAssignment assignment)
         {
             if (assignment == null)
@@ -62,6 +106,8 @@ namespace SchoolManager.Services.Implementations
                 _context.StudentAssignments.Add(assignment);
                 Console.WriteLine($"[StudentAssignmentService] Entidad agregada al contexto");
 
+                await _context.SaveChangesAsync();
+                await SyncStudentSubjectAssignmentsAsync(assignment);
                 await _context.SaveChangesAsync();
                 Console.WriteLine($"[StudentAssignmentService] SaveChangesAsync completado exitosamente");
             }
@@ -240,6 +286,13 @@ namespace SchoolManager.Services.Implementations
 
                 Console.WriteLine($"[StudentAssignmentService] Guardando cambios...");
                 await _context.SaveChangesAsync();
+                var createdAssignments = await _context.StudentAssignments
+                    .Where(sa => sa.StudentId == studentId && sa.IsActive)
+                    .OrderByDescending(sa => sa.CreatedAt)
+                    .ToListAsync();
+                foreach (var assignment in createdAssignments)
+                    await SyncStudentSubjectAssignmentsAsync(assignment);
+                await _context.SaveChangesAsync();
                 Console.WriteLine($"[StudentAssignmentService] AssignAsync completado exitosamente");
             }
             catch (DbUpdateException dbEx)
@@ -336,6 +389,8 @@ namespace SchoolManager.Services.Implementations
                 
                 _context.StudentAssignments.Add(assignment);
                 await _context.SaveChangesAsync();
+                await SyncStudentSubjectAssignmentsAsync(assignment, subjectId);
+                await _context.SaveChangesAsync();
                 
                 Console.WriteLine($"[StudentAssignmentService] Asignación guardada exitosamente");
                 return true;
@@ -398,6 +453,13 @@ namespace SchoolManager.Services.Implementations
             }
 
             await _context.SaveChangesAsync();
+            var affectedAssignments = await _context.StudentAssignments
+                .Where(sa => rows.Select(r => r.StudentEmail).Contains(sa.Student.Email) && sa.IsActive)
+                .Include(sa => sa.Student)
+                .ToListAsync();
+            foreach (var assignment in affectedAssignments)
+                await SyncStudentSubjectAssignmentsAsync(assignment);
+            await _context.SaveChangesAsync();
         }
 
         public async Task<bool> AddEnrollmentAsync(Guid studentId, Guid gradeId, Guid groupId, string enrollmentType = "Nocturno")
@@ -431,6 +493,12 @@ namespace SchoolManager.Services.Implementations
                 EnrollmentType = enrollmentType.Trim(),
                 StartDate = DateTime.UtcNow
             });
+            await _context.SaveChangesAsync();
+            var assignment = await _context.StudentAssignments
+                .Where(sa => sa.StudentId == studentId && sa.GradeId == gradeId && sa.GroupId == groupId && sa.IsActive)
+                .OrderByDescending(sa => sa.CreatedAt)
+                .FirstAsync();
+            await SyncStudentSubjectAssignmentsAsync(assignment);
             await _context.SaveChangesAsync();
             return true;
         }

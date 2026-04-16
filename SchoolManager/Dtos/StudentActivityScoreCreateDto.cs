@@ -7,6 +7,8 @@
         /// <summary>Si viene informado, se usa directamente; si no, se infiere por actividad o por grupo+grado.</summary>
         public Guid? StudentAssignmentId { get; set; }
 
+        public Guid? StudentSubjectAssignmentId { get; set; }
+
         public Guid ActivityId { get; set; }
         public string ActivityName { get; set; }  
         public string Type { get; set; }         

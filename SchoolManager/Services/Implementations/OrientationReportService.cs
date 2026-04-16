@@ -176,9 +176,14 @@ namespace SchoolManager.Services
             var groupIds = counselorGroups.Where(cg => cg.GroupId.HasValue).Select(cg => cg.GroupId.Value).ToList();
             var gradeIds = counselorGroups.Where(cg => cg.GradeId.HasValue).Select(cg => cg.GradeId.Value).ToList();
 
-            var studentIds = await _context.StudentAssignments
-                .Where(sa => groupIds.Contains(sa.GroupId) || gradeIds.Contains(sa.GradeId))
-                .Select(sa => sa.StudentId)
+            var studentIds = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.IsActive)
+                .Join(_context.SubjectAssignments,
+                      ssa => ssa.SubjectAssignmentId,
+                      sa => sa.Id,
+                      (ssa, sa) => new { ssa.StudentId, sa.GroupId, sa.GradeLevelId })
+                .Where(x => groupIds.Contains(x.GroupId) || gradeIds.Contains(x.GradeLevelId))
+                .Select(x => x.StudentId)
                 .Distinct()
                 .ToListAsync();
 
