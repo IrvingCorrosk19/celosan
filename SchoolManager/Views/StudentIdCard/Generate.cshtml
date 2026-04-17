@@ -19,16 +19,6 @@
     var hasLogo = !string.IsNullOrWhiteSpace(Model.SchoolLogoUrl);
     var showWm = Model.ShowWatermark && hasLogo;
     var hasEmergencyQr = hasCard && Model.ShowQr && !string.IsNullOrEmpty(Model.Card?.EmergencyInfoQrImageDataUrl);
-    var gradeGroupCompact = "—";
-    if (hasCard && Model.Card != null)
-    {
-        var gradeG = Model.Card.Grade?.Trim() ?? "";
-        var groupG = string.IsNullOrWhiteSpace(Model.Card.Group) ? "" : Model.Card.Group.Trim();
-        gradeGroupCompact = (string.IsNullOrWhiteSpace(gradeG) && string.IsNullOrWhiteSpace(groupG)) ? "—"
-            : string.IsNullOrWhiteSpace(groupG) ? gradeG
-            : string.IsNullOrWhiteSpace(gradeG) ? groupG
-            : $"{gradeG}-{groupG}";
-    }
 }
 
 <style>
@@ -214,16 +204,18 @@
     }
 
     .idcard-policy-section .policy-label {
-        font-size: 5.5pt;
+        font-size: 6.5pt;
         font-weight: 700;
         color: @primary;
         line-height: 1.25;
     }
 
     .idcard-policy-section .policy-number {
-        font-size: 5pt;
+        font-size: 6.5pt;
+        font-weight: 600;
         color: @text;
-        line-height: 1.2;
+        line-height: 1.25;
+        word-break: break-word;
     }
 
     .idcard-policy-section .policy-id {
@@ -406,7 +398,6 @@
                                 {
                                     <div style="font-size:6.5pt;color:@text">Cédula: @Model.DocumentId</div>
                                 }
-                                <div style="font-size:6.5pt;color:@text;line-height:1.25">@gradeGroupCompact</div>
                                 @if (Model.ShowAcademicYear && !string.IsNullOrWhiteSpace(Model.AcademicYear))
                                 {
                                     <div style="font-size:6.5pt;color:@text">Año: @Model.AcademicYear</div>

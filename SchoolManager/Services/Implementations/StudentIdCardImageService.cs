@@ -26,17 +26,6 @@ public class StudentIdCardImageService : IStudentIdCardImageService
     private static (int w, int h) GetDims(SchoolIdCardSetting s) =>
         IsInstitutionalVertical(s) ? (PortW, PortH) : (LandW, LandH);
 
-    /// <summary>Muestra grado y grupo como "9-A" sin etiquetas Grado:/Grupo:.</summary>
-    private static string FormatGradeGroupCompact(string? grade, string? group)
-    {
-        var g = grade?.Trim() ?? "";
-        var grp = string.IsNullOrWhiteSpace(group) ? "" : group.Trim();
-        if (string.IsNullOrWhiteSpace(g) && string.IsNullOrWhiteSpace(grp)) return "—";
-        if (string.IsNullOrWhiteSpace(grp)) return g;
-        if (string.IsNullOrWhiteSpace(g)) return grp;
-        return $"{g}-{grp}";
-    }
-
     public (float WidthMm, float HeightMm) GetCardMmDimensions(SchoolIdCardSetting s) =>
         IsInstitutionalVertical(s)
             ? (IdCardPhysicalDimensions.ShortMm, IdCardPhysicalDimensions.LongMm)
@@ -140,7 +129,6 @@ public class StudentIdCardImageService : IStudentIdCardImageService
 
         AutoText(canvas, dto.FullName,              dataX, ty, dataW, nameFs,  textCol, bold: true); ty += lineH;
         AutoText(canvas, $"Carnet: {dto.CardNumber}", dataX, ty, dataW, cardFs,  primary);            ty += lineH;
-        AutoText(canvas, FormatGradeGroupCompact(dto.Grade, dto.Group), dataX, ty, dataW, smallFs, textCol); ty += lineH;
         AutoText(canvas, dto.Shift,                  dataX, ty, dataW, smallFs, textCol);
 
         // ── Footer ────────────────────────────────────────────────────────────
@@ -243,8 +231,6 @@ public class StudentIdCardImageService : IStudentIdCardImageService
             AutoText(canvas, $"Cédula: {dto.DocumentId}", hPad, ty, textW, smallFs, textCol, center: true);
             ty += lineH;
         }
-        AutoText(canvas, FormatGradeGroupCompact(dto.Grade, dto.Group), hPad, ty, textW, smallFs, textCol, center: true);
-        ty += lineH;
         if (settings.ShowAcademicYear && !string.IsNullOrWhiteSpace(dto.AcademicYear))
             AutoText(canvas, $"Año: {dto.AcademicYear}", hPad, ty, textW, smallFs, textCol, center: true);
 
@@ -252,23 +238,23 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         using (var p = Fill(new SKColor(230, 238, 247)))
             canvas.DrawRect(0, bottomZoneTop, w, bottomZH, p);
 
-        float qrSz = bottomZH * 0.55f;
+        float qrSz = bottomZH * 0.52f;
         float qrX  = w - hPad - qrSz;
         float qrY  = bottomZoneTop + (bottomZH - qrSz) / 2f;
         if (settings.ShowQr)
             DrawQr(canvas, dto.QrToken, SKRect.Create(qrX, qrY, qrSz, qrSz));
 
         float leftW    = qrX - hPad * 2f;
-        float polFs    = h * 0.022f;
+        float polFs    = h * 0.028f;
         float polIdFs  = h * 0.025f;
-        float lty      = bottomZoneTop + bottomZH * 0.18f;
+        float lty      = bottomZoneTop + bottomZH * 0.20f;
 
         if (settings.ShowPolicyNumber && !string.IsNullOrWhiteSpace(dto.PolicyNumber))
         {
             AutoText(canvas, "Póliza de Seguro Educativo", hPad, lty, leftW, polFs, primary, bold: true);
             lty += polFs * 1.5f;
-            AutoText(canvas, Trunc(dto.PolicyNumber, 28), hPad, lty, leftW, polFs, textCol);
-            lty += polFs * 1.8f;
+            AutoText(canvas, Trunc(dto.PolicyNumber, 30), hPad, lty, leftW, polFs, textCol, bold: true);
+            lty += polFs * 1.55f;
         }
         AutoText(canvas, Trunc($"ID: {dto.CardNumber}", 22), hPad, lty, leftW, polIdFs, textCol, bold: true);
 
@@ -360,7 +346,6 @@ public class StudentIdCardImageService : IStudentIdCardImageService
 
         AutoText(canvas, dto.FullName,               dataX, ty, dataW, nameFs,  textCol, bold: true); ty += lineH;
         AutoText(canvas, $"Carnet: {dto.CardNumber}", dataX, ty, dataW, cardFs,  primary);             ty += lineH;
-        AutoText(canvas, FormatGradeGroupCompact(dto.Grade, dto.Group), dataX, ty, dataW, smallFs, textCol); ty += lineH;
         AutoText(canvas, dto.Shift,                   dataX, ty, dataW, smallFs, textCol);             ty += lineH;
         if (settings.ShowDocumentId && !string.IsNullOrWhiteSpace(dto.DocumentId))
             AutoText(canvas, $"Cédula: {dto.DocumentId}", dataX, ty, dataW, smallFs, textCol);
@@ -419,10 +404,8 @@ public class StudentIdCardImageService : IStudentIdCardImageService
                     AutoText(canvas, dto.DocumentId ?? "", fx, fy + fs, fw, fs, textCol);
                     break;
                 case "Grade":
-                    AutoText(canvas, dto.Grade, fx, fy + fs, fw, fs, textCol);
-                    break;
                 case "Group":
-                    AutoText(canvas, dto.Group, fx, fy + fs, fw, fs, textCol);
+                    // Requisito funcional: no mostrar grado/grupo en carnet.
                     break;
                 case "Shift":
                     AutoText(canvas, dto.Shift, fx, fy + fs, fw, fs, textCol);

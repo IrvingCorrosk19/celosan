@@ -435,6 +435,55 @@ namespace SchoolManager.Controllers
             return input;
         }
 
+        /// <summary>
+        /// Si no existe impartición materia+grado+grupo, la crea reutilizando área y especialidad de otra impartición de la escuela (o global).
+        /// </summary>
+        private async Task<(SubjectAssignment? Assignment, string? Error)> EnsureSubjectAssignmentForBulkAsync(
+            Guid schoolId,
+            Guid subjectId,
+            Guid gradeLevelId,
+            Guid groupId)
+        {
+            var existing = await _context.SubjectAssignments
+                .FirstOrDefaultAsync(sa =>
+                    sa.SubjectId == subjectId &&
+                    sa.GradeLevelId == gradeLevelId &&
+                    sa.GroupId == groupId);
+            if (existing != null)
+                return (existing, null);
+
+            var template = await _context.SubjectAssignments.AsNoTracking()
+                .Where(sa => sa.SchoolId == schoolId)
+                .Select(sa => new { sa.AreaId, sa.SpecialtyId })
+                .FirstOrDefaultAsync();
+
+            if (template == null)
+            {
+                template = await _context.SubjectAssignments.AsNoTracking()
+                    .Select(sa => new { sa.AreaId, sa.SpecialtyId })
+                    .FirstOrDefaultAsync();
+            }
+
+            if (template == null)
+                return (null, "No hay imparticiones (SubjectAssignment) para usar como plantilla de área/especialidad.");
+
+            var created = new SubjectAssignment
+            {
+                Id = Guid.NewGuid(),
+                SubjectId = subjectId,
+                GradeLevelId = gradeLevelId,
+                GroupId = groupId,
+                AreaId = template.AreaId,
+                SpecialtyId = template.SpecialtyId,
+                SchoolId = schoolId,
+                Status = "Active",
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.SubjectAssignments.Add(created);
+            await _context.SaveChangesAsync();
+            return (created, null);
+        }
+
         [HttpPost("/StudentAssignment/BulkSaveSubjectEnrollments")]
         public async Task<IActionResult> BulkSaveSubjectEnrollments([FromBody] List<StudentSubjectEnrollmentInputModel> rows)
         {
@@ -445,6 +494,7 @@ namespace SchoolManager.Controllers
             if (currentSchoolId == null)
                 return BadRequest(new { success = false, message = "No se pudo determinar la escuela actual." });
 
+            var schoolId = currentSchoolId.Value;
             var now = DateTime.UtcNow;
             var errors = new List<string>();
 
@@ -487,7 +537,7 @@ namespace SchoolManager.Controllers
                             Status = "active",
                             CreatedAt = now,
                             UpdatedAt = now,
-                            SchoolId = currentSchoolId,
+                            SchoolId = schoolId,
                             PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"),
                             TwoFactorEnabled = false,
                             LastLogin = null,
@@ -499,26 +549,21 @@ namespace SchoolManager.Controllers
 
                     var grade = await _gradeLevelService.GetByNameAsync(row.Nivel.Trim());
                     if (grade == null)
-                    {
-                        errors.Add($"Grado no encontrado: {row.Nivel} (estudiante {row.EstudianteEmail})");
-                        continue;
-                    }
+                        grade = await _gradeLevelService.GetOrCreateAsync(row.Nivel.Trim());
 
-                    Shift? shift = null;
-                    if (!string.IsNullOrWhiteSpace(row.Jornada))
-                    {
-                        shift = await _shiftService.GetOrCreateAsync(row.Jornada.Trim());
-                    }
+                    var jornadaEfectiva = string.IsNullOrWhiteSpace(row.Jornada)
+                        ? "Noche"
+                        : row.Jornada.Trim();
+                    var shift = await _shiftService.GetOrCreateAsync(jornadaEfectiva);
 
-                    var group = await _groupService.GetByNameAndGradeAsync(row.GrupoAcademico.Trim(), currentSchoolId, shift?.Id);
+                    var group = await _groupService.GetByNameAndGradeAsync(row.GrupoAcademico.Trim(), currentSchoolId, shift.Id);
                     if (group == null)
                     {
-                        errors.Add($"Grupo no encontrado: {row.GrupoAcademico} (estudiante {row.EstudianteEmail})");
+                        errors.Add($"Grupo no encontrado: {row.GrupoAcademico} (estudiante {row.EstudianteEmail}). Cree el grupo en su escuela o verifique el nombre.");
                         continue;
                     }
 
-                    // Alinear jornada al grupo si aplica (evita que AddEnrollmentAsync cree con shift distinto).
-                    if (shift != null && (group.ShiftId == null || group.ShiftId != shift.Id))
+                    if (group.ShiftId == null || group.ShiftId != shift.Id)
                     {
                         group.ShiftId = shift.Id;
                         group.Shift = shift.Name;
@@ -526,7 +571,6 @@ namespace SchoolManager.Controllers
                         await _groupService.UpdateAsync(group);
                     }
 
-                    // Materia (por Name o Code).
                     var normalizedSubject = NormalizeToken(row.Asignatura).ToUpperInvariant();
                     var subject = await _context.Subjects
                         .FirstOrDefaultAsync(s =>
@@ -534,12 +578,8 @@ namespace SchoolManager.Controllers
                             (s.Code != null && NormalizeToken(s.Code).ToUpperInvariant() == normalizedSubject));
 
                     if (subject == null)
-                    {
-                        errors.Add($"Materia no encontrada: {row.Asignatura} (estudiante {row.EstudianteEmail})");
-                        continue;
-                    }
+                        subject = await _subjectService.GetOrCreateAsync(row.Asignatura.Trim());
 
-                    // SubjectAssignment = (Subject + GradeLevel + Group)
                     var subjectAssignment = await _context.SubjectAssignments
                         .FirstOrDefaultAsync(sa =>
                             sa.SubjectId == subject.Id &&
@@ -548,12 +588,18 @@ namespace SchoolManager.Controllers
 
                     if (subjectAssignment == null)
                     {
-                        errors.Add($"No existe SubjectAssignment para {row.Asignatura} | {row.Nivel} | {row.GrupoAcademico} (estudiante {row.EstudianteEmail}).");
-                        continue;
+                        var (createdSa, ensureErr) = await EnsureSubjectAssignmentForBulkAsync(schoolId, subject.Id, grade.Id, group.Id);
+                        if (createdSa == null)
+                        {
+                            errors.Add($"{ensureErr} Fila: {row.Asignatura} | {row.Nivel} | {row.GrupoAcademico} ({row.EstudianteEmail}).");
+                            continue;
+                        }
+
+                        subjectAssignment = createdSa;
                     }
 
-                    var shiftId = group.ShiftId ?? shift?.Id;
-                    var key = $"{student.Id}::{grade.Id}::{group.Id}::{shiftId?.ToString() ?? "null"}";
+                    var shiftId = group.ShiftId ?? shift.Id;
+                    var key = $"{student.Id}::{grade.Id}::{group.Id}::{shiftId}";
                     if (!keepSetByKey.TryGetValue(key, out var keepSet))
                     {
                         keepSet = new HashSet<Guid>();
@@ -561,13 +607,7 @@ namespace SchoolManager.Controllers
                     }
 
                     if (!enrollmentTypeByKey.ContainsKey(key))
-                    {
-                        var tipoMatricula = "Regular";
-                        var jornadaNormalized = row.Jornada?.Trim().ToUpperInvariant() ?? string.Empty;
-                        if (!string.IsNullOrEmpty(jornadaNormalized) && (jornadaNormalized.Contains("NOCHE") || jornadaNormalized.Contains("NOCTURNO")))
-                            tipoMatricula = "Nocturno";
-                        enrollmentTypeByKey[key] = tipoMatricula;
-                    }
+                        enrollmentTypeByKey[key] = "Nocturno";
 
                     if (row.Inscrito)
                         keepSet.Add(subjectAssignment.Id);
@@ -610,7 +650,7 @@ namespace SchoolManager.Controllers
                 var groupId = Guid.Parse(parts[2]);
                 Guid? shiftId = parts[3] == "null" ? null : Guid.Parse(parts[3]);
 
-                var enrollmentType = enrollmentTypeByKey.TryGetValue(key, out var t) ? t : "Regular";
+                var enrollmentType = enrollmentTypeByKey.TryGetValue(key, out var t) ? t : "Nocturno";
 
                 // Asegurar StudentAssignment existente
                 var shiftFilter = shiftId;
