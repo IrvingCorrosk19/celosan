@@ -129,6 +129,7 @@ public class StudentIdCardImageService : IStudentIdCardImageService
 
         AutoText(canvas, dto.FullName,              dataX, ty, dataW, nameFs,  textCol, bold: true); ty += lineH;
         AutoText(canvas, $"Carnet: {dto.CardNumber}", dataX, ty, dataW, cardFs,  primary);            ty += lineH;
+        AutoText(canvas, "Nocturna",                dataX, ty, dataW, smallFs, textCol);              ty += lineH;
         AutoText(canvas, dto.Shift,                  dataX, ty, dataW, smallFs, textCol);
 
         // ── Footer ────────────────────────────────────────────────────────────
@@ -231,6 +232,8 @@ public class StudentIdCardImageService : IStudentIdCardImageService
             AutoText(canvas, $"Cédula: {dto.DocumentId}", hPad, ty, textW, smallFs, textCol, center: true);
             ty += lineH;
         }
+        AutoText(canvas, "Nocturna", hPad, ty, textW, smallFs, textCol, center: true);
+        ty += lineH;
         if (settings.ShowAcademicYear && !string.IsNullOrWhiteSpace(dto.AcademicYear))
             AutoText(canvas, $"Año: {dto.AcademicYear}", hPad, ty, textW, smallFs, textCol, center: true);
 
@@ -346,6 +349,7 @@ public class StudentIdCardImageService : IStudentIdCardImageService
 
         AutoText(canvas, dto.FullName,               dataX, ty, dataW, nameFs,  textCol, bold: true); ty += lineH;
         AutoText(canvas, $"Carnet: {dto.CardNumber}", dataX, ty, dataW, cardFs,  primary);             ty += lineH;
+        AutoText(canvas, "Nocturna",                 dataX, ty, dataW, smallFs, textCol);              ty += lineH;
         AutoText(canvas, dto.Shift,                   dataX, ty, dataW, smallFs, textCol);             ty += lineH;
         if (settings.ShowDocumentId && !string.IsNullOrWhiteSpace(dto.DocumentId))
             AutoText(canvas, $"Cédula: {dto.DocumentId}", dataX, ty, dataW, smallFs, textCol);
@@ -404,6 +408,8 @@ public class StudentIdCardImageService : IStudentIdCardImageService
                     AutoText(canvas, dto.DocumentId ?? "", fx, fy + fs, fw, fs, textCol);
                     break;
                 case "Grade":
+                    AutoText(canvas, "Nocturna", fx, fy + fs, fw, fs, textCol);
+                    break;
                 case "Group":
                     // Requisito funcional: no mostrar grado/grupo en carnet.
                     break;
