@@ -16,7 +16,7 @@
         <li><strong>Nivel</strong></li>
         <li><strong>Grupo académico</strong></li>
         <li><strong>Jornada</strong> (opcional: Mañana/Tarde/Noche)</li>
-        <li><strong>Resultado (Inscrito)</strong> (SI/NO, 1/0, TRUE/FALSE)</li>
+        <li><strong>Resultado (Inscrito)</strong> o solo <strong>Resultado</strong> (SI/NO, 1/0, TRUE/FALSE)</li>
     </ul>
 </div>
 
@@ -136,7 +136,10 @@
                     const idxNivel = headersObtenidos.findIndex(h => h === "NIVEL");
                     const idxGrupo = headersObtenidos.findIndex(h => h.includes("GRUPO") && h.includes("ACADEMICO"));
                     const idxJornada = headersObtenidos.findIndex(h => h === "JORNADA");
-                    const idxResultado = headersObtenidos.findIndex(h => h.includes("RESULTADO") && h.includes("INSCRITO"));
+                    // Acepta "Resultado (Inscrito)" o encabezado único "Resultado" (valores SI/NO).
+                    let idxResultado = headersObtenidos.findIndex(h => h.includes("RESULTADO") && h.includes("INSCRITO"));
+                    if (idxResultado < 0)
+                        idxResultado = headersObtenidos.findIndex(h => h === "RESULTADO");
 
                     const requeridos = [
                         { idx: idxEmail, label: "Estudiante (Email)" },

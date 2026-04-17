@@ -842,7 +842,13 @@ namespace SchoolManager.Controllers
                 try
                 {
                     Console.WriteLine($"[SaveAssignments] Procesando: {item.Estudiante} - {item.Grado} - {item.Grupo}");
-                    
+
+                    // Solo nocturna: jornada vacía → "Noche" (resolución de grupo + tipo de matrícula coherente).
+                    var jornadaParaShift = string.IsNullOrWhiteSpace(item.Jornada)
+                        ? "Noche"
+                        : item.Jornada.Trim();
+                    var shift = await _shiftService.GetOrCreateAsync(jornadaParaShift);
+
                     // Buscar o crear el estudiante
                     var student = await _userService.GetByEmailAsync(item.Estudiante);
                     if (student == null)
@@ -870,7 +876,7 @@ namespace SchoolManager.Controllers
                             TwoFactorEnabled = false,
                             LastLogin = null,
                             Inclusivo = item.Inclusivo,
-                            Shift = !string.IsNullOrEmpty(item.Jornada) ? item.Jornada.Trim() : null // Jornada del estudiante
+                            Shift = jornadaParaShift // alineado con resolución de grupo (por defecto Noche)
                         };
                         
                         await _userService.CreateAsync(newStudent, new List<Guid>(), new List<Guid>());
@@ -885,10 +891,7 @@ namespace SchoolManager.Controllers
                         
                         // Actualizar el campo Inclusivo y Jornada del estudiante existente
                         student.Inclusivo = item.Inclusivo;
-                        if (!string.IsNullOrEmpty(item.Jornada))
-                        {
-                            student.Shift = item.Jornada.Trim();
-                        }
+                        student.Shift = jornadaParaShift;
                         student.UpdatedAt = DateTime.UtcNow;
                         
                         await _userService.UpdateAsync(student, new List<Guid>(), new List<Guid>());
@@ -897,19 +900,10 @@ namespace SchoolManager.Controllers
                     }
 
                     var grade = await _gradeLevelService.GetByNameAsync(item.Grado);
-                    
-                    // Buscar o crear jornada si se proporcionó (similar a grado y grupo)
-                    Shift? shift = null;
-                    if (!string.IsNullOrEmpty(item.Jornada))
-                    {
-                        var jornadaNombre = item.Jornada.Trim();
-                        shift = await _shiftService.GetOrCreateAsync(jornadaNombre);
-                        
-                    }
 
-                    var group = await _groupService.GetByNameAndGradeAsync(item.Grupo, currentSchoolId, shift?.Id);
+                    var group = await _groupService.GetByNameAndGradeAsync(item.Grupo, currentSchoolId, shift.Id);
                     // Si el grupo existe y no tiene jornada, asignarla al grupo
-                    if (group != null && shift != null && (group.ShiftId == null || group.ShiftId != shift.Id))
+                    if (group != null && (group.ShiftId == null || group.ShiftId != shift.Id))
                     {
                         group.ShiftId = shift.Id;
                         group.Shift = shift.Name; // Mantener por compatibilidad
@@ -924,9 +918,9 @@ namespace SchoolManager.Controllers
                         continue;
                     }
 
-                    Console.WriteLine($"[SaveAssignments] Verificando si existe asignación: StudentId={student.Id}, GradeId={grade.Id}, GroupId={group.Id}, ShiftId={shift?.Id}");
+                    Console.WriteLine($"[SaveAssignments] Verificando si existe asignación: StudentId={student.Id}, GradeId={grade.Id}, GroupId={group.Id}, ShiftId={shift.Id}");
                     
-                    bool exists = await _studentAssignmentService.ExistsWithShiftAsync(student.Id, grade.Id, group.Id, shift?.Id);
+                    bool exists = await _studentAssignmentService.ExistsWithShiftAsync(student.Id, grade.Id, group.Id, shift.Id);
                     if (exists)
                     {
                         Console.WriteLine($"[SaveAssignments] Asignación ya existe, saltando");
@@ -934,14 +928,16 @@ namespace SchoolManager.Controllers
                         continue;
                     }
 
-                    var tipoMatricula = string.IsNullOrWhiteSpace(item.TipoMatricula) ? "Regular" : item.TipoMatricula.Trim();
+                    var tipoMatricula = string.IsNullOrWhiteSpace(item.TipoMatricula)
+                        ? "Nocturno"
+                        : item.TipoMatricula.Trim();
                     var assignment = new StudentAssignment
                     {
                         Id = Guid.NewGuid(),
                         StudentId = student.Id,
                         GradeId = grade.Id,
                         GroupId = group.Id,
-                        ShiftId = shift?.Id, // Asignar jornada directamente a la asignación (similar a grado y grupo)
+                        ShiftId = shift.Id,
                         CreatedAt = DateTime.UtcNow,
                         EnrollmentType = tipoMatricula,
                         StartDate = DateTime.UtcNow
