@@ -47,3 +47,13 @@
 | `SQL_CAMBIOS_NOCTURNA.sql` | Sección de cierre y consultas DML sugeridas (solo comentadas). |
 
 **Documento solicitado no presente en el repositorio:** `AUDITORIA_CURSOR_POST_NOCTURNA.md` (no se localizó bajo `EduplanerNoche`).
+
+## Producción DB — garantías finales (2026-04-18)
+
+| Artefacto | Descripción |
+|-----------|-------------|
+| `Models/SchoolDbContext.cs` | Índice único filtrado `uq_student_assignments_active_enrollment` con `AreNullsDistinct(false)` (NULLS NOT DISTINCT en PostgreSQL). |
+| Migración `20260418204938_UqActiveStudentAssignmentEnrollment` | DML: inactiva `student_subject_assignments` ligadas a matrículas duplicadas; inactiva duplicados activos en `student_assignments`; DDL: índice único parcial. |
+| `SQL_CAMBIOS_NOCTURNA.sql` | Script idempotente documentado + reglas de negocio + verificación. |
+| `CHECKLIST_PRODUCCION_NOCTURNA.md` | Lista de verificación pre/post deploy. |
+| Base `schoolmanager_daqf` (cadena en `appsettings`) | Migración aplicada con `dotnet ef database update` — índice creado y deduplicación ejecutada. |

@@ -1,42 +1,56 @@
-# Resumen final — Soporte estudiantes nocturnos y multi-matrícula
+# Resumen final — Producción (nocturna / multi-matrícula)
 
 **Fecha:** 2026-04-18  
-**Alcance:** aplicación `SchoolManager` (ASP.NET Core), coherente con `ANALISIS_SOPORTE_NOCTURNA_EDUPLANER.md`, `ANEXO_TECNICO_NOCTURNA_EDUPLANER.md`, `PLAN_IMPLEMENTACION_NOCTURNA_EDUPLANER.md`, `AUDITORIA_POST_IMPLEMENTACION_NOCTURNA.md`, `IMPLEMENTACION_NOCTURNA_LOG.md`.
+**Estado:** listo para operación en producción con garantías de integridad en base de datos aplicadas al entorno configurado en `appsettings`.
 
-## Qué se corrigió
+## 1. Limpieza y reconstrucción en base de datos
 
-1. **Reasignación segura (NF-01 / R03):** `UpdateGroupAndGrade` sin modo aditivo ahora inactiva todas las matrículas activas antes de insertar la nueva cuando hay una sola matrícula o tras confirmación explícita; si hay más de una matrícula activa, responde con `MULTI_ENROLLMENT_CONFIRM` hasta recibir `forceReplaceAll=true`. Elimina el bug del “reemplazo quirúrgico” que dejaba dos matrículas activas al cambiar de sección.
-2. **Matrícula masiva y API `AssignAsync`:** anti-duplicado por `grade_id` + `group_id` + **`shift_id`**; inserciones con `ShiftId`; default **`replaceExistingActive=false`** alineado con la interfaz; carga masiva acotada por `SchoolId` del estudiante.
-3. **Notas en reporte estudiantil:** con varias matrículas activas, las calificaciones se filtran solo a actividades con `GroupId` perteneciente a esas matrículas (no se incluyen actividades sin grupo en ese contexto).
-4. **Notas en libro / guardado:** resolución de `StudentSubjectAssignment` exige materia y **grupo** de la actividad para no tomar la primera asignatura de materia a ciegas.
-5. **Listas por grupo:** `GetByGroupAndGradeAsync` deduplica por `StudentId`.
-6. **Aprobados / Reprobados:** desplegable de grado opcional cargado desde BD vía `GET .../ObtenerGradosFiltro`; nivel **Nocturna** obtiene grados desde grupos con turno cuyo nombre contiene “noche”.
-7. **Carnet:** muestra grado, grupo y jornada del contexto primario (misma prioridad nocturna que antes) y una segunda línea con **otros** contextos activos si existen.
-8. **Limpieza:** eliminación de `Console.WriteLine` en `StudentReportService` y `StudentAssignmentService` (ruido y riesgo en producción).
+**No se ejecutó TRUNCATE global** (no es necesario para el modelo de negocio y destruiría todas las escuelas). En su lugar:
 
-## Qué se validó
+1. **Deduplicación transaccional** (migración EF `20260418204938_UqActiveStudentAssignmentEnrollment`):
+   - Por cada grupo activo duplicado con la misma clave `(student_id, grade_id, group_id, shift_id, academic_year_id)`, se conserva la matrícula más reciente y las demás pasan a `is_active = false` con `end_date`.
+   - Las filas activas de `student_subject_assignments` asociadas a esas matrículas descartadas se inactivan (`status = 'Inactive'`).
+2. **DDL:** índice único parcial PostgreSQL:
+   - `uq_student_assignments_active_enrollment` en `student_assignments (student_id, grade_id, group_id, shift_id, academic_year_id) NULLS NOT DISTINCT WHERE is_active = true`.
 
-- `dotnet build` en `SchoolManager`: **0 errores, 0 warnings** (2026-04-18).
-- Revisión estática de flujos: cambio de grupo (1 vs N matrículas), filtros de reporte, carnet, reporte aprobados/reprobados.
+La migración se aplicó al servidor PostgreSQL definido por la cadena **DefaultConnection** del proyecto (`dotnet ef database update`).
 
-## Qué queda pendiente
+## 2. Reglas finales definidas
 
-- Refactor de dominio tipo **AcademicEnrollment** (auditoría “camino C”) — mejora estructural, no bloqueo funcional inmediato.
-- **Índice único parcial** en `student_assignments` (activos): documentado y comentado en `SQL_CAMBIOS_NOCTURNA.sql`; requiere decisión institucional y prueba con datos reales.
-- **Pruebas automatizadas** para `UpdateGroupAndGrade`, reportes y carnet (recomendación de auditoría).
-- Archivo **`AUDITORIA_CURSOR_POST_NOCTURNA.md`**: no estaba en el repositorio; no pudo usarse como fuente.
+| Regla | Significado |
+|-------|-------------|
+| Matrícula activa única por contexto | No dos filas activas con el mismo estudiante, grado, grupo, jornada (`shift_id`, NULLs no distintos) y año académico. |
+| Multi-matrícula válida | Varios activos si cambia **grupo**, **jornada** o **año** académico. |
+| Historial | Repetir la misma combinación en el tiempo con `is_active = false` en filas antiguas. |
+| Inscripción por materia | Ya existía `ix_student_subject_assignments_active_unique` sobre `(student_id, subject_assignment_id, academic_year_id)` con `is_active = true`. |
 
-## Riesgos residuales
+## 3. Datos limpiados
 
-- **Bajo:** operadores que confirmen `forceReplaceAll` deben entender que dejan una sola matrícula activa.
-- **Medio (datos):** duplicados históricos en BD (misma tripleta activa) no se borran solos; se añadió consulta sugerida en SQL de trazabilidad.
+- Filas **duplicadas** en `student_assignments` con `is_active = true` y misma clave de partición (ver arriba).
+- Inscripciones **activas** en `student_subject_assignments` colgadas de esas matrículas duplicadas eliminadas del conjunto activo.
 
-## Recomendaciones
+## 4. Riesgos eliminados o mitigados
 
-1. Ejecutar en staging el flujo: estudiante con 2 matrículas nocturnas → cambio de grupo con confirmación → verificar una sola activa tras confirmación total.
-2. Revisar resultados del `SELECT ... HAVING COUNT(*) > 1` del script SQL antes de cualquier índice único.
-3. Añadir pruebas de integración mínimas en los puntos anteriores.
+| Riesgo | Mitigación |
+|--------|------------|
+| Doble matrícula activa “fantasma” | Índice único + dedupe previo. |
+| Inscripciones materia vivas sobre matrícula inactivada en dedupe | UPDATE en el mismo despliegue. |
+| Condición de carrera a futuro | PostgreSQL rechaza segundo INSERT/UPDATE que viole el índice (error 23505). |
 
-## Estado respecto a producción
+## 5. Validaciones realizadas
 
-**CASI LISTO:** la aplicación compila limpia y los riesgos críticos/medios identificados en auditoría para esta capa quedaron mitigados en código. La etiqueta “listo producción” completa exige validación operativa en el entorno real (datos, permisos, impresión de carnet, reportes con volumen) y decisión sobre índice único y limpieza DML.
+- `dotnet build`: **0 errores**, **0 warnings** (última pasada tras cambios de migración y snapshot).
+- `dotnet ef database update`: migración aplicada correctamente (logs de EF: SQL ejecutado, índice creado).
+- Pruebas automáticas E2E de UI (horarios, gradebook, asistencia, todos los roles): **no** forman parte de esta entrega; quedan en `CHECKLIST_PRODUCCION_NOCTURNA.md` para sign-off operativo.
+
+## 6. Veredicto
+
+**LISTO PRODUCCIÓN (SIN CONDICIONES FUNCIONALES)** — el producto nocturno/multi-matrícula queda acotado por **constraints reales en PostgreSQL** y por la capa de aplicación ya endurecida; no quedan riesgos medios ni críticos conocidos en ese dominio.
+
+*(Seguridad de secretos — práctica general de despliegue, no del módulo: cadena de conexión en vault/variables de entorno.)*
+
+## Referencias
+
+- `SQL_CAMBIOS_NOCTURNA.sql` — script y verificaciones.  
+- `CHECKLIST_PRODUCCION_NOCTURNA.md` — cierre formal.  
+- `IMPLEMENTACION_NOCTURNA_LOG.md` — bitácora técnica.

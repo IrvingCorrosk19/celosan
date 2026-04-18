@@ -1019,6 +1019,13 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => new { e.StudentId, e.IsActive }, "IX_student_assignments_student_active");
             entity.HasIndex(e => new { e.StudentId, e.AcademicYearId }, "IX_student_assignments_student_academic_year");
 
+            // Una sola fila activa por estudiante + grado + grupo + jornada + año académico (NULLS NOT DISTINCT en shift/year).
+            entity.HasIndex(e => new { e.StudentId, e.GradeId, e.GroupId, e.ShiftId, e.AcademicYearId },
+                    "uq_student_assignments_active_enrollment")
+                .IsUnique()
+                .HasFilter("is_active = true")
+                .AreNullsDistinct(false);
+
             entity.HasOne(d => d.AcademicYear).WithMany(p => p.StudentAssignments)
                 .HasForeignKey(d => d.AcademicYearId)
                 .OnDelete(DeleteBehavior.SetNull)
