@@ -13,14 +13,14 @@ namespace SchoolManager.Services.Implementations
                     Title = "Dashboard", 
                     Icon = "fas fa-tachometer-alt",
                     Url = "/Home/Index",
-                    RequiredRoles = new[] { "admin", "teacher", "student", "director", "superadmin", "estudiante" }
+                    RequiredRoles = new[] { "admin", "teacher", "student", "director", "superadmin", "estudiante", "secretaria" }
                 },
                 new MenuItem 
                 { 
                     Title = "Cambiar Contraseña", 
                     Icon = "fas fa-key",
                     Url = "/ChangePassword/Index",
-                    RequiredRoles = new[] { "admin", "teacher", "student", "director", "superadmin", "estudiante" }
+                    RequiredRoles = new[] { "admin", "teacher", "student", "director", "superadmin", "estudiante", "secretaria" }
                 },
                 new MenuItem 
                 { 
@@ -112,7 +112,7 @@ namespace SchoolManager.Services.Implementations
                             Title = "Carnet Estudiantil", 
                             Icon = "fas fa-id-card",
                             Url = "/StudentIdCard/ui",
-                            RequiredRoles = new[] { "admin" }
+                            RequiredRoles = new[] { "admin", "secretaria" }
                         },
                         new MenuItem 
                         { 
@@ -128,7 +128,7 @@ namespace SchoolManager.Services.Implementations
                     Title = "Carnet Estudiantil", 
                     Icon = "fas fa-id-card",
                     Url = "/StudentIdCard/ui",
-                    RequiredRoles = new[] { "superadmin" }
+                    RequiredRoles = new[] { "superadmin", "secretaria" }
                 },
                 new MenuItem 
                 { 
