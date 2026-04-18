@@ -862,15 +862,8 @@ namespace SchoolManager.Controllers
         {
             try
             {
-                // Obtener el usuario actual desde el contexto de autenticación
-                var userEmail = User.Identity?.Name;
-                if (string.IsNullOrEmpty(userEmail))
-                {
-                    Console.WriteLine("[GetCurrentUserSchoolId] No se pudo obtener el email del usuario actual");
-                    return null;
-                }
-
-                var currentUser = await _userService.GetByEmailAsync(userEmail);
+                // No usar User.Identity.Name: en cookie auth suele ser el nombre (ClaimTypes.Name), no el email.
+                var currentUser = await _currentUserService.GetCurrentUserAsync();
                 return currentUser?.SchoolId;
             }
             catch (Exception ex)
