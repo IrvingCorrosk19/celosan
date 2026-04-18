@@ -48,12 +48,19 @@ namespace SchoolManager.Services
 
         private async Task<Guid?> ResolveStudentSubjectAssignmentIdAsync(Guid studentId, Guid subjectId, Guid? activityGroupId, Guid? activityGradeLevelId)
         {
-            var subjectAssignmentId = await _context.SubjectAssignments
-                .Where(sa => sa.SubjectId == subjectId
-                    && (!activityGroupId.HasValue || sa.GroupId == activityGroupId.Value)
-                    && (!activityGradeLevelId.HasValue || sa.GradeLevelId == activityGradeLevelId.Value))
-                .Select(sa => (Guid?)sa.Id)
-                .FirstOrDefaultAsync();
+            if (subjectId == Guid.Empty)
+                return null;
+
+            if (!activityGroupId.HasValue || activityGroupId.Value == Guid.Empty)
+                return null;
+
+            var q = _context.SubjectAssignments
+                .Where(sa => sa.SubjectId == subjectId && sa.GroupId == activityGroupId.Value);
+
+            if (activityGradeLevelId.HasValue && activityGradeLevelId.Value != Guid.Empty)
+                q = q.Where(sa => sa.GradeLevelId == activityGradeLevelId.Value);
+
+            var subjectAssignmentId = await q.Select(sa => (Guid?)sa.Id).FirstOrDefaultAsync();
 
             if (!subjectAssignmentId.HasValue)
                 return null;

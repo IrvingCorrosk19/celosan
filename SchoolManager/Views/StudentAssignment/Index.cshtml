@@ -257,7 +257,8 @@
                                 <td>
                                     <button type="button" class="btn btn-primary btn-md me-2 px-3 py-1"
                                             data-bs-toggle="modal" data-bs-target="#gradeGroupModal"
-                                            data-student-id="@est.StudentId" data-student-name="@est.FullName">
+                                            data-student-id="@est.StudentId" data-student-name="@est.FullName"
+                                            data-active-enrollment-count="@(est.GradeGroupPairs?.Count ?? 0)">
                                         <i class="bi bi-pencil-square me-1"></i> Editar
                                     </button>
                                 </td>
@@ -421,6 +422,7 @@
         });
 
         let currentStudentId = null;
+        let currentActiveEnrollmentCount = 0;
 
         function loadSubjectEnrollmentsIntoModal() {
             const target = $('#subjectEnrollmentInfo .subject-enrollment-list');
@@ -494,6 +496,7 @@
             prepareModalOpen();
             const button = $(event.relatedTarget);
             currentStudentId = button.data('student-id');
+            currentActiveEnrollmentCount = parseInt(button.data('active-enrollment-count'), 10) || 0;
             const studentName = button.data('student-name');
 
             $('#modalStudentName').text(studentName);
@@ -568,6 +571,7 @@
         // Limpiar cuando se cierra el modal
         $('#gradeGroupModal').on('hidden.bs.modal', function () {
             currentStudentId = null;
+            currentActiveEnrollmentCount = 0;
             $('#gradeGroupSelect').empty();
             $('#subjectCatalogWrapper').addClass('d-none');
             $('#subjectCatalogSelect').empty();
@@ -653,32 +657,24 @@
 
             const [gradeId, groupId] = selected.split('|');
             const $btn = $(this).prop('disabled', true);
-            
-            Swal.fire({
-                title: '¿Guardar cambios?',
-                text: 'Se actualizará la asignación del estudiante.',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#22c55e',
-                cancelButtonColor: '#6c757d',
-                confirmButtonText: 'Sí, guardar',
-                cancelButtonText: 'Cancelar',
-                allowOutsideClick: true,
-                didClose: () => forceCleanup()
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    $.post('/StudentAssignment/UpdateGroupAndGrade', { 
-                        studentId: currentStudentId, 
-                        gradeId, 
-                        groupId 
-                    })
+            const warnMulti = currentActiveEnrollmentCount > 1
+                ? ' Tiene varias matrículas activas: al usar “reemplazo” (no aditivo), el sistema pedirá una segunda confirmación antes de dejar una sola matrícula activa.'
+                : '';
+
+            function postUpdate(forceReplaceAll) {
+                $.post('/StudentAssignment/UpdateGroupAndGrade', {
+                    studentId: currentStudentId,
+                    gradeId,
+                    groupId,
+                    forceReplaceAll: !!forceReplaceAll
+                })
                     .done(function (resp) {
                         if (resp.success) {
                             const row = $(`tr[data-student-id="${currentStudentId}"]`);
                             const displayText = $('#gradeGroupSelect option:selected').text();
                             row.find('.grade-group-cell').html(`<strong>${displayText}</strong>`);
                             hideGradeGroupModalSafe();
-                            
+
                             Swal.fire({
                                 icon: 'success',
                                 title: '¡Éxito!',
@@ -687,7 +683,24 @@
                                 showConfirmButton: false,
                                 didClose: () => {
                                     forceCleanup();
-                                    location.reload(); // Forzar recarga de la página
+                                    location.reload();
+                                }
+                            });
+                            $btn.prop('disabled', false);
+                        } else if (resp.code === 'MULTI_ENROLLMENT_CONFIRM') {
+                            Swal.fire({
+                                icon: 'warning',
+                                title: 'Varias matrículas activas',
+                                text: resp.message || 'Se inactivarán todas las matrículas activas y quedará solo la seleccionada.',
+                                showCancelButton: true,
+                                confirmButtonText: 'Sí, reemplazar todas',
+                                cancelButtonText: 'Cancelar'
+                            }).then(function (r2) {
+                                if (r2.isConfirmed) {
+                                    postUpdate(true);
+                                } else {
+                                    $btn.prop('disabled', false);
+                                    cleanupSweetAlert();
                                 }
                             });
                         } else {
@@ -697,6 +710,7 @@
                                 text: resp.message || 'No se pudo guardar la asignación.',
                                 didClose: () => forceCleanup()
                             });
+                            $btn.prop('disabled', false);
                         }
                     })
                     .fail(function (xhr) {
@@ -711,10 +725,24 @@
                             text: msg,
                             didClose: () => forceCleanup()
                         });
-                    })
-                    .always(function () {
                         $btn.prop('disabled', false);
                     });
+            }
+
+            Swal.fire({
+                title: '¿Guardar cambios?',
+                text: 'Se actualizará la asignación del estudiante.' + warnMulti,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#22c55e',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, guardar',
+                cancelButtonText: 'Cancelar',
+                allowOutsideClick: true,
+                didClose: () => forceCleanup()
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    postUpdate(false);
                 } else {
                     $btn.prop('disabled', false);
                     cleanupSweetAlert();

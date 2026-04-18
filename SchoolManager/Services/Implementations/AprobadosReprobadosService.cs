@@ -26,6 +26,20 @@ namespace SchoolManager.Services.Implementations
             _httpClientFactory = httpClientFactory;
         }
 
+        /// <summary>
+        /// Retorna los IDs de los turnos cuyo nombre indica jornada nocturna.
+        /// Punto único de detección para evitar duplicación de la lógica de nombre de turno.
+        /// Si en el futuro se renombra el turno, solo hay que ajustar este método.
+        /// </summary>
+        private async Task<List<Guid>> GetNightShiftIdsAsync()
+        {
+            return await _context.Shifts
+                .AsNoTracking()
+                .Where(s => s.Name.ToLower().Contains("noche"))
+                .Select(s => s.Id)
+                .ToListAsync();
+        }
+
         public async Task<AprobadosReprobadosReportViewModel> GenerarReporteAsync(
             Guid schoolId,
             string trimestre,
@@ -52,57 +66,16 @@ namespace SchoolManager.Services.Implementations
                     .Select(t => (Guid?)t.Id)
                     .FirstOrDefaultAsync();
 
-                // Determinar los grados según el nivel educativo
-                var grados = ObtenerGradosPorNivel(nivelEducativo);
-
-                // Obtener estadísticas por grado y grupo
-                var estadisticas = new List<GradoEstadisticaDto>();
-
-                foreach (var grado in grados)
-                {
-                    // Filtrar por grado específico si se proporciona
-                    if (!string.IsNullOrEmpty(gradoEspecifico) && grado != gradoEspecifico)
-                        continue;
-
-                    // Obtener grupos para este grado
-                    var gruposQuery = _context.Groups
-                        .Where(g => g.SchoolId == schoolId && g.Grade == grado);
-
-                    if (!string.IsNullOrEmpty(grupoEspecifico))
-                    {
-                        gruposQuery = gruposQuery.Where(g => g.Name == grupoEspecifico);
-                    }
-
-                    var grupos = await gruposQuery.ToListAsync();
-
-                    if (!grupos.Any())
-                    {
-                        _logger.LogWarning("No se encontraron grupos para el grado {Grado} en la escuela {SchoolId}", grado, schoolId);
-                        continue;
-                    }
-
-                    foreach (var grupo in grupos)
-                    {
-                        var stats = await CalcularEstadisticasGrupoAsync(grupo.Id, trimestre, trimesterId, materiaId, areaId, especialidadId);
-                        
-                        estadisticas.Add(new GradoEstadisticaDto
-                        {
-                            Grado = grado,
-                            Grupo = grupo.Name,
-                            TotalEstudiantes = stats.Total,
-                            Aprobados = stats.Aprobados,
-                            PorcentajeAprobados = stats.PorcentajeAprobados,
-                            Reprobados = stats.Reprobados,
-                            PorcentajeReprobados = stats.PorcentajeReprobados,
-                            ReprobadosHastaLaFecha = stats.ReprobadosHastaLaFecha,
-                            PorcentajeReprobadosHastaLaFecha = stats.PorcentajeReprobadosHastaLaFecha,
-                            SinCalificaciones = stats.SinCalificaciones,
-                            PorcentajeSinCalificaciones = stats.PorcentajeSinCalificaciones,
-                            Retirados = stats.Retirados,
-                            PorcentajeRetirados = stats.PorcentajeRetirados
-                        });
-                    }
-                }
+                var estadisticas = await ConstruirEstadisticasPorNivelAsync(
+                    schoolId,
+                    trimestre,
+                    trimesterId,
+                    nivelEducativo,
+                    gradoEspecifico,
+                    grupoEspecifico,
+                    especialidadId,
+                    areaId,
+                    materiaId);
 
                 if (!estadisticas.Any())
                 {
@@ -129,7 +102,7 @@ namespace SchoolManager.Services.Implementations
                     Estadisticas = estadisticas.OrderBy(e => e.Grado).ThenBy(e => e.Grupo).ToList(),
                     TotalesGenerales = totales,
                     TrimestresDisponibles = await ObtenerTrimestresDisponiblesAsync(schoolId),
-                    NivelesDisponibles = await ObtenerNivelesEducativosAsync()
+                    NivelesDisponibles = await ObtenerNivelesEducativosAsync(schoolId)
                 };
 
                 _logger.LogInformation("✅ Reporte generado exitosamente con {Count} grupos", estadisticas.Count);
@@ -195,9 +168,11 @@ namespace SchoolManager.Services.Implementations
                     .ThenInclude(a => a!.Subject)
                         .ThenInclude(s => s!.Area)
                 .Where(sas => estudiantesDelGrupo.Contains(sas.StudentId) &&
+                    sas.Activity != null &&
+                    sas.Activity.GroupId == grupoId &&
                     (trimesterId.HasValue
-                        ? (sas.Activity!.TrimesterId == trimesterId || sas.Activity!.Trimester == trimestre)
-                        : sas.Activity!.Trimester == trimestre));
+                        ? (sas.Activity.TrimesterId == trimesterId || sas.Activity.Trimester == trimestre)
+                        : sas.Activity.Trimester == trimestre));
             if (materiaId.HasValue)
                 queryScores = queryScores.Where(sas => sas.Activity!.SubjectId == materiaId.Value);
             if (areaId.HasValue)
@@ -290,14 +265,233 @@ namespace SchoolManager.Services.Implementations
             };
         }
 
-        private List<string> ObtenerGradosPorNivel(string nivelEducativo)
+        private async Task<List<string>> ObtenerGradosDesdeGruposNocturnosAsync(Guid schoolId)
         {
-            return nivelEducativo.ToLower() switch
+            var nightIds = await GetNightShiftIdsAsync();
+            if (nightIds.Count == 0)
+                return new List<string>();
+
+            var fromGroups = await _context.Groups.AsNoTracking()
+                .Where(g => g.SchoolId == schoolId && g.ShiftId != null && nightIds.Contains(g.ShiftId.Value)
+                    && g.Grade != null && g.Grade != "")
+                .Select(g => g.Grade!)
+                .Distinct()
+                .ToListAsync();
+
+            if (fromGroups.Any())
+                return fromGroups.OrderBy(x => x).ToList();
+
+            return await _context.SubjectAssignments.AsNoTracking()
+                .Where(sa => sa.Group.SchoolId == schoolId && sa.Group.ShiftId != null && nightIds.Contains(sa.Group.ShiftId.Value))
+                .Select(sa => sa.GradeLevel.Name)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync();
+        }
+
+        /// <summary>Grados reales de la escuela según oferta (subject_assignments) y respaldo por groups.grade.</summary>
+        private async Task<List<string>> ObtenerGradosPorNivelEscuelaAsync(Guid schoolId, string nivelEducativo)
+        {
+            var nivel = nivelEducativo.Trim().ToLowerInvariant();
+            var desdeOferta = await _context.SubjectAssignments
+                .AsNoTracking()
+                .Where(sa => sa.Group.SchoolId == schoolId)
+                .Select(sa => sa.GradeLevel.Name)
+                .Distinct()
+                .ToListAsync();
+
+            if (!desdeOferta.Any())
             {
-                "premedia" => new List<string> { "7°", "8°", "9°" },
-                "media" => new List<string> { "10°", "11°", "12°" },
-                _ => new List<string>()
+                desdeOferta = await _context.Groups
+                    .AsNoTracking()
+                    .Where(g => g.SchoolId == schoolId && g.Grade != null && g.Grade != "")
+                    .Select(g => g.Grade!)
+                    .Distinct()
+                    .ToListAsync();
+            }
+
+            static bool EsPremediaNombre(string n)
+            {
+                var t = n.Trim().ToLowerInvariant();
+                return t.StartsWith("7", StringComparison.Ordinal) ||
+                       t.StartsWith("8", StringComparison.Ordinal) ||
+                       t.StartsWith("9", StringComparison.Ordinal);
+            }
+
+            static bool EsMediaNombre(string n)
+            {
+                var t = n.Trim().ToLowerInvariant();
+                return t.StartsWith("10", StringComparison.Ordinal) ||
+                       t.StartsWith("11", StringComparison.Ordinal) ||
+                       t.StartsWith("12", StringComparison.Ordinal);
+            }
+
+            if (nivel is "nocturna" or "nocturno")
+                return await ObtenerGradosDesdeGruposNocturnosAsync(schoolId);
+
+            return nivel switch
+            {
+                "premedia" => desdeOferta.Where(EsPremediaNombre).OrderBy(x => x).ToList(),
+                "media" => desdeOferta.Where(EsMediaNombre).OrderBy(x => x).ToList(),
+                "todos" or "todo" or "todas" => desdeOferta.OrderBy(x => x).ToList(),
+                _ => desdeOferta.OrderBy(x => x).ToList()
             };
+        }
+
+        private async Task<List<(Guid GroupId, string GroupName, string GradoEtiqueta)>> ListarGruposPorFiltroAsync(
+            Guid schoolId,
+            string nivelEducativo,
+            string? gradoEspecifico,
+            string? grupoEspecifico)
+        {
+            var nivel = nivelEducativo.Trim().ToLowerInvariant();
+            IQueryable<Group> q = _context.Groups.AsNoTracking().Where(g => g.SchoolId == schoolId);
+
+            if (nivel is "nocturna" or "nocturno")
+            {
+                var nightIds = await GetNightShiftIdsAsync();
+                q = q.Where(g => g.ShiftId != null && nightIds.Contains(g.ShiftId.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(grupoEspecifico))
+                q = q.Where(g => g.Name == grupoEspecifico);
+
+            var grupos = await q.OrderBy(g => g.Name).ToListAsync();
+
+            var resultado = new List<(Guid GroupId, string GroupName, string GradoEtiqueta)>();
+            foreach (var g in grupos)
+            {
+                var etiqueta = g.Grade;
+                if (string.IsNullOrWhiteSpace(etiqueta))
+                {
+                    etiqueta = await _context.SubjectAssignments
+                        .AsNoTracking()
+                        .Where(sa => sa.GroupId == g.Id)
+                        .Select(sa => sa.GradeLevel.Name)
+                        .FirstOrDefaultAsync() ?? "—";
+                }
+
+                if (!string.IsNullOrWhiteSpace(gradoEspecifico) &&
+                    !string.Equals(etiqueta, gradoEspecifico, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (nivel is "premedia" or "media")
+                {
+                    var gradosNivel = await ObtenerGradosPorNivelEscuelaAsync(schoolId, nivel);
+                    if (gradosNivel.Any() && !gradosNivel.Contains(etiqueta, StringComparer.OrdinalIgnoreCase))
+                        continue;
+                }
+
+                resultado.Add((g.Id, g.Name, etiqueta));
+            }
+
+            return resultado;
+        }
+
+        private async Task<List<GradoEstadisticaDto>> ConstruirEstadisticasPorNivelAsync(
+            Guid schoolId,
+            string trimestre,
+            Guid? trimesterId,
+            string nivelEducativo,
+            string? gradoEspecifico,
+            string? grupoEspecifico,
+            Guid? especialidadId,
+            Guid? areaId,
+            Guid? materiaId)
+        {
+            var estadisticas = new List<GradoEstadisticaDto>();
+            var nivel = nivelEducativo.Trim().ToLowerInvariant();
+
+            if (nivel is "todos" or "todo" or "todas" or "nocturna" or "nocturno")
+            {
+                var filas = await ListarGruposPorFiltroAsync(schoolId, nivelEducativo, gradoEspecifico, grupoEspecifico);
+                foreach (var (groupId, groupName, gradoEtiqueta) in filas)
+                {
+                    var stats = await CalcularEstadisticasGrupoAsync(groupId, trimestre, trimesterId, materiaId, areaId, especialidadId);
+                    estadisticas.Add(new GradoEstadisticaDto
+                    {
+                        Grado = gradoEtiqueta,
+                        Grupo = groupName,
+                        TotalEstudiantes = stats.Total,
+                        Aprobados = stats.Aprobados,
+                        PorcentajeAprobados = stats.PorcentajeAprobados,
+                        Reprobados = stats.Reprobados,
+                        PorcentajeReprobados = stats.PorcentajeReprobados,
+                        ReprobadosHastaLaFecha = stats.ReprobadosHastaLaFecha,
+                        PorcentajeReprobadosHastaLaFecha = stats.PorcentajeReprobadosHastaLaFecha,
+                        SinCalificaciones = stats.SinCalificaciones,
+                        PorcentajeSinCalificaciones = stats.PorcentajeSinCalificaciones,
+                        Retirados = stats.Retirados,
+                        PorcentajeRetirados = stats.PorcentajeRetirados
+                    });
+                }
+
+                return estadisticas;
+            }
+
+            var grados = await ObtenerGradosPorNivelEscuelaAsync(schoolId, nivelEducativo);
+            if (!grados.Any())
+            {
+                _logger.LogWarning("No hay grados resueltos en BD para nivel {Nivel} escuela {SchoolId}", nivelEducativo, schoolId);
+                return estadisticas;
+            }
+
+            foreach (var grado in grados)
+            {
+                if (!string.IsNullOrEmpty(gradoEspecifico) && grado != gradoEspecifico)
+                    continue;
+
+                var idsPorOferta = await _context.SubjectAssignments
+                    .AsNoTracking()
+                    .Where(sa => sa.Group.SchoolId == schoolId && sa.GradeLevel.Name == grado)
+                    .Select(sa => sa.GroupId)
+                    .Distinct()
+                    .ToListAsync();
+
+                var idsPorTexto = await _context.Groups
+                    .AsNoTracking()
+                    .Where(g => g.SchoolId == schoolId && g.Grade == grado)
+                    .Select(g => g.Id)
+                    .ToListAsync();
+
+                var idsGrupo = idsPorOferta.Union(idsPorTexto).Distinct().ToList();
+
+                if (!string.IsNullOrEmpty(grupoEspecifico))
+                {
+                    idsGrupo = await _context.Groups
+                        .AsNoTracking()
+                        .Where(g => idsGrupo.Contains(g.Id) && g.Name == grupoEspecifico)
+                        .Select(g => g.Id)
+                        .ToListAsync();
+                }
+
+                foreach (var gid in idsGrupo)
+                {
+                    var grupo = await _context.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == gid);
+                    if (grupo == null)
+                        continue;
+
+                    var stats = await CalcularEstadisticasGrupoAsync(grupo.Id, trimestre, trimesterId, materiaId, areaId, especialidadId);
+                    estadisticas.Add(new GradoEstadisticaDto
+                    {
+                        Grado = grado,
+                        Grupo = grupo.Name,
+                        TotalEstudiantes = stats.Total,
+                        Aprobados = stats.Aprobados,
+                        PorcentajeAprobados = stats.PorcentajeAprobados,
+                        Reprobados = stats.Reprobados,
+                        PorcentajeReprobados = stats.PorcentajeReprobados,
+                        ReprobadosHastaLaFecha = stats.ReprobadosHastaLaFecha,
+                        PorcentajeReprobadosHastaLaFecha = stats.PorcentajeReprobadosHastaLaFecha,
+                        SinCalificaciones = stats.SinCalificaciones,
+                        PorcentajeSinCalificaciones = stats.PorcentajeSinCalificaciones,
+                        Retirados = stats.Retirados,
+                        PorcentajeRetirados = stats.PorcentajeRetirados
+                    });
+                }
+            }
+
+            return estadisticas;
         }
 
         public async Task<List<string>> ObtenerTrimestresDisponiblesAsync(Guid schoolId)
@@ -324,10 +518,20 @@ namespace SchoolManager.Services.Implementations
             }
         }
 
-        public async Task<List<string>> ObtenerNivelesEducativosAsync()
+        public async Task<List<string>> ObtenerNivelesEducativosAsync(Guid schoolId)
         {
-            return await Task.FromResult(new List<string> { "Premedia", "Media" });
+            var niveles = new List<string> { "Todos", "Premedia", "Media" };
+            var nightShiftIds = await GetNightShiftIdsAsync();
+            var hayNocturna = nightShiftIds.Count > 0 && await _context.Groups.AsNoTracking()
+                .AnyAsync(g => g.SchoolId == schoolId && g.ShiftId != null && nightShiftIds.Contains(g.ShiftId.Value));
+            if (hayNocturna)
+                niveles.Insert(1, "Nocturna");
+            return niveles;
         }
+
+        /// <summary>Grados para el filtro opcional del reporte, alineados con la lógica de <see cref="ConstruirEstadisticasPorNivelAsync"/>.</summary>
+        public Task<List<string>> ObtenerGradosParaFiltroReporteAsync(Guid schoolId, string nivelEducativo) =>
+            ObtenerGradosPorNivelEscuelaAsync(schoolId, nivelEducativo);
 
         public async Task<List<(Guid Id, string Nombre)>> ObtenerEspecialidadesAsync(Guid schoolId)
         {
@@ -631,46 +835,28 @@ namespace SchoolManager.Services.Implementations
         {
             try
             {
-                var trimester3T = await _context.Trimesters
-                    .FirstOrDefaultAsync(t => t.SchoolId == schoolId && t.Name == "3T");
-                if (trimester3T == null)
-                {
-                    return (false, "No existe el trimestre 3T para esta escuela. Cree primero el trimestre en la configuración.");
-                }
+                // Solo sincroniza groups.grade desde la oferta académica real (sin mapas fijos ni masivo 3T en actividades).
+                var groups = await _context.Groups
+                    .Where(g => g.SchoolId == schoolId && (g.Grade == null || g.Grade == ""))
+                    .ToListAsync();
 
-                var activities = await _context.Activities.Where(a => a.SchoolId == schoolId).ToListAsync();
-                foreach (var a in activities)
+                var groupsUpdated = 0;
+                foreach (var g in groups)
                 {
-                    a.Trimester = "3T";
-                    a.TrimesterId = trimester3T.Id;
-                }
-                var activitiesUpdated = activities.Count;
-
-                var groupNamesByGrade = new Dictionary<string, string[]>
-                {
-                    ["7°"] = new[] { "A", "A1", "A2" },
-                    ["8°"] = new[] { "B", "C", "C1", "C2" },
-                    ["9°"] = new[] { "D", "E", "E1", "E2" },
-                    ["10°"] = new[] { "F", "G", "H" },
-                    ["11°"] = new[] { "I", "J", "K" },
-                    ["12°"] = new[] { "L", "M", "N" }
-                };
-                int groupsUpdated = 0;
-                foreach (var kv in groupNamesByGrade)
-                {
-                    var groups = await _context.Groups
-                        .Where(g => g.SchoolId == schoolId && kv.Value.Contains(g.Name) && (g.Grade == null || g.Grade == ""))
-                        .ToListAsync();
-                    foreach (var g in groups)
+                    var gradeName = await _context.SubjectAssignments
+                        .Where(sa => sa.GroupId == g.Id)
+                        .Select(sa => sa.GradeLevel.Name)
+                        .FirstOrDefaultAsync();
+                    if (!string.IsNullOrWhiteSpace(gradeName))
                     {
-                        g.Grade = kv.Key;
+                        g.Grade = gradeName;
                         groupsUpdated++;
                     }
                 }
 
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("PrepararDatosParaReporte: school {SchoolId}, activities actualizadas {A}, grupos actualizados {G}", schoolId, activitiesUpdated, groupsUpdated);
-                return (true, $"Datos preparados: {activitiesUpdated} actividades asociadas al 3T y {groupsUpdated} grupos con grado asignado. Genere el reporte con Trimestre 3T y Nivel Media o Premedia.");
+                _logger.LogInformation("PrepararDatosParaReporte: school {SchoolId}, grupos con grado sincronizado desde oferta: {G}", schoolId, groupsUpdated);
+                return (true, $"Se actualizó el grado (campo Grade) en {groupsUpdated} grupos según subject_assignments. No se modificaron actividades ni trimestres.");
             }
             catch (Exception ex)
             {

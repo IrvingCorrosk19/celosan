@@ -398,7 +398,17 @@
                                 {
                                     <div style="font-size:6.5pt;color:@text">Cédula: @Model.DocumentId</div>
                                 }
-                                <div style="font-size:6.5pt;color:@text;line-height:1.25">Nocturna</div>
+                                <div style="font-size:6.5pt;color:@text;line-height:1.25">
+                                    @(Model.Card!.Grade) — @(Model.Card.Group)
+                                    @if (!string.IsNullOrWhiteSpace(Model.Card.Shift) && !string.Equals(Model.Card.Shift, "N/A", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <text> (@Model.Card.Shift)</text>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(Model.Card.AdditionalEnrollmentsSummary))
+                                {
+                                    <div style="font-size:5.5pt;color:@text;line-height:1.2;opacity:.92">@Model.Card.AdditionalEnrollmentsSummary</div>
+                                }
                                 @if (Model.ShowAcademicYear && !string.IsNullOrWhiteSpace(Model.AcademicYear))
                                 {
                                     <div style="font-size:6.5pt;color:@text">Año: @Model.AcademicYear</div>

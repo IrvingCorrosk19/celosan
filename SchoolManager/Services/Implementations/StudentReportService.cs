@@ -28,20 +28,28 @@ namespace SchoolManager.Services.Implementations
             _logger = logger;
         }
 
-        // Método auxiliar para verificar si una columna existe (compatibilidad hacia atrás)
-        private async Task<bool> ColumnExistsAsync(string tableName, string columnName)
+        /// <summary>Grupos de matrículas activas y etiqueta de encabezado (multi-matrícula nocturna).</summary>
+        private async Task<(HashSet<Guid> GroupIds, string GradeHeader)> GetActiveEnrollmentGroupsAsync(Guid studentId)
         {
-            try
-            {
-                var sql = "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = {0} AND column_name = {1}";
-                var result = await _context.Database.SqlQueryRaw<int>(sql, tableName.ToLower(), columnName.ToLower()).ToListAsync();
-                return result.FirstOrDefault() > 0;
-            }
-            catch
-            {
-                // Si falla la consulta, asumir que la columna no existe
-                return false;
-            }
+            var rows = await _context.StudentAssignments.AsNoTracking()
+                .Where(sa => sa.StudentId == studentId && sa.IsActive)
+                .Join(_context.GradeLevels.AsNoTracking(), sa => sa.GradeId, gl => gl.Id, (sa, gl) => new { sa, gl })
+                .Join(_context.Groups.AsNoTracking(), x => x.sa.GroupId, g => g.Id, (x, g) => new
+                {
+                    x.sa.GroupId,
+                    GradeName = x.gl.Name,
+                    GroupName = g.Name,
+                    SortKey = x.sa.StartDate ?? x.sa.CreatedAt
+                })
+                .OrderByDescending(r => r.SortKey)
+                .ToListAsync();
+
+            if (rows.Count == 0)
+                return (new HashSet<Guid>(), "Sin asignación");
+
+            var ids = rows.Select(r => r.GroupId).ToHashSet();
+            var label = string.Join(" · ", rows.Select(r => $"{r.GradeName} - {r.GroupName}").Distinct());
+            return (ids, label);
         }
 
         public async Task<StudentReportDto> GetReportByStudentIdAsync(Guid studentId)
@@ -49,11 +57,9 @@ namespace SchoolManager.Services.Implementations
             try
             {
                 _logger.LogInformation("=== INICIO GetReportByStudentIdAsync - StudentId: {StudentId} ===", studentId);
-                Console.WriteLine($"=== INICIO GetReportByStudentIdAsync - StudentId: {studentId} ===");
 
                 // Obtener el Grado y Grupo del estudiante PRIMERO para saber su escuela
                 _logger.LogInformation("Buscando asignación del estudiante: {StudentId}", studentId);
-                Console.WriteLine($"Buscando asignación del estudiante: {studentId}");
 
                 var studentUser = await _context.Users
                     .Where(u => u.Id == studentId)
@@ -63,13 +69,13 @@ namespace SchoolManager.Services.Implementations
                 if (studentUser == null || !studentUser.SchoolId.HasValue)
                 {
                     _logger.LogWarning("No se encontró el usuario o no tiene escuela asignada: {StudentId}", studentId);
-                    Console.WriteLine($"No se encontró el usuario o no tiene escuela asignada: {studentId}");
                     return null;
                 }
 
+                var (activeGroupIds, gradeHeaderLabel) = await GetActiveEnrollmentGroupsAsync(studentId);
+
                 // Obtener TODOS los trimestres de la escuela del estudiante (desde la tabla Trimesters)
                 _logger.LogInformation("Buscando trimestres disponibles para la escuela: {SchoolId}", studentUser.SchoolId);
-                Console.WriteLine($"Buscando trimestres disponibles para la escuela: {studentUser.SchoolId}");
 
                 var trimesters = await _context.Trimesters
                     .Where(t => t.SchoolId == studentUser.SchoolId && t.IsActive)
@@ -78,12 +84,10 @@ namespace SchoolManager.Services.Implementations
                     .ToListAsync();
 
                 _logger.LogInformation("Trimestres encontrados en la configuración: {Trimesters}", string.Join(", ", trimesters));
-                Console.WriteLine($"Trimestres encontrados en la configuración: {string.Join(", ", trimesters)}");
 
                 if (!trimesters.Any())
                 {
                     _logger.LogWarning("No hay trimestres configurados en la escuela: {SchoolId}", studentUser.SchoolId);
-                    Console.WriteLine($"No hay trimestres configurados en la escuela: {studentUser.SchoolId}");
                     // Aún así, intentar obtener trimestres de las actividades como fallback
                     trimesters = new List<string> { "1T", "2T", "3T" }; // Trimestres por defecto
                 }
@@ -94,23 +98,18 @@ namespace SchoolManager.Services.Implementations
                                         trimesters.FirstOrDefault(t => t == "3T");
 
                 _logger.LogInformation("Trimestre seleccionado: {SelectedTrimester}", selectedTrimester);
-                Console.WriteLine($"Trimestre seleccionado: {selectedTrimester}");
 
                 // Obtener las actividades del estudiante con la calificación para el trimestre seleccionado
                 _logger.LogInformation("Buscando calificaciones para StudentId: {StudentId}, Trimester: {Trimester}", studentId, selectedTrimester);
-                Console.WriteLine($"Buscando calificaciones para StudentId: {studentId}, Trimester: {selectedTrimester}");
 
-                // MEJORADO: Obtener año académico activo para filtrar notas
+                // Obtener año académico activo para filtrar notas
                 var activeAcademicYear = await _academicYearService.GetActiveAcademicYearAsync(studentUser.SchoolId);
-
-                // MEJORADO: Verificar si la columna academic_year_id existe antes de usarla
-                var academicYearColumnExists = await ColumnExistsAsync("student_activity_scores", "academic_year_id");
 
                 var scoresBaseQuery = _context.StudentActivityScores
                     .Where(s => s.StudentId == studentId);
 
-                // Filtrar por año académico solo si existe la columna y hay un año académico activo
-                if (activeAcademicYear != null && academicYearColumnExists)
+                // La columna academic_year_id existe desde la migración AddAcademicYearSupport (nov-2025)
+                if (activeAcademicYear != null)
                 {
                     scoresBaseQuery = scoresBaseQuery.Where(s => s.AcademicYearId == activeAcademicYear.Id);
                 }
@@ -133,48 +132,39 @@ namespace SchoolManager.Services.Implementations
                           })
                     .Where(a => a.Trimester == selectedTrimester);
 
+                if (activeGroupIds.Count > 0)
+                {
+                    scoresQuery = scoresQuery.Where(a =>
+                        a.GroupId.HasValue && activeGroupIds.Contains(a.GroupId.Value));
+                }
+
                 var studentScores = await scoresQuery
                     .GroupBy(a => new { a.ActivityId, a.SubjectId, a.TeacherId, a.Name })
                     .Select(g => g.OrderByDescending(x => x.CreatedAt).First())
                     .ToListAsync();
 
                 _logger.LogInformation("Calificaciones encontradas: {ScoresCount}", studentScores?.Count ?? 0);
-                Console.WriteLine($"Calificaciones encontradas: {studentScores?.Count ?? 0}");
 
                 // Obtener matrículas activas y asignaturas activas del estudiante (modelo flexible nocturno)
-                var studentAssignment = await _context.StudentAssignments
-                    .Where(sa => sa.StudentId == studentId && sa.IsActive)
-                    .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
-                    .Join(_context.GradeLevels,
-                          sa => sa.GradeId,
-                          gl => gl.Id,
-                          (sa, gl) => new { sa.GroupId, sa.GradeId, GradeName = gl.Name, sa.Id })
-                    .Join(_context.Groups,
-                          sa => sa.GroupId,
-                          g => g.Id,
-                          (sa, g) => new { sa.Id, sa.GroupId, GradeName = sa.GradeName, GroupName = g.Name })
-                    .FirstOrDefaultAsync();
-
                 var activeSubjectAssignments = await _context.StudentSubjectAssignments
                     .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
                     .Join(_context.SubjectAssignments,
                           ssa => ssa.SubjectAssignmentId,
                           sa => sa.Id,
                           (ssa, sa) => new { ssa.Id, ssa.SubjectAssignmentId, sa.GroupId, sa.GradeLevelId })
+                    .Where(x => activeGroupIds.Count == 0 || activeGroupIds.Contains(x.GroupId))
                     .Distinct()
                     .ToListAsync();
 
-                _logger.LogInformation("Asignación encontrada: {Assignment}", studentAssignment != null ? $"Grado: {studentAssignment.GradeName}, Grupo: {studentAssignment.GroupName}" : "NULL");
-                Console.WriteLine($"Asignación encontrada: {(studentAssignment != null ? $"Grado: {studentAssignment.GradeName}, Grupo: {studentAssignment.GroupName}" : "NULL")}");
+                _logger.LogInformation("Contexto académico (matrículas activas): {Label}", gradeHeaderLabel);
 
                 var name = $"{studentUser.Name} {studentUser.LastName}";
-                var gradeName = studentAssignment != null ? $"{studentAssignment.GradeName} - {studentAssignment.GroupName}" : "Sin asignación";
+                var gradeName = gradeHeaderLabel;
 
                 // Si no hay calificaciones, devolver reporte vacío pero con trimestres disponibles
                 if (studentScores == null || !studentScores.Any())
                 {
                     _logger.LogWarning("No se encontraron calificaciones para StudentId: {StudentId}, Trimester: {Trimester}", studentId, selectedTrimester);
-                    Console.WriteLine($"No se encontraron calificaciones para StudentId: {studentId}, Trimester: {selectedTrimester}");
                     
                     return new StudentReportDto
                     {
@@ -209,6 +199,13 @@ namespace SchoolManager.Services.Implementations
                 .Where(a => activityIds.Contains(a.Id))
                 .ToDictionaryAsync(a => a.Id, a => new { a.Type, a.PdfUrl });
 
+            var scoreGroupIds = studentScores.Where(s => s.GroupId.HasValue).Select(s => s.GroupId!.Value).Distinct().ToList();
+            var groupLabels = scoreGroupIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _context.Groups.AsNoTracking()
+                    .Where(g => scoreGroupIds.Contains(g.Id))
+                    .ToDictionaryAsync(g => g.Id, g => g.Name);
+
             var grades = studentScores.Select(a => new GradeDto
             {
                 Subject = a.SubjectId.HasValue ? subjects.GetValueOrDefault(a.SubjectId.Value, "Desconocida") : "Desconocida",
@@ -218,7 +215,8 @@ namespace SchoolManager.Services.Implementations
                 Value = a.Score,
                 CreatedAt = a.CreatedAt.ToUniversalTime(),
                 FileUrl = activities.GetValueOrDefault(a.ActivityId)?.PdfUrl,
-                Trimester = a.Trimester
+                Trimester = a.Trimester,
+                GroupContext = a.GroupId.HasValue && groupLabels.TryGetValue(a.GroupId.Value, out var gn) ? gn : null
             }).ToList();
 
             // --- ASISTENCIA POR TRIMESTRE ---
@@ -230,10 +228,11 @@ namespace SchoolManager.Services.Implementations
                 var endDate = DateOnly.FromDateTime(trimesterConfig.EndDate);
 
                 var asistencias = await _context.Attendances
-                    .Where(a => 
-                        a.StudentId == studentId && 
-                        a.Date >= startDate && 
-                        a.Date <= endDate)
+                    .Where(a =>
+                        a.StudentId == studentId &&
+                        a.Date >= startDate &&
+                        a.Date <= endDate &&
+                        (activeGroupIds.Count == 0 || (a.GroupId.HasValue && activeGroupIds.Contains(a.GroupId.Value))))
                     .ToListAsync();
 
                 attendanceByTrimester.Add(new AttendanceDto
@@ -254,10 +253,11 @@ namespace SchoolManager.Services.Implementations
                 var endDate = DateOnly.FromDateTime(trimesterConfig.EndDate);
 
                 var attendanceByMonthRaw = await _context.Attendances
-                    .Where(a => 
-                        a.StudentId == studentId && 
-                        a.Date >= startDate && 
-                        a.Date <= endDate)
+                    .Where(a =>
+                        a.StudentId == studentId &&
+                        a.Date >= startDate &&
+                        a.Date <= endDate &&
+                        (activeGroupIds.Count == 0 || (a.GroupId.HasValue && activeGroupIds.Contains(a.GroupId.Value))))
                     .GroupBy(a => new { a.Date.Year, a.Date.Month })
                     .Select(g => new
                     {
@@ -303,7 +303,7 @@ namespace SchoolManager.Services.Implementations
                                 s.ActivityId == a.Id &&
                                 s.StudentId == studentId &&
                                 ((s.StudentSubjectAssignmentId.HasValue && activeSubjectAssignments.Select(x => x.Id).Contains(s.StudentSubjectAssignmentId.Value))
-                                    || _context.StudentAssignments.Any(sa => sa.Id == s.StudentAssignmentId && sa.StudentId == studentId))))
+                                    || _context.StudentAssignments.Any(sa => sa.Id == s.StudentAssignmentId && sa.StudentId == studentId && sa.IsActive))))
                         .Select(a => new PendingActivityDto
                         {
                             ActivityId = a.Id,
@@ -326,7 +326,6 @@ namespace SchoolManager.Services.Implementations
 
                 _logger.LogInformation("Construyendo reporte final - Grades: {GradesCount}, Attendance: {AttendanceCount}, Discipline: {DisciplineCount}, Pending: {PendingCount}", 
                     grades?.Count ?? 0, attendanceByTrimester?.Count ?? 0, disciplineReports?.Count ?? 0, pendingActivities?.Count ?? 0);
-                Console.WriteLine($"Construyendo reporte final - Grades: {grades?.Count ?? 0}, Attendance: {attendanceByTrimester?.Count ?? 0}, Discipline: {disciplineReports?.Count ?? 0}, Pending: {pendingActivities?.Count ?? 0}");
 
                 // Obtener lista de materias únicas
                 var availableSubjects = grades
@@ -353,20 +352,17 @@ namespace SchoolManager.Services.Implementations
                 };
 
                 _logger.LogInformation("=== FIN GetReportByStudentIdAsync - Reporte construido exitosamente ===");
-                Console.WriteLine("=== FIN GetReportByStudentIdAsync - Reporte construido exitosamente ===");
 
                 return result;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en GetReportByStudentIdAsync para StudentId: {StudentId} - {Message}", studentId, ex.Message);
-                Console.WriteLine($"ERROR en GetReportByStudentIdAsync para StudentId: {studentId} - {ex.Message}");
-                Console.WriteLine($"Stack Trace: {ex.StackTrace}");
                 throw;
             }
         }
 
-        public async Task<StudentReportDto> GetReportByStudentIdAndTrimesterAsync(Guid studentId, string trimester)
+        public async Task<StudentReportDto?> GetReportByStudentIdAndTrimesterAsync(Guid studentId, string trimester)
         {
             // Obtener la escuela del estudiante
             var studentUser = await _context.Users
@@ -374,19 +370,18 @@ namespace SchoolManager.Services.Implementations
                 .Select(u => new { u.SchoolId })
                 .FirstOrDefaultAsync();
 
+            var (activeGroupIds, gradeHeaderLabel) = await GetActiveEnrollmentGroupsAsync(studentId);
+
             // MEJORADO: Obtener año académico activo para filtrar notas
             var activeAcademicYear = studentUser?.SchoolId.HasValue == true
                 ? await _academicYearService.GetActiveAcademicYearAsync(studentUser.SchoolId)
                 : null;
 
-            // MEJORADO: Verificar si la columna academic_year_id existe antes de usarla
-            var academicYearColumnExists = await ColumnExistsAsync("student_activity_scores", "academic_year_id");
-
             var scoresBaseQuery = _context.StudentActivityScores
                 .Where(s => s.StudentId == studentId);
 
-            // Filtrar por año académico solo si existe la columna y hay un año académico activo
-            if (activeAcademicYear != null && academicYearColumnExists)
+            // La columna academic_year_id existe desde la migración AddAcademicYearSupport (nov-2025)
+            if (activeAcademicYear != null)
             {
                 scoresBaseQuery = scoresBaseQuery.Where(s => s.AcademicYearId == activeAcademicYear.Id);
             }
@@ -415,31 +410,18 @@ namespace SchoolManager.Services.Implementations
                       })
                 .Where(a => a.Trimester.Trim().ToLower() == trimester.Trim().ToLower());
 
+            if (activeGroupIds.Count > 0)
+            {
+                scoresQuery = scoresQuery.Where(a =>
+                    a.GroupId.HasValue && activeGroupIds.Contains(a.GroupId.Value));
+            }
+
             var studentScores = await scoresQuery
                 .GroupBy(a => new { a.Id, a.SubjectId, a.TeacherId, a.Name })
                 .Select(g => g.OrderByDescending(x => x.ScoreCreatedAt).First())
                 .ToListAsync();
 
             if (studentScores == null || !studentScores.Any())
-            {
-                return null;
-            }
-
-            // Obtener el Grado y Grupo principal del estudiante (activa más reciente)
-            var studentAssignment = await _context.StudentAssignments
-                .Where(sa => sa.StudentId == studentId && sa.IsActive)
-                .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
-                .Join(_context.GradeLevels,
-                      sa => sa.GradeId,
-                      gl => gl.Id,
-                      (sa, gl) => new { sa.GroupId, sa.GradeId, GradeName = gl.Name, sa.Id })
-                .Join(_context.Groups,
-                      sa => sa.GroupId,
-                      g => g.Id,
-                      (sa, g) => new { sa.Id, sa.GroupId, GradeName = sa.GradeName, GroupName = g.Name })
-                .FirstOrDefaultAsync();
-
-            if (studentAssignment == null)
             {
                 return null;
             }
@@ -457,6 +439,13 @@ namespace SchoolManager.Services.Implementations
 
             var name = $"{studentData.Name} {studentData.LastName}";
 
+            var scoreGroupIds2 = studentScores.Where(s => s.GroupId.HasValue).Select(s => s.GroupId!.Value).Distinct().ToList();
+            var groupLabels2 = scoreGroupIds2.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _context.Groups.AsNoTracking()
+                    .Where(g => scoreGroupIds2.Contains(g.Id))
+                    .ToDictionaryAsync(g => g.Id, g => g.Name);
+
             var grades = studentScores.Select(a => new GradeDto
             {
                 Subject = a.Subject?.Name ?? "Desconocida",
@@ -466,7 +455,8 @@ namespace SchoolManager.Services.Implementations
                 Value = a.Score,
                 CreatedAt = a.CreatedAt ?? DateTime.UtcNow,
                 FileUrl = a.PdfUrl,
-                Trimester = a.Trimester
+                Trimester = a.Trimester,
+                GroupContext = a.GroupId.HasValue && groupLabels2.TryGetValue(a.GroupId.Value, out var gn2) ? gn2 : null
             }).ToList();
 
             // --- ASISTENCIA POR TRIMESTRE ---
@@ -478,10 +468,11 @@ namespace SchoolManager.Services.Implementations
                 var endDate = DateOnly.FromDateTime(trimesterConfig.EndDate);
 
                 var asistencias = await _context.Attendances
-                    .Where(a => 
-                        a.StudentId == studentId && 
-                        a.Date >= startDate && 
-                        a.Date <= endDate)
+                    .Where(a =>
+                        a.StudentId == studentId &&
+                        a.Date >= startDate &&
+                        a.Date <= endDate &&
+                        (activeGroupIds.Count == 0 || (a.GroupId.HasValue && activeGroupIds.Contains(a.GroupId.Value))))
                     .ToListAsync();
 
                 attendanceByTrimester.Add(new AttendanceDto
@@ -502,10 +493,11 @@ namespace SchoolManager.Services.Implementations
                 var endDate = DateOnly.FromDateTime(trimesterConfig.EndDate);
 
                 var attendanceByMonthRaw = await _context.Attendances
-                    .Where(a => 
-                        a.StudentId == studentId && 
-                        a.Date >= startDate && 
-                        a.Date <= endDate)
+                    .Where(a =>
+                        a.StudentId == studentId &&
+                        a.Date >= startDate &&
+                        a.Date <= endDate &&
+                        (activeGroupIds.Count == 0 || (a.GroupId.HasValue && activeGroupIds.Contains(a.GroupId.Value))))
                     .GroupBy(a => new { a.Date.Year, a.Date.Month })
                     .Select(g => new
                     {
@@ -542,6 +534,7 @@ namespace SchoolManager.Services.Implementations
                       ssa => ssa.SubjectAssignmentId,
                       sa => sa.Id,
                       (ssa, sa) => new { ssa.Id, ssa.SubjectAssignmentId, sa.GroupId, sa.GradeLevelId })
+                .Where(x => activeGroupIds.Count == 0 || activeGroupIds.Contains(x.GroupId))
                 .Distinct()
                 .ToListAsync();
 
@@ -559,7 +552,7 @@ namespace SchoolManager.Services.Implementations
                                     s.StudentId == studentId &&
                                     ((s.StudentSubjectAssignmentId.HasValue && activeSubjectAssignments.Select(x => x.Id).Contains(s.StudentSubjectAssignmentId.Value))
                                      || _context.StudentAssignments.Any(sa =>
-                                            sa.Id == s.StudentAssignmentId && sa.StudentId == studentId))))
+                                            sa.Id == s.StudentAssignmentId && sa.StudentId == studentId && sa.IsActive))))
                     .Select(a => new PendingActivityDto
                     {
                         ActivityId = a.Id,
@@ -582,7 +575,7 @@ namespace SchoolManager.Services.Implementations
             {
                 StudentId = studentId,
                 StudentName = name,
-                Grade = $"{studentAssignment.GradeName} - {studentAssignment.GroupName}",
+                Grade = gradeHeaderLabel,
                 Grades = grades,
                 AttendanceByTrimester = attendanceByTrimester,
                 AttendanceByMonth = attendanceByMonth,
@@ -598,7 +591,6 @@ namespace SchoolManager.Services.Implementations
             try
             {
                 _logger.LogInformation("=== INICIO GetDisciplineReportsByStudentIdAsync - StudentId: {StudentId} ===", studentId);
-                Console.WriteLine($"=== INICIO GetDisciplineReportsByStudentIdAsync - StudentId: {studentId} ===");
 
                 var reports = await _context.DisciplineReports
                     .Where(dr => dr.StudentId == studentId)
@@ -617,14 +609,12 @@ namespace SchoolManager.Services.Implementations
                     .ToListAsync();
 
                 _logger.LogInformation("Reportes de disciplina encontrados: {Count}", reports.Count);
-                Console.WriteLine($"Reportes de disciplina encontrados: {reports.Count}");
 
                 return reports;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error en GetDisciplineReportsByStudentIdAsync: {Message}", ex.Message);
-                Console.WriteLine($"ERROR en GetDisciplineReportsByStudentIdAsync: {ex.Message}");
                 return new List<DisciplineReportDto>();
             }
         }

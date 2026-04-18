@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
@@ -72,13 +72,10 @@ namespace SchoolManager.Services.Implementations
 
             try
             {
-                Console.WriteLine($"[StudentAssignmentService] Iniciando inserción para StudentId: {assignment.StudentId}, GradeId: {assignment.GradeId}, GroupId: {assignment.GroupId}");
-                
                 // Asegurar que CreatedAt esté establecido si no lo está
                 if (!assignment.CreatedAt.HasValue)
                 {
                     assignment.CreatedAt = DateTime.UtcNow;
-                    Console.WriteLine($"[StudentAssignmentService] CreatedAt establecido: {assignment.CreatedAt}");
                 }
 
                 // MEJORADO: Asignar año académico si no está asignado
@@ -89,7 +86,6 @@ namespace SchoolManager.Services.Implementations
                     {
                         var activeAcademicYear = await _academicYearService.GetActiveAcademicYearAsync(student.SchoolId.Value);
                         assignment.AcademicYearId = activeAcademicYear?.Id;
-                        Console.WriteLine($"[StudentAssignmentService] AcademicYearId asignado: {assignment.AcademicYearId}");
                     }
                 }
 
@@ -104,24 +100,18 @@ namespace SchoolManager.Services.Implementations
                 assignment.StartDate ??= assignment.CreatedAt ?? DateTime.UtcNow;
                 
                 _context.StudentAssignments.Add(assignment);
-                Console.WriteLine($"[StudentAssignmentService] Entidad agregada al contexto");
 
                 await _context.SaveChangesAsync();
                 await SyncStudentSubjectAssignmentsAsync(assignment);
                 await _context.SaveChangesAsync();
-                Console.WriteLine($"[StudentAssignmentService] SaveChangesAsync completado exitosamente");
             }
             catch (DbUpdateException dbEx)
             {
-                Console.WriteLine($"[StudentAssignmentService] DbUpdateException: {dbEx.Message}");
-                Console.WriteLine($"[StudentAssignmentService] Inner Exception: {dbEx.InnerException?.Message}");
                 // Excepción típica de clave foránea, clave primaria duplicada, etc.
                 throw new InvalidOperationException($"Error al guardar la asignación en la base de datos. Verifica claves foráneas y datos duplicados. Detalles: {dbEx.Message}", dbEx);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StudentAssignmentService] Exception general: {ex.Message}");
-                Console.WriteLine($"[StudentAssignmentService] Stack Trace: {ex.StackTrace}");
                 // Otro tipo de excepción general
                 throw new Exception($"Ocurrió un error inesperado al insertar la asignación. Detalles: {ex.Message}", ex);
             }
@@ -224,20 +214,16 @@ namespace SchoolManager.Services.Implementations
                 .ToDictionary(g => g.Key, g => g.ToList());
         }
 
-        public async Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments, bool replaceExistingActive = true)
+        public async Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments, bool replaceExistingActive = false)
         {
             try
             {
-                Console.WriteLine($"[StudentAssignmentService] Iniciando AssignAsync para StudentId: {studentId}");
-                
                 if (replaceExistingActive)
                 {
-                    // Inactivar todas las asignaciones activas (comportamiento histórico de “reemplazar matrícula”)
+                    // Inactivar todas las asignaciones activas (comportamiento explícito de “reemplazar matrícula”)
                     var existing = await _context.StudentAssignments
                         .Where(a => a.StudentId == studentId && a.IsActive)
                         .ToListAsync();
-
-                    Console.WriteLine($"[StudentAssignmentService] Encontradas {existing.Count} asignaciones activas existentes");
 
                     foreach (var assignment in existing)
                     {
@@ -255,16 +241,22 @@ namespace SchoolManager.Services.Implementations
                     ? await _academicYearService.GetActiveAcademicYearAsync(schoolId.Value)
                     : null;
 
+                var groupIds = assignments.Select(a => a.GroupId).Distinct().ToList();
+                var shiftByGroup = await _context.Groups.AsNoTracking()
+                    .Where(g => groupIds.Contains(g.Id))
+                    .ToDictionaryAsync(g => g.Id, g => g.ShiftId);
+
                 foreach (var item in assignments)
                 {
-                    Console.WriteLine($"[StudentAssignmentService] Agregando asignación: GradeId={item.GradeId}, GroupId={item.GroupId}");
-                    
+                    shiftByGroup.TryGetValue(item.GroupId, out var shiftId);
+
                     if (!replaceExistingActive)
                     {
                         var dup = await _context.StudentAssignments.AnyAsync(sa =>
                             sa.StudentId == studentId &&
                             sa.GradeId == item.GradeId &&
                             sa.GroupId == item.GroupId &&
+                            sa.ShiftId == shiftId &&
                             sa.IsActive);
                         if (dup)
                             continue;
@@ -276,6 +268,7 @@ namespace SchoolManager.Services.Implementations
                         StudentId = studentId,
                         GradeId = item.GradeId,
                         GroupId = item.GroupId,
+                        ShiftId = shiftId,
                         IsActive = true, // Nueva asignación activa
                         AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
                         CreatedAt = DateTime.UtcNow,
@@ -284,7 +277,6 @@ namespace SchoolManager.Services.Implementations
                     });
                 }
 
-                Console.WriteLine($"[StudentAssignmentService] Guardando cambios...");
                 await _context.SaveChangesAsync();
                 var createdAssignments = await _context.StudentAssignments
                     .Where(sa => sa.StudentId == studentId && sa.IsActive)
@@ -293,18 +285,13 @@ namespace SchoolManager.Services.Implementations
                 foreach (var assignment in createdAssignments)
                     await SyncStudentSubjectAssignmentsAsync(assignment);
                 await _context.SaveChangesAsync();
-                Console.WriteLine($"[StudentAssignmentService] AssignAsync completado exitosamente");
             }
             catch (DbUpdateException dbEx)
             {
-                Console.WriteLine($"[StudentAssignmentService] DbUpdateException en AssignAsync: {dbEx.Message}");
-                Console.WriteLine($"[StudentAssignmentService] InnerException: {dbEx.InnerException?.Message}");
                 throw new InvalidOperationException($"Error al asignar estudiantes. Detalles: {dbEx.Message}", dbEx);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StudentAssignmentService] Exception general en AssignAsync: {ex.Message}");
-                Console.WriteLine($"[StudentAssignmentService] StackTrace: {ex.StackTrace}");
                 throw new Exception($"Error inesperado al asignar estudiantes. Detalles: {ex.Message}", ex);
             }
         }
@@ -349,21 +336,11 @@ namespace SchoolManager.Services.Implementations
         {
             try
             {
-                Console.WriteLine($"[StudentAssignmentService] AssignStudentAsync - StudentId: {studentId}, GradeId: {gradeId}, GroupId: {groupId}");
-                
-                // Verificar solo asignaciones activas
-                bool exists = await _context.StudentAssignments.AnyAsync(sa =>
-                    sa.StudentId == studentId &&
-                    sa.GradeId == gradeId &&
-                    sa.GroupId == groupId &&
-                    sa.IsActive
-                );
+                var groupEntity = await _context.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == groupId);
+                var shiftId = groupEntity?.ShiftId;
 
-                if (exists)
-                {
-                    Console.WriteLine($"[StudentAssignmentService] La asignación ya existe");
+                if (await ExistsWithShiftAsync(studentId, gradeId, groupId, shiftId))
                     return false;
-                }
 
                 // MEJORADO: Obtener año académico activo para la nueva asignación
                 var student = await _context.Users.FindAsync(studentId);
@@ -378,6 +355,7 @@ namespace SchoolManager.Services.Implementations
                     StudentId = studentId,
                     GradeId = gradeId,
                     GroupId = groupId,
+                    ShiftId = shiftId,
                     IsActive = true,
                     AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
                     CreatedAt = DateTime.UtcNow,
@@ -385,26 +363,19 @@ namespace SchoolManager.Services.Implementations
                     StartDate = DateTime.UtcNow
                 };
 
-                Console.WriteLine($"[StudentAssignmentService] Nueva asignación creada con CreatedAt: {assignment.CreatedAt}");
-                
                 _context.StudentAssignments.Add(assignment);
                 await _context.SaveChangesAsync();
                 await SyncStudentSubjectAssignmentsAsync(assignment, subjectId);
                 await _context.SaveChangesAsync();
-                
-                Console.WriteLine($"[StudentAssignmentService] Asignación guardada exitosamente");
+
                 return true;
             }
             catch (DbUpdateException dbEx)
             {
-                Console.WriteLine($"[StudentAssignmentService] DbUpdateException en AssignStudentAsync: {dbEx.Message}");
-                Console.WriteLine($"[StudentAssignmentService] Inner Exception: {dbEx.InnerException?.Message}");
                 throw new InvalidOperationException($"Error al asignar estudiante. Detalles: {dbEx.Message}", dbEx);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[StudentAssignmentService] Exception general en AssignStudentAsync: {ex.Message}");
-                Console.WriteLine($"[StudentAssignmentService] Stack Trace: {ex.StackTrace}");
                 throw new Exception($"Error inesperado al asignar estudiante. Detalles: {ex.Message}", ex);
             }
         }
@@ -416,7 +387,14 @@ namespace SchoolManager.Services.Implementations
                 var student = await _context.Users.FirstOrDefaultAsync(u => u.Email == row.StudentEmail);
                 var subject = await _context.Subjects.FirstOrDefaultAsync(s => s.Code == row.SubjectCode);
                 var grade = await _context.GradeLevels.FirstOrDefaultAsync(g => g.Name == row.GradeName);
-                var group = await _context.Groups.FirstOrDefaultAsync(g => g.Name == row.GroupName && g.Grade == row.GradeName);
+                Group? group = null;
+                if (student?.SchoolId != null)
+                {
+                    group = await _context.Groups.FirstOrDefaultAsync(g =>
+                        g.SchoolId == student.SchoolId &&
+                        g.Name == row.GroupName &&
+                        g.Grade == row.GradeName);
+                }
 
                 if (student == null || subject == null || grade == null || group == null)
                 {
@@ -428,6 +406,7 @@ namespace SchoolManager.Services.Implementations
                     sa.StudentId == student.Id &&
                     sa.GradeId == grade.Id &&
                     sa.GroupId == group.Id &&
+                    sa.ShiftId == group.ShiftId &&
                     sa.IsActive);
 
                 if (!alreadyExists)
@@ -443,6 +422,7 @@ namespace SchoolManager.Services.Implementations
                         StudentId = student.Id,
                         GradeId = grade.Id,
                         GroupId = group.Id,
+                        ShiftId = group.ShiftId,
                         IsActive = true,
                         AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
                         CreatedAt = DateTime.UtcNow,

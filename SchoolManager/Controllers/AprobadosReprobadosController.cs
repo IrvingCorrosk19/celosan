@@ -49,7 +49,7 @@ namespace SchoolManager.Controllers
                 
                 // Cargar trimestres y niveles disponibles
                 ViewBag.TrimestresDisponibles = await _aprobadosReprobadosService.ObtenerTrimestresDisponiblesAsync(currentUser.SchoolId.Value);
-                ViewBag.NivelesDisponibles = await _aprobadosReprobadosService.ObtenerNivelesEducativosAsync();
+                ViewBag.NivelesDisponibles = await _aprobadosReprobadosService.ObtenerNivelesEducativosAsync(currentUser.SchoolId.Value);
                 
                 // Cargar nuevos filtros
                 ViewBag.EspecialidadesDisponibles = await _aprobadosReprobadosService.ObtenerEspecialidadesAsync(currentUser.SchoolId.Value);
@@ -336,6 +336,33 @@ namespace SchoolManager.Controllers
             {
                 _logger.LogError(ex, "Error obteniendo materias");
                 return Json(new { success = false, message = "Error al obtener materias" });
+            }
+        }
+
+        // GET: AprobadosReprobados/ObtenerGradosFiltro?nivelEducativo=Media
+        [HttpGet]
+        public async Task<IActionResult> ObtenerGradosFiltro(string nivelEducativo)
+        {
+            try
+            {
+                var currentUser = await _currentUserService.GetCurrentUserAsync();
+                if (currentUser?.SchoolId == null || string.IsNullOrWhiteSpace(nivelEducativo))
+                    return Json(new { success = false, message = "Datos inválidos" });
+
+                var grados = await _aprobadosReprobadosService.ObtenerGradosParaFiltroReporteAsync(
+                    currentUser.SchoolId.Value,
+                    nivelEducativo.Trim());
+
+                return Json(new
+                {
+                    success = true,
+                    data = grados.Select(g => new { value = g, text = g })
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error obteniendo grados para filtro");
+                return Json(new { success = false, message = "Error al obtener grados" });
             }
         }
     }

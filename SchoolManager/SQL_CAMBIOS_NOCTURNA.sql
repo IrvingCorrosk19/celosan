@@ -1,0 +1,71 @@
+-- =============================================================================
+-- SQL_CAMBIOS_NOCTURNA.sql
+-- Jornada nocturna / multi-matrícula — Trazabilidad de cambios en base de datos
+-- Fecha: 2026-04-18
+-- =============================================================================
+--
+-- ENTREGA ACTUAL (Fase crítica auditoría):
+--   No se aplicaron migraciones DDL ni DML obligatorios: la corrección principal
+--   fue en la capa de aplicación (C#), alineada con ANALISIS_SOPORTE_NOCTURNA_EDUPLANER.md
+--   (el modelo BD ya permitía múltiples student_assignments activos).
+--
+-- EVIDENCIA (solo lectura, ejecutada desde entorno DEV):
+--   SELECT name FROM shifts ORDER BY display_order;
+--   → Mañana, Tarde, Noche
+--
+-- =============================================================================
+-- OPCIONAL — Evaluar con datos reales antes de ejecutar en producción
+-- =============================================================================
+-- Objetivo: evitar duplicados accidentales mismo estudiante + grado + grupo +
+--           jornada + año, manteniendo permitidos distintos grupos o jornadas.
+--
+-- CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ix_student_assignments_active_unique_context
+-- ON student_assignments (student_id, grade_id, group_id, COALESCE(shift_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(academic_year_id, '00000000-0000-0000-0000-000000000000'::uuid))
+-- WHERE is_active = true;
+--
+-- Nota: COALESCE en índice único puede requerir expresión almacenada o índice parcial
+-- por escuela; ajustar según política de NULLs en shift_id/academic_year_id.
+--
+-- Alternativa más simple (solo si shift_id siempre NOT NULL en su institución):
+-- CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ix_student_assignments_active_student_grade_group_shift_year
+-- ON student_assignments (student_id, grade_id, group_id, shift_id, academic_year_id)
+-- WHERE is_active = true;
+--
+-- =============================================================================
+-- DATOS: sincronización suave de groups.grade (también disponible desde la app:
+--        AprobadosReprobados → Preparar datos, que ahora solo hace esto)
+-- =============================================================================
+-- UPDATE groups g
+-- SET grade = sub.nombre_grado
+-- FROM (
+--   SELECT DISTINCT ON (sa.group_id) sa.group_id, gl.name AS nombre_grado
+--   FROM subject_assignments sa
+--   INNER JOIN grade_levels gl ON gl.id = sa.grade_level_id
+--   WHERE sa.group_id IS NOT NULL
+--   ORDER BY sa.group_id, gl.name
+-- ) sub
+-- WHERE g.id = sub.group_id
+--   AND g.school_id = '<UUID_ESCUELA_AQUI>'::uuid
+--   AND (g.grade IS NULL OR g.grade = '');
+--
+-- Fin del script de trazabilidad.
+
+-- =============================================================================
+-- 2026-04-18 — Cierre implementación (aplicación)
+-- =============================================================================
+-- No se ejecutó DDL/DML automático en esta fase. Cambios funcionales:
+--   - Reemplazo de matrícula vía API: ver StudentAssignmentController.UpdateGroupAndGrade
+--     (MULTI_ENROLLMENT_CONFIRM + forceReplaceAll).
+--   - Anti-duplicado lógico en app: AssignAsync / carga masiva consideran shift_id.
+--
+-- DML sugerido (SOLO revisión / opcional): localizar estudiantes con más de una
+-- fila activa idéntica en student_id + grade_id + group_id + COALESCE(shift_id):
+--
+-- SELECT student_id, grade_id, group_id, shift_id, academic_year_id, COUNT(*)
+-- FROM student_assignments
+-- WHERE is_active = true
+-- GROUP BY 1,2,3,4,5
+-- HAVING COUNT(*) > 1;
+--
+-- Tras revisión manual, inactivar duplicados conservando la fila más reciente
+-- (por created_at / start_date) según política de la institución.

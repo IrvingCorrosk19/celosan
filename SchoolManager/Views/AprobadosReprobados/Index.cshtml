@@ -181,18 +181,25 @@
             $('#nivelEducativo').change(function () {
                 const nivel = $(this).val();
                 const gradoSelect = $('#gradoEspecifico');
-                
+
                 gradoSelect.html('<option value="">Todos los grados</option>');
-                
-                if (nivel === 'Premedia') {
-                    gradoSelect.append('<option value="7°">7°</option>');
-                    gradoSelect.append('<option value="8°">8°</option>');
-                    gradoSelect.append('<option value="9°">9°</option>');
-                } else if (nivel === 'Media') {
-                    gradoSelect.append('<option value="10°">10°</option>');
-                    gradoSelect.append('<option value="11°">11°</option>');
-                    gradoSelect.append('<option value="12°">12°</option>');
+
+                if (!nivel || nivel === 'Todos') {
+                    return;
                 }
+
+                $.getJSON('/AprobadosReprobados/ObtenerGradosFiltro', { nivelEducativo: nivel })
+                    .done(function (resp) {
+                        if (!resp.success || !resp.data || !resp.data.length) {
+                            return;
+                        }
+                        resp.data.forEach(function (g) {
+                            gradoSelect.append(`<option value="${g.value}">${g.text}</option>`);
+                        });
+                    })
+                    .fail(function () {
+                        console.error('Error al cargar grados para el nivel seleccionado');
+                    });
             });
 
             // Actualizar materias cuando cambia el área o especialidad
@@ -377,7 +384,7 @@
                         <tr>
                             <td colspan="13" class="text-center py-4 text-muted">
                                 <p class="mb-0"><strong>No hay datos para los filtros seleccionados.</strong></p>
-                                <p class="mb-0 small">Para que aparezcan filas: los grupos deben tener <strong>grado</strong> asignado (Media: 10°, 11°, 12°; Premedia: 7°, 8°, 9°) y las actividades deben estar asociadas al trimestre elegido (ej. 3T).</p>
+                                <p class="mb-0 small">Para que aparezcan filas: use nivel <strong>Todos</strong> o <strong>Nocturna</strong> para incluir todos los grupos o solo jornada noche; <strong>Premedia/Media</strong> usan grados detectados en la oferta. Las actividades deben coincidir con el trimestre elegido. “Preparar datos” solo sincroniza el campo grado de grupos vacíos desde la oferta académica.</p>
                                 <p class="mb-0 small">Si usa la base de datos en la nube, ejecute el script <code>Scripts/FixDatosParaReporteAprobados.sql</code> en esa base (ajustando el <code>school_id</code> si es distinto).</p>
                             </td>
                         </tr>

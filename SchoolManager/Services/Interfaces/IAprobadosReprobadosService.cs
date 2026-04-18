@@ -28,7 +28,12 @@ namespace SchoolManager.Services.Interfaces
         /// <summary>
         /// Obtiene los niveles educativos disponibles
         /// </summary>
-        Task<List<string>> ObtenerNivelesEducativosAsync();
+        Task<List<string>> ObtenerNivelesEducativosAsync(Guid schoolId);
+
+        /// <summary>
+        /// Grados reales para el filtro opcional según nivel (incluye Nocturna desde grupos con turno noche).
+        /// </summary>
+        Task<List<string>> ObtenerGradosParaFiltroReporteAsync(Guid schoolId, string nivelEducativo);
         
         /// <summary>
         /// Obtiene las especialidades disponibles

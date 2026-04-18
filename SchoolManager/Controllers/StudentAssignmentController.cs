@@ -53,7 +53,12 @@ namespace SchoolManager.Controllers
         }
 
         [HttpPost("/StudentAssignment/UpdateGroupAndGrade")]
-        public async Task<IActionResult> UpdateGroupAndGrade(Guid studentId, Guid gradeId, Guid groupId, bool additive = false)
+        public async Task<IActionResult> UpdateGroupAndGrade(
+            Guid studentId,
+            Guid gradeId,
+            Guid groupId,
+            bool additive = false,
+            bool forceReplaceAll = false)
         {
             if (studentId == Guid.Empty || gradeId == Guid.Empty || groupId == Guid.Empty)
                 return Json(new { success = false, message = "Datos inválidos para la asignación." });
@@ -75,9 +80,29 @@ namespace SchoolManager.Controllers
             if (group == null)
                 return Json(new { success = false, message = "Grupo no válido." });
 
+            // Determinar EnrollmentType según la jornada real del grupo, no según el flag additive
+            var shift = group.ShiftId.HasValue ? await _shiftService.GetByIdAsync(group.ShiftId.Value) : null;
+            var isNightShift = shift?.Name?.ToLower().Contains("noche") == true;
+            var enrollmentType = isNightShift ? "Nocturno" : "Regular";
+
             if (!additive)
             {
-                await _studentAssignmentService.RemoveAssignmentsAsync(studentId);
+                var activeCount = await _context.StudentAssignments
+                    .CountAsync(sa => sa.StudentId == studentId && sa.IsActive);
+
+                if (activeCount > 1 && !forceReplaceAll)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        code = "MULTI_ENROLLMENT_CONFIRM",
+                        activeCount,
+                        message = "El estudiante tiene varias matrículas activas. Confirmar reemplazo total dejará una sola matrícula (las demás se inactivan)."
+                    });
+                }
+
+                if (activeCount > 0)
+                    await _studentAssignmentService.RemoveAssignmentsAsync(studentId);
             }
             else
             {
@@ -95,7 +120,7 @@ namespace SchoolManager.Controllers
                 ShiftId = group.ShiftId,
                 CreatedAt = DateTime.UtcNow,
                 IsActive = true,
-                EnrollmentType = additive ? "Nocturno" : "Regular",
+                EnrollmentType = enrollmentType,
                 StartDate = DateTime.UtcNow
             };
             await _studentAssignmentService.InsertAsync(newAssignment);

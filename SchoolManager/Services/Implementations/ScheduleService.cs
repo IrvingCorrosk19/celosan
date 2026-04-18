@@ -212,7 +212,7 @@ public class ScheduleService : IScheduleService
         if (userSchoolId == null || userSchoolId == Guid.Empty)
             return new List<ScheduleEntry>();
 
-        var assignment = await _context.StudentAssignments
+        var assignments = await _context.StudentAssignments
             .AsNoTracking()
             .Include(sa => sa.Group)
             .Where(sa =>
@@ -221,16 +221,31 @@ public class ScheduleService : IScheduleService
                 (sa.AcademicYearId == academicYearId || sa.AcademicYearId == null))
             .OrderByDescending(sa => sa.AcademicYearId != null)
             .ThenByDescending(sa => sa.CreatedAt)
-            .FirstOrDefaultAsync(CancellationToken.None)
+            .ToListAsync(CancellationToken.None)
             .ConfigureAwait(false);
 
-        if (assignment == null || assignment.Group == null)
+        if (assignments.Count == 0)
             return new List<ScheduleEntry>();
 
-        if (assignment.Group.SchoolId != userSchoolId)
-            return new List<ScheduleEntry>();
+        var merged = new List<ScheduleEntry>();
+        var seenEntryIds = new HashSet<Guid>();
+        foreach (var assignment in assignments)
+        {
+            if (assignment.Group == null || assignment.Group.SchoolId != userSchoolId)
+                continue;
 
-        return await GetByGroupAsync(assignment.GroupId, academicYearId).ConfigureAwait(false);
+            var forGroup = await GetByGroupAsync(assignment.GroupId, academicYearId).ConfigureAwait(false);
+            foreach (var entry in forGroup)
+            {
+                if (seenEntryIds.Add(entry.Id))
+                    merged.Add(entry);
+            }
+        }
+
+        return merged
+            .OrderBy(e => e.DayOfWeek)
+            .ThenBy(e => e.TimeSlot.DisplayOrder)
+            .ToList();
     }
 
     private static string FormatTimeSlotLabel(TimeSlot timeSlot) =>

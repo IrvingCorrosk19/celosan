@@ -63,37 +63,27 @@ public class StudentIdCardService : IStudentIdCardService
 
     public async Task<StudentIdCardDto?> GetCurrentCardAsync(Guid studentId, string? siteBaseUrl = null)
     {
-        var row = await StudentRoleFilter.WhereIsStudent(_context.Users.AsNoTracking())
+        var userRow = await StudentRoleFilter.WhereIsStudent(_context.Users.AsNoTracking())
             .Where(x => x.Id == studentId)
-            .Select(x => new
-            {
-                x.Name,
-                x.LastName,
-                x.PhotoUrl,
-                HasActiveAssignment = x.StudentAssignments.Any(a => a.IsActive),
-                Grade = x.StudentAssignments.Where(a => a.IsActive)
-                    .OrderByDescending(a => a.EnrollmentType != null && a.EnrollmentType.ToLower() == "nocturno")
-                    .ThenByDescending(a => a.Shift != null && a.Shift.Name != null && a.Shift.Name.ToLower().Contains("noche"))
-                    .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
-                    .Select(a => a.Grade.Name)
-                    .FirstOrDefault(),
-                Group = x.StudentAssignments.Where(a => a.IsActive)
-                    .OrderByDescending(a => a.EnrollmentType != null && a.EnrollmentType.ToLower() == "nocturno")
-                    .ThenByDescending(a => a.Shift != null && a.Shift.Name != null && a.Shift.Name.ToLower().Contains("noche"))
-                    .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
-                    .Select(a => a.Group.Name)
-                    .FirstOrDefault(),
-                ShiftName = x.StudentAssignments.Where(a => a.IsActive)
-                    .OrderByDescending(a => a.EnrollmentType != null && a.EnrollmentType.ToLower() == "nocturno")
-                    .ThenByDescending(a => a.Shift != null && a.Shift.Name != null && a.Shift.Name.ToLower().Contains("noche"))
-                    .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
-                    .Select(a => a.Shift != null ? a.Shift.Name : null)
-                    .FirstOrDefault()
-            })
+            .Select(x => new { x.Name, x.LastName, x.PhotoUrl })
             .FirstOrDefaultAsync();
 
-        if (row == null || !row.HasActiveAssignment)
+        if (userRow == null)
             return null;
+
+        var assignments = await _context.StudentAssignments
+            .AsNoTracking()
+            .Where(a => a.StudentId == studentId && a.IsActive)
+            .Include(a => a.Grade)
+            .Include(a => a.Group)
+            .Include(a => a.Shift)
+            .ToListAsync();
+
+        var primary = ActiveStudentAssignmentHelper.PickForDisplay(assignments);
+        if (primary == null)
+            return null;
+
+        var multiSummary = ActiveStudentAssignmentHelper.BuildMultiEnrollmentSummary(assignments, primary);
 
         var card = await _context.StudentIdCards
             .AsNoTracking()
@@ -122,14 +112,15 @@ public class StudentIdCardService : IStudentIdCardService
         {
             StudentId = studentId,
             CardNumber = card.CardNumber,
-            FullName = $"{row.Name} {row.LastName}",
-            Grade = row.Grade ?? "",
-            Group = row.Group ?? "",
-            Shift = string.IsNullOrEmpty(row.ShiftName) ? "N/A" : row.ShiftName,
+            FullName = $"{userRow.Name} {userRow.LastName}",
+            Grade = primary.Grade?.Name ?? "",
+            Group = primary.Group?.Name ?? "",
+            Shift = string.IsNullOrEmpty(primary.Shift?.Name) ? "N/A" : primary.Shift.Name,
+            AdditionalEnrollmentsSummary = multiSummary,
             QrToken = token?.Token ?? "",
             QrImageDataUrl = qrImageDataUrl,
             EmergencyInfoQrImageDataUrl = BuildEmergencyQrDataUrl(studentId, siteBaseUrl),
-            PhotoUrl = row.PhotoUrl
+            PhotoUrl = userRow.PhotoUrl
         };
     }
 
@@ -242,6 +233,8 @@ public class StudentIdCardService : IStudentIdCardService
             var pngBytes = QrHelper.GenerateQrPng(newToken.Token, _qrSignatureService);
             var qrImageDataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
 
+            var multiSummary = ActiveStudentAssignmentHelper.BuildMultiEnrollmentSummary(student.StudentAssignments, activeAssignment);
+
             return new StudentIdCardDto
             {
                 StudentId = studentId,
@@ -250,6 +243,7 @@ public class StudentIdCardService : IStudentIdCardService
                 Grade = activeAssignment.Grade?.Name ?? "",
                 Group = activeAssignment.Group?.Name ?? "",
                 Shift = activeAssignment.Shift?.Name ?? "N/A",
+                AdditionalEnrollmentsSummary = multiSummary,
                 QrToken = newToken.Token,
                 QrImageDataUrl = qrImageDataUrl,
                 EmergencyInfoQrImageDataUrl = BuildEmergencyQrDataUrl(studentId, siteBaseUrl),

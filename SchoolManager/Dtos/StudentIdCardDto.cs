@@ -8,6 +8,10 @@ public class StudentIdCardDto
     public string Grade { get; set; } = null!;
     public string Group { get; set; } = null!;
     public string Shift { get; set; } = null!;
+
+    /// <summary>Otros contextos de matrícula activa (misma prioridad nocturna que el primario).</summary>
+    public string? AdditionalEnrollmentsSummary { get; set; }
+
     public string QrToken { get; set; } = null!;
     /// <summary>QR generado en el servidor como data URI (data:image/png;base64,...). Evita dependencia de CDN en la vista.</summary>
     public string? QrImageDataUrl { get; set; }

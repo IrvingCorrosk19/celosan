@@ -10,6 +10,8 @@
         public DateTime CreatedAt { get; set; }
         public string? FileUrl { get; set; }
         public string Trimester { get; set; } = string.Empty;
+        /// <summary>Grupo u oferta académica (evita ambigüedad con varias matrículas).</summary>
+        public string? GroupContext { get; set; }
         public decimal? Grade { get { return Value; } }
     }
 

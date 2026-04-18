@@ -75,7 +75,10 @@ namespace SchoolManager.Services
                                     DocumentId = student.DocumentId ?? ""
                                 }).ToListAsync();
 
-            return result;
+            return result
+                .GroupBy(s => s.StudentId)
+                .Select(g => g.First())
+                .ToList();
         }
 
         public async Task<IEnumerable<StudentBasicDto>> GetBySubjectGroupAndGradeAsync(Guid subjectId, Guid groupId, Guid gradeId)

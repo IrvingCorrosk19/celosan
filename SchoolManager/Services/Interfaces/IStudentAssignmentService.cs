@@ -11,7 +11,8 @@ public interface IStudentAssignmentService
     /// </summary>
     Task<Dictionary<Guid, List<StudentAssignment>>> GetActiveAssignmentsForCurrentSchoolAsync();
 
-    Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments, bool replaceExistingActive = true);
+    /// <param name="replaceExistingActive">Si es true, inactiva todas las matrículas activas antes de agregar (riesgo en nocturna). Por defecto false: modo aditivo seguro.</param>
+    Task AssignAsync(Guid studentId, List<(Guid SubjectId, Guid GradeId, Guid GroupId)> assignments, bool replaceExistingActive = false);
 
     Task<bool> AssignStudentAsync(Guid studentId, Guid subjectId, Guid gradeId, Guid groupId); // ← NUEVO
 

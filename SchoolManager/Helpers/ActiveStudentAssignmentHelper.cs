@@ -25,6 +25,32 @@ public static class ActiveStudentAssignmentHelper
             .First();
     }
 
+    /// <summary>
+    /// Otros contextos de matrícula activa (excluye la fila primaria), mismo criterio de orden que <see cref="PickForDisplay"/>.
+    /// </summary>
+    public static string? BuildMultiEnrollmentSummary(
+        IEnumerable<StudentAssignment> assignments,
+        StudentAssignment? primaryToExclude)
+    {
+        var list = assignments
+            .Where(a => a.IsActive && (primaryToExclude == null || a.Id != primaryToExclude.Id))
+            .ToList();
+        if (list.Count == 0)
+            return null;
+
+        return string.Join(" · ", list
+            .OrderByDescending(MatchesNocturnoEnrollment)
+            .ThenByDescending(MatchesNightShiftName)
+            .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
+            .Select(a =>
+            {
+                var g = a.Grade?.Name ?? "—";
+                var gr = a.Group?.Name ?? "—";
+                var sh = string.IsNullOrWhiteSpace(a.Shift?.Name) ? null : a.Shift!.Name.Trim();
+                return sh == null ? $"{g} — {gr}" : $"{g} — {gr} ({sh})";
+            }));
+    }
+
     private static bool MatchesNocturnoEnrollment(StudentAssignment a) =>
         !string.IsNullOrWhiteSpace(a.EnrollmentType) &&
         a.EnrollmentType.Trim().Equals("Nocturno", StringComparison.OrdinalIgnoreCase);

@@ -31,8 +31,8 @@ public interface IScheduleService
 
     /// <summary>
     /// Obtiene las entradas de horario del estudiante (User) para un año académico.
-    /// Resuelve GroupId vía StudentAssignment activa; valida que el grupo pertenezca a la escuela del usuario.
-    /// Solo lectura; no modifica datos.
+    /// Consolida todas las matrículas activas del año (jornada nocturna / múltiples grupos): une los horarios
+    /// de cada grupo y deduplica por Id de entrada.
     /// </summary>
     Task<List<ScheduleEntry>> GetByStudentUserAsync(Guid studentUserId, Guid academicYearId);
 }
