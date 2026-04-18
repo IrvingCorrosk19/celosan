@@ -575,9 +575,8 @@ namespace SchoolManager.Controllers
                     if (grade == null)
                         grade = await _gradeLevelService.GetOrCreateAsync(row.Nivel.Trim());
 
-                    var jornadaEfectiva = string.IsNullOrWhiteSpace(row.Jornada)
-                        ? "Noche"
-                        : row.Jornada.Trim();
+                    // Plataforma solo nocturna: la jornada del Excel no cambia el turno efectivo.
+                    const string jornadaEfectiva = "Noche";
                     var shift = await _shiftService.GetOrCreateAsync(jornadaEfectiva);
 
                     var group = await _groupService.GetByNameAndGradeAsync(row.GrupoAcademico.Trim(), currentSchoolId, shift.Id);
@@ -923,10 +922,8 @@ namespace SchoolManager.Controllers
                 {
                     Console.WriteLine($"[SaveAssignments] Procesando: {item.Estudiante} - {item.Grado} - {item.Grupo}");
 
-                    // Solo nocturna: jornada vacía → "Noche" (resolución de grupo + tipo de matrícula coherente).
-                    var jornadaParaShift = string.IsNullOrWhiteSpace(item.Jornada)
-                        ? "Noche"
-                        : item.Jornada.Trim();
+                    // Plataforma solo nocturna: siempre turno Noche para matrícula y grupo.
+                    const string jornadaParaShift = "Noche";
                     var shift = await _shiftService.GetOrCreateAsync(jornadaParaShift);
 
                     // Buscar o crear el estudiante
