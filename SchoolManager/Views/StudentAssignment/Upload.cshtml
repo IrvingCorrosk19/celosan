@@ -21,29 +21,26 @@
 <div class="alert alert-info mb-3">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div class="flex-grow-1">
-            <h5 class="mb-2"><i class="bi bi-info-circle me-2"></i>Matrícula grado + grupo (solo colegios nocturnos)</h5>
-            <p class="mb-2 small text-muted">Turno y tipo de matrícula siempre <strong>Noche</strong> / <strong>Nocturno</strong>. La columna Jornada del Excel es opcional y no cambia el turno.</p>
-            <p class="small mb-1"><strong>Esta pantalla no usa</strong> columnas “Asignatura”, “Nivel”, “Grupo académico” ni “Resultado (Inscrito)”. Eso es la <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")">carga por materias</a>.</p>
-            <p class="small mb-1"><strong>Fila 1 — encabezados en este orden exacto</strong> (como en la plantilla descargable):</p>
+            <h5 class="mb-2"><i class="bi bi-info-circle me-2"></i>Carga masiva (colegio nocturna)</h5>
+            <p class="mb-2 small text-muted">Una sola pantalla y un solo formato Excel: inscripciones por asignatura (una fila por materia). El turno operativo del sistema sigue siendo <strong>Noche</strong>; la columna Jornada del archivo es informativa u opcional.</p>
+            <p class="small mb-1"><strong>Columnas</strong> (orden flexible; deben existir los encabezados con estos nombres):</p>
             <div class="table-responsive small mb-2">
                 <table class="table table-bordered table-sm mb-0 bg-white">
                     <thead class="table-light"><tr>
-                        <th>Estudiante (Email)</th><th>Nombre</th><th>Apellido</th><th>Documento ID</th><th>Fecha Nacimiento</th><th>Grado</th><th>Grupo</th><th>Jornada</th><th>Inclusión</th>
+                        <th>Estudiante (Email)</th><th>Nombre</th><th>Apellido</th><th>Documento ID</th><th>Asignatura</th><th>Nivel</th><th>Grupo académico</th><th>Jornada</th><th>Resultado (Inscrito)</th>
                     </tr></thead>
-                    <tbody><tr class="text-muted">
-                        <td colspan="9">Fila 2 en adelante: datos por estudiante. Ej.: <code>maria@colegio.edu</code> · María · López · 8-1234-567 · 15/03/2010 · 10° · 10-A · <em>(vacío)</em> · no</td>
+                    <tbody><tr>
+                        <td>maria@colegio.edu</td><td>María</td><td>López</td><td>8-1234-567</td><td>Matemática</td><td>10°</td><td>10-A</td><td><em>(opcional)</em></td><td>SI / NO</td>
                     </tr></tbody>
                 </table>
             </div>
-            <div class="mt-2">
-                <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")" class="btn btn-outline-primary btn-sm">Ir a carga por materias (otro formato Excel)</a>
-            </div>
+            <p class="small text-muted mb-0">Obligatorios: email del estudiante, asignatura, nivel, grupo académico y resultado (SI/NO, 1/0, etc.). Opcionales: nombre, apellido, documento, jornada.</p>
         </div>
         <div>
             <a href="@Url.Action("DownloadTemplate", "File", new { fileName = "asignaciones_estudiantes_grado_grupo.xlsx" })"
                class="btn btn-success btn-sm"
                download="asignaciones_estudiantes_grado_grupo.xlsx">
-                <i class="bi bi-download me-1"></i>Descargar formato
+                <i class="bi bi-download me-1"></i>Descargar plantilla
             </a>
         </div>
     </div>
@@ -58,27 +55,26 @@
             <th>Nombre</th>
             <th>Apellido</th>
             <th>Documento ID</th>
-            <th>Fecha Nacimiento</th>
-            <th>Grado</th>
-            <th>Grupo</th>
+            <th>Asignatura</th>
+            <th>Nivel</th>
+            <th>Grupo académico</th>
             <th>Jornada</th>
-            <th>Inclusión</th>
+            <th>Resultado (Inscrito)</th>
         </tr>
     </thead>
     <tbody></tbody>
 </table>
 
 <div class="text-right mt-3">
-    <button id="btnGuardarAsignaciones" class="btn btn-success">Guardar Asignaciones</button>
+    <button id="btnGuardarAsignaciones" class="btn btn-success">Guardar carga masiva</button>
 </div>
 
-<!-- Loading overlay -->
 <div id="loadingOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999;">
     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white;">
         <div class="spinner-border" role="status">
             <span class="visually-hidden">Cargando...</span>
         </div>
-        <div class="mt-2">Procesando asignaciones...</div>
+        <div class="mt-2">Procesando inscripciones...</div>
     </div>
 </div>
 
@@ -87,10 +83,38 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         $(document).ready(function () {
-            let filasConErrores = new Set();
+            let payload = [];
 
             function marcarFilaConError(row) {
                 row.addClass('error-row');
+            }
+
+            function normalizeHeader(h) {
+                return (h ?? "")
+                    .toString()
+                    .trim()
+                    .toUpperCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .replace(/\s+/g, " ");
+            }
+
+            function parseInscrito(value) {
+                if (value === null || value === undefined) return null;
+                if (typeof value === 'number') return Math.abs(value) > 0.00001;
+                if (typeof value === 'boolean') return value;
+
+                const str = value.toString().trim();
+                if (!str) return null;
+
+                const normalized = str
+                    .toUpperCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "");
+
+                if (["1", "SI", "SÍ", "TRUE", "INSCRITO", "YES"].includes(normalized)) return true;
+                if (["0", "NO", "FALSE", "NO INSCRITO", "N"].includes(normalized)) return false;
+                return null;
             }
 
             $('#excelFile').on('change', function (e) {
@@ -100,11 +124,9 @@
                     return;
                 }
 
-                // Limpiar el conjunto de filas con errores al cargar nuevo archivo
-                filasConErrores.clear();
+                payload = [];
 
                 const reader = new FileReader();
-
                 reader.onload = function (e) {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
@@ -112,29 +134,37 @@
                     const sheet = workbook.Sheets[sheetName];
                     const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-                    // Validación de encabezados exactos
-                    const headersEsperados = ["ESTUDIANTE (EMAIL)", "NOMBRE", "APELLIDO", "DOCUMENTO ID", "FECHA NACIMIENTO", "GRADO", "GRUPO", "JORNADA", "INCLUSIÓN"];
-                    // Normalizar los encabezados obtenidos: quitar espacios, convertir a mayúsculas y normalizar caracteres especiales
-                    const headersObtenidos = json[0]?.map(h => {
-                        let header = h?.toString().trim().toUpperCase() || "";
-                        // Normalizar caracteres especiales: Ó -> O (para comparación más flexible)
-                        header = header.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                        return header;
-                    });
-                    // Normalizar también los encabezados esperados para comparación
-                    const headersEsperadosNormalizados = headersEsperados.map(h => {
-                        let header = h.toUpperCase();
-                        header = header.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                        return header;
-                    });
-                    const headersValidados = headersEsperadosNormalizados.every((expected, i) =>
-                        headersObtenidos[i] === expected
-                    );
+                    if (!json || json.length < 2) {
+                        Swal.fire("Excel vacío", "El archivo no contiene filas de datos.", "error");
+                        return;
+                    }
 
-                    if (!headersValidados) {
+                    const headersObtenidos = (json[0] || []).map(normalizeHeader);
+
+                    const idxEmail = headersObtenidos.findIndex(h => h === "ESTUDIANTE (EMAIL)" || h === "ESTUDIANTE");
+                    const idxNombre = headersObtenidos.findIndex(h => h === "NOMBRE");
+                    const idxApellido = headersObtenidos.findIndex(h => h === "APELLIDO");
+                    const idxDocumento = headersObtenidos.findIndex(h => h === "DOCUMENTO ID" || h === "DOCUMENTOID");
+                    const idxAsignatura = headersObtenidos.findIndex(h => h === "ASIGNATURA");
+                    const idxNivel = headersObtenidos.findIndex(h => h === "NIVEL");
+                    const idxGrupo = headersObtenidos.findIndex(h => h.includes("GRUPO") && h.includes("ACADEMICO"));
+                    const idxJornada = headersObtenidos.findIndex(h => h === "JORNADA");
+                    let idxResultado = headersObtenidos.findIndex(h => h.includes("RESULTADO") && h.includes("INSCRITO"));
+                    if (idxResultado < 0)
+                        idxResultado = headersObtenidos.findIndex(h => h === "RESULTADO");
+
+                    const requeridos = [
+                        { idx: idxEmail, label: "Estudiante (Email)" },
+                        { idx: idxAsignatura, label: "Asignatura" },
+                        { idx: idxNivel, label: "Nivel" },
+                        { idx: idxGrupo, label: "Grupo académico" },
+                        { idx: idxResultado, label: "Resultado (Inscrito)" }
+                    ];
+                    const faltantes = requeridos.filter(x => x.idx < 0);
+                    if (faltantes.length > 0) {
                         Swal.fire(
                             "Encabezados incorrectos",
-                            `Las columnas deben estar en este orden exacto: ${headersEsperados.join(", ")}`,
+                            `Faltan columnas requeridas: ${faltantes.map(f => f.label).join(", ")}`,
                             "error"
                         );
                         return;
@@ -143,140 +173,77 @@
                     const tbody = $('#excelTable tbody');
                     tbody.empty();
 
-                    let filasInvalidas = 0;
                     let erroresDetallados = [];
+                    let filasInvalidas = 0;
+                    const emailRegex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
 
                     for (let i = 1; i < json.length; i++) {
                         const row = json[i];
+                        if (!row || row.length === 0) continue;
                         const rowNumber = i + 1;
+
+                        const estudiante = (row[idxEmail] ?? "").toString().trim();
+                        const nombre = idxNombre >= 0 ? (row[idxNombre] ?? "").toString().trim() : "";
+                        const apellido = idxApellido >= 0 ? (row[idxApellido] ?? "").toString().trim() : "";
+                        const documentoId = idxDocumento >= 0 ? (row[idxDocumento] ?? "").toString().trim() : "";
+                        const asignatura = (row[idxAsignatura] ?? "").toString().trim();
+                        const nivel = (row[idxNivel] ?? "").toString().trim();
+                        const grupo = (row[idxGrupo] ?? "").toString().trim();
+                        const jornada = idxJornada >= 0 ? (row[idxJornada] ?? "").toString().trim() : "";
+                        const inscrito = parseInscrito(row[idxResultado]);
+                        const resultadoRaw = (row[idxResultado] ?? "").toString().trim();
+
                         const camposFaltantes = [];
-                        
-                        // Validar cada campo
-                        if (!row[0] || row[0].toString().trim() === "") camposFaltantes.push("Estudiante (Email)");
-                        if (!row[1] || row[1].toString().trim() === "") camposFaltantes.push("Nombre");
-                        if (!row[2] || row[2].toString().trim() === "") camposFaltantes.push("Apellido");
-                        if (!row[3] || row[3].toString().trim() === "") camposFaltantes.push("Documento ID");
-                        if (!row[4] || row[4].toString().trim() === "") camposFaltantes.push("Fecha Nacimiento");
-                        if (!row[5] || row[5].toString().trim() === "") camposFaltantes.push("Grado");
-                        if (!row[6] || row[6].toString().trim() === "") camposFaltantes.push("Grupo");
-                        // Inclusión es opcional, no se valida
+                        if (!estudiante) camposFaltantes.push("Estudiante (Email)");
+                        if (estudiante && !emailRegex.test(estudiante)) camposFaltantes.push("Estudiante (Email) con formato inválido");
+                        if (!asignatura) camposFaltantes.push("Asignatura");
+                        if (!nivel) camposFaltantes.push("Nivel");
+                        if (!grupo) camposFaltantes.push("Grupo académico");
+                        if (inscrito === null) camposFaltantes.push("Resultado (Inscrito) con valor SI/NO (o 1/0)");
 
-                        // Validar formato de fecha DD/MM/YYYY o número de Excel
-                        if (row[4] && row[4].toString().trim() !== "") {
-                            const fechaStr = row[4].toString().trim();
-                            let fechaValida = false;
-                            
-                            // Verificar si es formato DD/MM/YYYY
-                            const fechaRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
-                            const match = fechaStr.match(fechaRegex);
-                            
-                            if (match) {
-                                const dia = parseInt(match[1]);
-                                const mes = parseInt(match[2]);
-                                const año = parseInt(match[3]);
-                                
-                                // Validar rangos
-                                if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12 && año >= 1900 && año <= new Date().getFullYear()) {
-                                    fechaValida = true;
-                                }
-                            } else {
-                                // Verificar si es un número de Excel (fecha serial)
-                                const numeroFecha = parseFloat(fechaStr);
-                                if (!isNaN(numeroFecha) && numeroFecha > 0) {
-                                    // Convertir número de Excel a fecha
-                                    // Excel cuenta días desde 1900-01-01, pero tiene un bug: considera 1900 como año bisiesto
-                                    const fechaExcel = new Date(1900, 0, numeroFecha - 2);
-                                    
-                                    // Verificar si la fecha es válida y está en un rango razonable
-                                    if (fechaExcel.getFullYear() >= 1900 && fechaExcel.getFullYear() <= new Date().getFullYear()) {
-                                        fechaValida = true;
-                                    }
-                                }
-                            }
-                            
-                            if (!fechaValida) {
-                                camposFaltantes.push("Fecha Nacimiento (formato inválido)");
-                            }
-                        }
+                        const cells = (vals) => vals.map(v => `<td>${v}</td>`).join("");
 
-                        const isValid = camposFaltantes.length === 0;
-                        if (!isValid) {
+                        if (camposFaltantes.length > 0) {
                             filasInvalidas++;
-                            filasConErrores.add(rowNumber);
-                            erroresDetallados.push(`Fila ${rowNumber}: Faltan los campos: ${camposFaltantes.join(", ")}`);
+                            erroresDetallados.push(`Fila ${rowNumber}: ${camposFaltantes.join(", ")}`);
+                            tbody.append(`<tr>${cells([
+                                estudiante || "-",
+                                nombre || "-",
+                                apellido || "-",
+                                documentoId || "-",
+                                asignatura || "-",
+                                nivel || "-",
+                                grupo || "-",
+                                jornada || "-",
+                                resultadoRaw || "-"
+                            ])}</tr>`);
+                            marcarFilaConError(tbody.find('tr').last());
+                            continue;
                         }
 
-                        // Convertir fecha de Excel a formato legible si es necesario
-                        let fechaDisplay = row[4] ?? "";
-                        if (fechaDisplay && fechaDisplay.toString().trim() !== "") {
-                            const fechaStr = fechaDisplay.toString().trim();
-                            const fechaRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
-                            
-                            // Si no es formato DD/MM/YYYY, intentar convertir desde número de Excel
-                            if (!fechaStr.match(fechaRegex)) {
-                                const numeroFecha = parseFloat(fechaStr);
-                                if (!isNaN(numeroFecha) && numeroFecha > 0) {
-                                    try {
-                                        const fechaExcel = new Date(1900, 0, numeroFecha - 2);
-                                        const dia = fechaExcel.getDate().toString().padStart(2, '0');
-                                        const mes = (fechaExcel.getMonth() + 1).toString().padStart(2, '0');
-                                        const año = fechaExcel.getFullYear();
-                                        fechaDisplay = `${dia}/${mes}/${año}`;
-                                    } catch (e) {
-                                        // Si falla la conversión, mantener el valor original
-                                        fechaDisplay = fechaStr;
-                                    }
-                                }
-                            }
-                        }
+                        payload.push({
+                            estudianteEmail: estudiante,
+                            nombre: nombre || null,
+                            apellido: apellido || null,
+                            documentoId: documentoId || null,
+                            asignatura: asignatura,
+                            nivel: nivel,
+                            grupoAcademico: grupo,
+                            jornada: jornada || null,
+                            inscrito: inscrito
+                        });
 
-                        // Procesar campo Jornada (opcional)
-                        let jornadaDisplay = row[7] ?? "";
-                        let jornadaValue = jornadaDisplay ? jornadaDisplay.toString().trim() : "";
-                        if (jornadaValue) {
-                            const jornadaLower = jornadaValue.toLowerCase();
-                            if (jornadaLower === "mañana" || jornadaLower === "manana" || jornadaLower === "mañana") {
-                                jornadaDisplay = '<span class="badge bg-info"><i class="fas fa-sun me-1"></i>Mañana</span>';
-                            } else if (jornadaLower === "tarde") {
-                                jornadaDisplay = '<span class="badge bg-warning"><i class="fas fa-sun me-1"></i>Tarde</span>';
-                            } else if (jornadaLower === "noche") {
-                                jornadaDisplay = '<span class="badge bg-dark"><i class="fas fa-moon me-1"></i>Noche</span>';
-                            } else {
-                                jornadaDisplay = `<span class="badge bg-secondary">${jornadaValue}</span>`;
-                            }
-                        } else {
-                            jornadaDisplay = '<span class="badge bg-secondary"><i class="fas fa-minus me-1"></i>Sin definir</span>';
-                        }
-
-                        // Procesar campo Inclusión
-                        let inclusionDisplay = row[8] ?? "";
-                        if (inclusionDisplay && inclusionDisplay.toString().trim().toLowerCase() === "si") {
-                            inclusionDisplay = '<span class="badge bg-success"><i class="fas fa-heart me-1"></i>Sí</span>';
-                        } else if (inclusionDisplay && inclusionDisplay.toString().trim().toLowerCase() === "no") {
-                            inclusionDisplay = '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>No</span>';
-                        } else {
-                            inclusionDisplay = '<span class="badge bg-secondary"><i class="fas fa-minus me-1"></i>Sin definir</span>';
-                        }
-
-                        const rowHtml = `
-                            <tr data-row="${rowNumber}" data-jornada="${jornadaValue}" data-inclusion="${row[8] ?? ""}">
-                                <td>${row[0] ?? ""}</td>
-                                <td>${row[1] ?? ""}</td>
-                                <td>${row[2] ?? ""}</td>
-                                <td>${row[3] ?? ""}</td>
-                                <td>${fechaDisplay}</td>
-                                <td>${row[5] ?? ""}</td>
-                                <td>${row[6] ?? ""}</td>
-                                <td>${jornadaDisplay}</td>
-                                <td>${inclusionDisplay}</td>
-                            </tr>
-                        `;
-                        const $row = $(rowHtml);
-                        tbody.append($row);
-
-                        if (!isValid) {
-                            marcarFilaConError($row);
-                        }
+                        tbody.append(`<tr>${cells([
+                            estudiante,
+                            nombre || "-",
+                            apellido || "-",
+                            documentoId || "-",
+                            asignatura,
+                            nivel,
+                            grupo,
+                            jornada || "-",
+                            inscrito ? "SI" : "NO"
+                        ])}</tr>`);
                     }
 
                     if (filasInvalidas > 0) {
@@ -319,156 +286,20 @@
             });
 
             $('#btnGuardarAsignaciones').on('click', function () {
-                const asignaciones = [];
-                const errores = [];
-                let rowNumber = 1;
-
-                $('#excelTable tbody tr').each(function () {
-                    rowNumber++;
-                    const $row = $(this);
-                    const estudiante = $row.find('td').eq(0).text().trim();
-                    const nombre = $row.find('td').eq(1).text().trim();
-                    const apellido = $row.find('td').eq(2).text().trim();
-                    const documentoId = $row.find('td').eq(3).text().trim();
-                    const fechaNacimiento = $row.find('td').eq(4).text().trim();
-                    const grado = $row.find('td').eq(5).text().trim();
-                    const grupo = $row.find('td').eq(6).text().trim();
-                    // Obtener el valor original de Jornada desde los datos del Excel
-                    const jornadaRaw = $row.data('jornada') || '';
-                    let jornadaValue = null; // Por defecto null
-                    
-                    if (jornadaRaw && jornadaRaw.toString().trim() !== '') {
-                        const jornadaStr = jornadaRaw.toString().trim();
-                        // Normalizar jornada: Mañana, Tarde, Noche
-                        const jornadaLower = jornadaStr.toLowerCase();
-                        if (jornadaLower === 'mañana' || jornadaLower === 'manana' || jornadaLower === 'mañana') {
-                            jornadaValue = 'Mañana';
-                        } else if (jornadaLower === 'tarde') {
-                            jornadaValue = 'Tarde';
-                        } else if (jornadaLower === 'noche') {
-                            jornadaValue = 'Noche';
-                        } else {
-                            // Si no coincide, usar el valor original capitalizado
-                            jornadaValue = jornadaStr.charAt(0).toUpperCase() + jornadaStr.slice(1).toLowerCase();
-                        }
-                    }
-                    
-                    // Obtener el valor original de Inclusión desde los datos del Excel y normalizarlo
-                    const inclusionRaw = $row.data('inclusion') || '';
-                    let inclusionValue = null; // Por defecto null
-                    
-                    if (inclusionRaw && inclusionRaw.toString().trim() !== '') {
-                        const inclusionStr = inclusionRaw.toString().trim().toLowerCase();
-                        if (inclusionStr === 'si' || inclusionStr === 'sí' || inclusionStr === 'yes' || inclusionStr === 'true') {
-                            inclusionValue = true;
-                        } else if (inclusionStr === 'no' || inclusionStr === 'false') {
-                            inclusionValue = false;
-                        }
-                        // Si no coincide con ninguno, queda null
-                    }
-
-                    const camposFaltantes = [];
-                    if (!estudiante) camposFaltantes.push("Estudiante (Email)");
-                    if (!nombre) camposFaltantes.push("Nombre");
-                    if (!apellido) camposFaltantes.push("Apellido");
-                    if (!documentoId) camposFaltantes.push("Documento ID");
-                    if (!fechaNacimiento) camposFaltantes.push("Fecha Nacimiento");
-                    if (!grado) camposFaltantes.push("Grado");
-                    if (!grupo) camposFaltantes.push("Grupo");
-                    
-                    // Validar formato de correo electrónico
-                    if (estudiante && estudiante.trim() !== "") {
-                        const emailRegex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
-                        if (!emailRegex.test(estudiante)) {
-                            camposFaltantes.push("Estudiante (Email con formato inválido)");
-                        }
-                    }
-
-                    // Validar formato de fecha DD/MM/YYYY o número de Excel
-                    if (fechaNacimiento && fechaNacimiento.trim() !== "") {
-                        const fechaStr = fechaNacimiento.trim();
-                        let fechaValida = false;
-                        
-                        // Verificar si es formato DD/MM/YYYY
-                        const fechaRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
-                        const match = fechaStr.match(fechaRegex);
-                        
-                        if (match) {
-                            const dia = parseInt(match[1]);
-                            const mes = parseInt(match[2]);
-                            const año = parseInt(match[3]);
-                            
-                            // Validar rangos
-                            if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12 && año >= 1900 && año <= new Date().getFullYear()) {
-                                fechaValida = true;
-                            }
-                        } else {
-                            // Verificar si es un número de Excel (fecha serial)
-                            const numeroFecha = parseFloat(fechaStr);
-                            if (!isNaN(numeroFecha) && numeroFecha > 0) {
-                                // Convertir número de Excel a fecha
-                                const fechaExcel = new Date(1900, 0, numeroFecha - 2);
-                                
-                                // Verificar si la fecha es válida y está en un rango razonable
-                                if (fechaExcel.getFullYear() >= 1900 && fechaExcel.getFullYear() <= new Date().getFullYear()) {
-                                    fechaValida = true;
-                                }
-                            }
-                        }
-                        
-                        if (!fechaValida) {
-                            camposFaltantes.push("Fecha Nacimiento (formato inválido)");
-                        }
-                    }
-
-                    if (camposFaltantes.length > 0) {
-                        errores.push(`Fila ${rowNumber}: Faltan los campos: ${camposFaltantes.join(", ")}`);
-                        filasConErrores.add(rowNumber);
-                        marcarFilaConError($row);
-                    } else {
-                        asignaciones.push({ 
-                            estudiante, 
-                            nombre, 
-                            apellido, 
-                            documentoId, 
-                            fechaNacimiento, 
-                            grado, 
-                            grupo,
-                            jornada: jornadaValue,  // Jornada del estudiante (Mañana, Tarde, Noche)
-                            inclusivo: inclusionValue  // Cambiado de 'inclusion' a 'inclusivo' para coincidir con la BD
-                        });
-                    }
-                });
-
-                if (errores.length > 0) {
-                    Swal.fire({
-                        title: "Error de validación",
-                        html: `
-                            <div class="text-danger mb-2">Por favor, complete los siguientes campos:</div>
-                            <div style="max-height: 200px; overflow-y: auto; text-align: left;">
-                                ${errores.join("<br>")}
-                            </div>
-                        `,
-                        icon: "error"
-                    });
-                    return;
-                }
-
-                if (asignaciones.length === 0) {
+                if (!payload || payload.length === 0) {
                     Swal.fire("Sin datos válidos", "No hay filas completas para guardar.", "error");
                     return;
                 }
 
                 Swal.fire({
                     title: "¿Deseas guardar?",
-                    text: `Se van a guardar ${asignaciones.length} asignaciones válidas.`,
+                    text: `Se van a guardar ${payload.length} fila(s) (inscripciones por materia).`,
                     icon: "question",
                     showCancelButton: true,
                     confirmButtonText: "Sí, guardar",
                     cancelButtonText: "Cancelar"
                 }).then(result => {
                     if (result.isConfirmed) {
-                        // Mostrar overlay y deshabilitar botón
                         $('#loadingOverlay').show();
                         $('#btnGuardarAsignaciones').prop('disabled', true);
 
@@ -476,15 +307,14 @@
                             url: '/StudentAssignment/SaveAssignments',
                             method: 'POST',
                             contentType: 'application/json',
-                            data: JSON.stringify({ mode: 'gradeGroup', gradeGroupRows: asignaciones }),
+                            data: JSON.stringify({ mode: 'subjects', subjectRows: payload }),
                             success: function (response) {
                                 $('#loadingOverlay').hide();
                                 $('#btnGuardarAsignaciones').prop('disabled', false);
-                                
+
                                 let resumen = `
-                                    <b>Asignaciones insertadas:</b> ${response.insertadas}<br>
-                                    <b>Estudiantes creados:</b> ${response.estudiantesCreados || 0}<br>
-                                    <b>Duplicadas:</b> ${response.duplicadas}<br>
+                                    <b>Activadas/aseguradas:</b> ${response.insertadas || 0}<br>
+                                    <b>Desactivadas:</b> ${response.desactivadas || 0}<br>
                                 `;
 
                                 if (response.errores && response.errores.length > 0) {
@@ -502,14 +332,14 @@
                                     icon: 'success',
                                     title: 'Resultado de la carga',
                                     html: resumen,
-                                    width: '50%',
+                                    width: '60%',
                                     confirmButtonText: 'Aceptar'
                                 });
                             },
                             error: function () {
                                 $('#loadingOverlay').hide();
                                 $('#btnGuardarAsignaciones').prop('disabled', false);
-                                Swal.fire("Error del servidor", "No se pudieron guardar las asignaciones. Intenta más tarde.", "error");
+                                Swal.fire("Error del servidor", "No se pudo completar la carga masiva. Intenta más tarde.", "error");
                             }
                         });
                     }

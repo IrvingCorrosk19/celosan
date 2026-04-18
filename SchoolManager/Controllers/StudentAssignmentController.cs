@@ -444,13 +444,6 @@ namespace SchoolManager.Controllers
             return View();
         }
 
-        [HttpGet("/StudentAssignment/UploadSubjectEnrollments")]
-        public IActionResult UploadSubjectEnrollments()
-        {
-            // Vista dedicada a cargar el subconjunto de materias por estudiante (eje flexible para nocturna).
-            return View();
-        }
-
         private static string NormalizeToken(string? input)
         {
             input ??= string.Empty;
@@ -887,7 +880,7 @@ namespace SchoolManager.Controllers
             }
         }
 
-        /// <summary>Única entrada HTTP para carga masiva: matrícula grado/grupo (<c>mode=gradeGroup</c>) o materias (<c>mode=subjects</c>).</summary>
+        /// <summary>Carga masiva: la UI usa <c>mode=subjects</c>; <c>mode=gradeGroup</c> queda por compatibilidad con clientes antiguos.</summary>
         [HttpPost("/StudentAssignment/SaveAssignments")]
         public async Task<IActionResult> SaveAssignments([FromBody] BulkStudentUploadRequest? request)
         {
