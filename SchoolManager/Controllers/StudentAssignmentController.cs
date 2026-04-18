@@ -509,8 +509,7 @@ namespace SchoolManager.Controllers
             return (created, null);
         }
 
-        [HttpPost("/StudentAssignment/BulkSaveSubjectEnrollments")]
-        public async Task<IActionResult> BulkSaveSubjectEnrollments([FromBody] List<StudentSubjectEnrollmentInputModel> rows)
+        private async Task<IActionResult> ProcessBulkSubjectEnrollmentsAsync(List<StudentSubjectEnrollmentInputModel> rows)
         {
             if (rows == null || rows.Count == 0)
                 return BadRequest(new { success = false, message = "No se recibieron filas." });
@@ -652,7 +651,7 @@ namespace SchoolManager.Controllers
                     success = true,
                     insertadas = 0,
                     desactivadas = 0,
-                    errors,
+                    errores = errors,
                     message = "No se procesaron filas válidas."
                 });
             }
@@ -773,7 +772,7 @@ namespace SchoolManager.Controllers
                 success = true,
                 insertadas = activadas,
                 desactivadas,
-                errors,
+                errores = errors,
                 message = "Carga de asignaturas individuales completada."
             });
         }
@@ -867,7 +866,6 @@ namespace SchoolManager.Controllers
 
             return Json(new { success = true, message = "Asignaciones actualizadas correctamente." });
         }
-        [HttpPost]
         private async Task<Guid?> GetCurrentUserSchoolId()
         {
             try
@@ -890,12 +888,29 @@ namespace SchoolManager.Controllers
             }
         }
 
-        [HttpPost]
-        public async Task<IActionResult> SaveAssignments([FromBody] List<StudentAssignmentInputModel> asignaciones)
+        /// <summary>Única entrada HTTP para carga masiva: matrícula grado/grupo (<c>mode=gradeGroup</c>) o materias (<c>mode=subjects</c>).</summary>
+        [HttpPost("/StudentAssignment/SaveAssignments")]
+        public async Task<IActionResult> SaveAssignments([FromBody] BulkStudentUploadRequest? request)
         {
-            if (asignaciones == null || asignaciones.Count == 0)
+            if (request == null)
+                return BadRequest(new { success = false, message = "Solicitud inválida." });
+
+            var mode = (request.Mode ?? "gradeGroup").Trim();
+            if (string.Equals(mode, "subjects", StringComparison.OrdinalIgnoreCase))
+            {
+                if (request.SubjectRows == null || request.SubjectRows.Count == 0)
+                    return BadRequest(new { success = false, message = "No se recibieron filas de materias." });
+                return await ProcessBulkSubjectEnrollmentsAsync(request.SubjectRows);
+            }
+
+            if (request.GradeGroupRows == null || request.GradeGroupRows.Count == 0)
                 return BadRequest(new { success = false, message = "No se recibieron asignaciones." });
 
+            return await ProcessBulkGradeGroupMatriculasAsync(request.GradeGroupRows);
+        }
+
+        private async Task<IActionResult> ProcessBulkGradeGroupMatriculasAsync(List<StudentAssignmentInputModel> asignaciones)
+        {
             var currentSchoolId = await GetCurrentUserSchoolId();
             int insertadas = 0;
             int duplicadas = 0;

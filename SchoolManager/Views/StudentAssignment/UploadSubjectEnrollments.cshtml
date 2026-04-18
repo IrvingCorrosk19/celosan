@@ -297,10 +297,10 @@
                         $('#btnGuardarSubjectEnrollments').prop('disabled', true);
 
                         $.ajax({
-                            url: '/StudentAssignment/BulkSaveSubjectEnrollments',
+                            url: '/StudentAssignment/SaveAssignments',
                             method: 'POST',
                             contentType: 'application/json',
-                            data: JSON.stringify(payload),
+                            data: JSON.stringify({ mode: 'subjects', subjectRows: payload }),
                             success: function (response) {
                                 $('#loadingOverlay').hide();
                                 $('#btnGuardarSubjectEnrollments').prop('disabled', false);

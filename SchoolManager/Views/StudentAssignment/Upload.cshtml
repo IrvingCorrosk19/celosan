@@ -21,11 +21,11 @@
 <div class="alert alert-secondary mb-3">
     <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
         <div>
-            <strong>Cargar asignaturas individuales</strong>
-            <div class="text-muted">Para seleccionar materias por estudiante (apto para nocturna).</div>
+            <strong>Otra plantilla Excel (materias por estudiante)</strong>
+            <div class="text-muted">Usa el mismo guardado en servidor; solo cambia el formato del archivo.</div>
         </div>
         <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")" class="btn btn-outline-primary btn-sm">
-            Ir a la carga
+            Abrir plantilla materias
         </a>
     </div>
 </div>
@@ -485,7 +485,7 @@
                             url: '/StudentAssignment/SaveAssignments',
                             method: 'POST',
                             contentType: 'application/json',
-                            data: JSON.stringify(asignaciones),
+                            data: JSON.stringify({ mode: 'gradeGroup', gradeGroupRows: asignaciones }),
                             success: function (response) {
                                 $('#loadingOverlay').hide();
                                 $('#btnGuardarAsignaciones').prop('disabled', false);
