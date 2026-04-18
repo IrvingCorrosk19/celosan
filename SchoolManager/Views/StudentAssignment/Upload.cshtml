@@ -23,13 +23,20 @@
         <div class="flex-grow-1">
             <h5 class="mb-2"><i class="bi bi-info-circle me-2"></i>Matrícula grado + grupo (solo colegios nocturnos)</h5>
             <p class="mb-2 small text-muted">Turno y tipo de matrícula siempre <strong>Noche</strong> / <strong>Nocturno</strong>. La columna Jornada del Excel es opcional y no cambia el turno.</p>
-            <ol class="mb-0 small">
-                <li><strong>Estudiante (Email)</strong> · <strong>Nombre</strong> · <strong>Apellido</strong> · <strong>Documento ID</strong> · <strong>Fecha Nacimiento</strong> (DD/MM/AAAA o número Excel)</li>
-                <li><strong>Grado</strong> y <strong>Grupo</strong> deben existir en su escuela (grupo nocturno)</li>
-                <li><strong>Jornada</strong> (opcional) · <strong>Inclusión</strong> (si / no / vacío)</li>
-            </ol>
+            <p class="small mb-1"><strong>Esta pantalla no usa</strong> columnas “Asignatura”, “Nivel”, “Grupo académico” ni “Resultado (Inscrito)”. Eso es la <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")">carga por materias</a>.</p>
+            <p class="small mb-1"><strong>Fila 1 — encabezados en este orden exacto</strong> (como en la plantilla descargable):</p>
+            <div class="table-responsive small mb-2">
+                <table class="table table-bordered table-sm mb-0 bg-white">
+                    <thead class="table-light"><tr>
+                        <th>Estudiante (Email)</th><th>Nombre</th><th>Apellido</th><th>Documento ID</th><th>Fecha Nacimiento</th><th>Grado</th><th>Grupo</th><th>Jornada</th><th>Inclusión</th>
+                    </tr></thead>
+                    <tbody><tr class="text-muted">
+                        <td colspan="9">Fila 2 en adelante: datos por estudiante. Ej.: <code>maria@colegio.edu</code> · María · López · 8-1234-567 · 15/03/2010 · 10° · 10-A · <em>(vacío)</em> · no</td>
+                    </tr></tbody>
+                </table>
+            </div>
             <div class="mt-2">
-                <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")" class="btn btn-outline-primary btn-sm">Plantilla por materias (otro Excel)</a>
+                <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")" class="btn btn-outline-primary btn-sm">Ir a carga por materias (otro formato Excel)</a>
             </div>
         </div>
         <div>

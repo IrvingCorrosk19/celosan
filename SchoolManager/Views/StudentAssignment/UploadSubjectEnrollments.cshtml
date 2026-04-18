@@ -9,10 +9,19 @@
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
         <div>
             <strong>Inscripción por materia</strong> <span class="text-muted small">(solo colegios nocturnos; turno siempre <strong>Noche</strong>)</span>
-            <ul class="mb-2 mt-2 small">
-                <li>Obligatorias: <strong>Estudiante (Email)</strong>, <strong>Asignatura</strong>, <strong>Nivel</strong>, <strong>Grupo académico</strong>, <strong>Resultado (Inscrito)</strong> o <strong>Resultado</strong> (SI/NO, 1/0…)</li>
-                <li>Opcionales: Nombre, Apellido, Documento ID, Jornada (no modifica el turno)</li>
-            </ul>
+            <p class="small mb-1 mt-2">Este formato <strong>no</strong> sirve en la pantalla de <a href="@Url.Action("Upload", "StudentAssignment")">matrícula grado + grupo</a> (allá van <em>Fecha nacimiento</em>, <em>Grado</em>, <em>Grupo</em>, <em>Inclusión</em>, sin asignatura).</p>
+            <p class="small mb-1"><strong>Ejemplo de columnas</strong> (orden flexible salvo que existan los nombres de columna; una fila por inscripción):</p>
+            <div class="table-responsive small mb-2">
+                <table class="table table-bordered table-sm mb-0 bg-white">
+                    <thead class="table-light"><tr>
+                        <th>Estudiante (Email)</th><th>Nombre</th><th>Apellido</th><th>Documento ID</th><th>Asignatura</th><th>Nivel</th><th>Grupo académico</th><th>Jornada</th><th>Resultado (Inscrito)</th>
+                    </tr></thead>
+                    <tbody><tr>
+                        <td>maria@colegio.edu</td><td>María</td><td>López</td><td>8-1234-567</td><td>Matemática</td><td>10°</td><td>10-A</td><td><em>(opcional)</em></td><td>SI</td>
+                    </tr></tbody>
+                </table>
+            </div>
+            <p class="small text-muted mb-2">Obligatorios en el archivo: email, asignatura, nivel, grupo académico, resultado (SI/NO, 1/0…). Opcionales: nombre, apellido, documento, jornada.</p>
             <a href="/samples/student_enrollments_test.xlsx" class="btn btn-sm btn-outline-success" download>student_enrollments_test.xlsx</a>
             <a href="@Url.Action("Upload", "StudentAssignment")" class="btn btn-sm btn-outline-secondary ms-1">Volver a matrícula grado/grupo</a>
         </div>
