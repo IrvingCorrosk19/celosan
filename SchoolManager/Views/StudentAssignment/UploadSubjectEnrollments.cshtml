@@ -5,29 +5,18 @@
 
 <h3>Cargar y previsualizar asignaturas individuales (estudiantes)</h3>
 
-<div class="alert alert-dark mb-3 text-white">
-    <strong>Solo colegios nocturnos:</strong> las matrículas e inscripciones se resuelven siempre en turno <strong>Noche</strong>.
-</div>
-
-<div class="alert alert-secondary mb-3">
-    <strong>Ejemplo listo para probar:</strong>
-    <a href="/samples/student_enrollments_test.xlsx" class="btn btn-sm btn-outline-success ms-2" download>Descargar student_enrollments_test.xlsx</a>
-    <span class="text-muted small ms-2">Mismas columnas que la plantilla; el servidor puede crear grado, materia e impartición si ya existe al menos una SubjectAssignment modelo en la escuela.</span>
-</div>
-
 <div class="alert alert-info mb-3">
-    <div><strong>Formato requerido (Excel)</strong></div>
-    <ul class="mb-0">
-        <li><strong>Estudiante (Email)</strong></li>
-        <li><strong>Nombre</strong> (opcional para creación/actualización)</li>
-        <li><strong>Apellido</strong> (opcional)</li>
-        <li><strong>Documento ID</strong> (opcional)</li>
-        <li><strong>Asignatura</strong> (por nombre o código)</li>
-        <li><strong>Nivel</strong></li>
-        <li><strong>Grupo académico</strong></li>
-        <li><strong>Jornada</strong> (opcional en plantilla; el sistema aplica siempre <strong>Noche</strong> — solo colegios nocturnos)</li>
-        <li><strong>Resultado (Inscrito)</strong> o solo <strong>Resultado</strong> (SI/NO, 1/0, TRUE/FALSE)</li>
-    </ul>
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+            <strong>Inscripción por materia</strong> <span class="text-muted small">(solo colegios nocturnos; turno siempre <strong>Noche</strong>)</span>
+            <ul class="mb-2 mt-2 small">
+                <li>Obligatorias: <strong>Estudiante (Email)</strong>, <strong>Asignatura</strong>, <strong>Nivel</strong>, <strong>Grupo académico</strong>, <strong>Resultado (Inscrito)</strong> o <strong>Resultado</strong> (SI/NO, 1/0…)</li>
+                <li>Opcionales: Nombre, Apellido, Documento ID, Jornada (no modifica el turno)</li>
+            </ul>
+            <a href="/samples/student_enrollments_test.xlsx" class="btn btn-sm btn-outline-success" download>student_enrollments_test.xlsx</a>
+            <a href="@Url.Action("Upload", "StudentAssignment")" class="btn btn-sm btn-outline-secondary ms-1">Volver a matrícula grado/grupo</a>
+        </div>
+    </div>
 </div>
 
 <input type="file" id="excelFile" class="form-control mb-3" accept=".xlsx,.xls" />

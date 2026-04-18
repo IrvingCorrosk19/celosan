@@ -18,45 +18,25 @@
 
 <h3>Cargar y previsualizar archivo Excel</h3>
 
-<div class="alert alert-dark mb-3 text-white">
-    <strong>Solo colegios nocturnos:</strong> toda la carga masiva aplica turno <strong>Noche</strong> y matrícula <strong>Nocturno</strong>.
-</div>
-
-<div class="alert alert-secondary mb-3">
-    <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
-        <div>
-            <strong>Otra plantilla Excel (materias por estudiante)</strong>
-            <div class="text-muted">Usa el mismo guardado en servidor; solo cambia el formato del archivo.</div>
-        </div>
-        <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")" class="btn btn-outline-primary btn-sm">
-            Abrir plantilla materias
-        </a>
-    </div>
-</div>
-
 <div class="alert alert-info mb-3">
-    <div class="d-flex justify-content-between align-items-start">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div class="flex-grow-1">
-            <h5><i class="bi bi-info-circle me-2"></i>Formato del archivo Excel</h5>
-            <p class="mb-2">Este sistema está pensado <strong>solo para colegios nocturnos</strong>. Cada fila genera matrícula tipo <strong>Nocturno</strong> y turno <strong>Noche</strong> (la columna Jornada del Excel, si existe, se ignora a efectos de turno).</p>
-            <ol class="mb-0">
-                <li><strong>Estudiante (Email):</strong> Correo electrónico del estudiante</li>
-                <li><strong>Nombre:</strong> Nombre del estudiante</li>
-                <li><strong>Apellido:</strong> Apellido del estudiante</li>
-                <li><strong>Documento ID:</strong> Número de documento de identidad</li>
-                <li><strong>Fecha Nacimiento:</strong> Fecha de nacimiento (formato: DD/MM/YYYY o número de Excel)</li>
-                <li><strong>Grado:</strong> Nombre del grado</li>
-                <li><strong>Grupo:</strong> Nombre del grupo (debe ser un grupo nocturno de su escuela)</li>
-                <li><strong>Jornada:</strong> Opcional (plantilla); el sistema siempre aplica <strong>Noche</strong>.</li>
-                <li><strong>Inclusión:</strong> Indica si el estudiante tiene alguna discapacidad (si, no, o dejar vacío)</li>
+            <h5 class="mb-2"><i class="bi bi-info-circle me-2"></i>Matrícula grado + grupo (solo colegios nocturnos)</h5>
+            <p class="mb-2 small text-muted">Turno y tipo de matrícula siempre <strong>Noche</strong> / <strong>Nocturno</strong>. La columna Jornada del Excel es opcional y no cambia el turno.</p>
+            <ol class="mb-0 small">
+                <li><strong>Estudiante (Email)</strong> · <strong>Nombre</strong> · <strong>Apellido</strong> · <strong>Documento ID</strong> · <strong>Fecha Nacimiento</strong> (DD/MM/AAAA o número Excel)</li>
+                <li><strong>Grado</strong> y <strong>Grupo</strong> deben existir en su escuela (grupo nocturno)</li>
+                <li><strong>Jornada</strong> (opcional) · <strong>Inclusión</strong> (si / no / vacío)</li>
             </ol>
+            <div class="mt-2">
+                <a href="@Url.Action("UploadSubjectEnrollments", "StudentAssignment")" class="btn btn-outline-primary btn-sm">Plantilla por materias (otro Excel)</a>
+            </div>
         </div>
-        <div class="ms-3">
-            <a href="@Url.Action("DownloadTemplate", "File", new { fileName = "asignaciones_estudiantes_grado_grupo.xlsx" })" 
-               class="btn btn-success btn-sm" 
+        <div>
+            <a href="@Url.Action("DownloadTemplate", "File", new { fileName = "asignaciones_estudiantes_grado_grupo.xlsx" })"
+               class="btn btn-success btn-sm"
                download="asignaciones_estudiantes_grado_grupo.xlsx">
-                <i class="bi bi-download me-1"></i>
-                Descargar Formato
+                <i class="bi bi-download me-1"></i>Descargar formato
             </a>
         </div>
     </div>
