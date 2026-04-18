@@ -476,8 +476,14 @@ namespace SchoolManager.Services.Implementations
             await _context.SaveChangesAsync();
             var assignment = await _context.StudentAssignments
                 .Where(sa => sa.StudentId == studentId && sa.GradeId == gradeId && sa.GroupId == groupId && sa.IsActive)
-                .OrderByDescending(sa => sa.CreatedAt)
-                .FirstAsync();
+                .OrderByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
+                .FirstOrDefaultAsync();
+            if (assignment == null)
+            {
+                throw new InvalidOperationException(
+                    $"No se encontró la matrícula recién creada (estudiante {studentId}, grado {gradeId}, grupo {groupId}). " +
+                    "Revise duplicados activos o restricciones en student_assignments.");
+            }
             await SyncStudentSubjectAssignmentsAsync(assignment);
             await _context.SaveChangesAsync();
             return true;

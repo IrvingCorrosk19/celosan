@@ -892,7 +892,21 @@ namespace SchoolManager.Controllers
             {
                 if (request.SubjectRows == null || request.SubjectRows.Count == 0)
                     return BadRequest(new { success = false, message = "No se recibieron filas de materias." });
-                return await ProcessBulkSubjectEnrollmentsAsync(request.SubjectRows);
+                try
+                {
+                    return await ProcessBulkSubjectEnrollmentsAsync(request.SubjectRows);
+                }
+                catch (DbUpdateException dbEx)
+                {
+                    Console.WriteLine($"[SaveAssignments] subjects DbUpdateException: {dbEx}");
+                    var inner = dbEx.InnerException?.Message ?? dbEx.Message;
+                    return StatusCode(500, new { success = false, message = "Error al guardar en la base de datos.", detail = inner });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SaveAssignments] subjects Exception: {ex}");
+                    return StatusCode(500, new { success = false, message = "Error al procesar la carga masiva.", detail = ex.Message });
+                }
             }
 
             if (request.GradeGroupRows == null || request.GradeGroupRows.Count == 0)

@@ -304,13 +304,21 @@
                         $('#btnGuardarAsignaciones').prop('disabled', true);
 
                         $.ajax({
-                            url: '/StudentAssignment/SaveAssignments',
+                            url: '@Url.Action("SaveAssignments", "StudentAssignment")',
                             method: 'POST',
-                            contentType: 'application/json',
+                            contentType: 'application/json; charset=utf-8',
+                            dataType: 'json',
                             data: JSON.stringify({ mode: 'subjects', subjectRows: payload }),
                             success: function (response) {
                                 $('#loadingOverlay').hide();
                                 $('#btnGuardarAsignaciones').prop('disabled', false);
+
+                                if (response && response.success === false) {
+                                    const msg = response.message || 'La solicitud no pudo completarse.';
+                                    const det = response.detail ? `<div class="small text-muted mt-2">${String(response.detail).replace(/</g, '&lt;')}</div>` : '';
+                                    Swal.fire({ icon: 'error', title: 'Carga masiva', html: msg + det });
+                                    return;
+                                }
 
                                 let resumen = `
                                     <b>Activadas/aseguradas:</b> ${response.insertadas || 0}<br>
@@ -336,10 +344,28 @@
                                     confirmButtonText: 'Aceptar'
                                 });
                             },
-                            error: function () {
+                            error: function (xhr) {
                                 $('#loadingOverlay').hide();
                                 $('#btnGuardarAsignaciones').prop('disabled', false);
-                                Swal.fire("Error del servidor", "No se pudo completar la carga masiva. Intenta más tarde.", "error");
+                                let msg = 'No se pudo completar la carga masiva.';
+                                if (xhr.responseJSON) {
+                                    if (xhr.responseJSON.message) msg = xhr.responseJSON.message;
+                                    else if (xhr.responseJSON.title) msg = xhr.responseJSON.title;
+                                    if (xhr.responseJSON.detail)
+                                        msg += '<div class="small text-muted mt-2">' + String(xhr.responseJSON.detail).replace(/</g, '&lt;') + '</div>';
+                                    else if (xhr.responseJSON.errors)
+                                        msg += '<pre class="small text-start mt-2">' + JSON.stringify(xhr.responseJSON.errors, null, 2).replace(/</g, '&lt;') + '</pre>';
+                                } else if (xhr.responseText) {
+                                    const t = xhr.responseText.trim();
+                                    if (t.length > 0 && t.length < 2000)
+                                        msg += '<pre class="small text-start mt-2">' + t.replace(/</g, '&lt;') + '</pre>';
+                                }
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error (' + (xhr.status || '?') + ')',
+                                    html: msg,
+                                    width: '50%'
+                                });
                             }
                         });
                     }
