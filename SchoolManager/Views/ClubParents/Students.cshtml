@@ -27,6 +27,10 @@
                                 <option value="">Todos</option>
                             </select>
                         </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Nombre o cédula</label>
+                            <input type="text" id="filterSearch" class="form-control form-control-sm" placeholder="Buscar…" autocomplete="off" />
+                        </div>
                         <div class="col-md-2 d-flex align-items-end">
                             <button type="button" id="btnFilter" class="btn btn-primary btn-sm">
                                 <i class="fas fa-filter"></i> Filtrar
@@ -38,6 +42,7 @@
                             <thead>
                                 <tr>
                                     <th>Nombre</th>
+                                    <th>Cédula</th>
                                     <th>Grado</th>
                                     <th>Grupo</th>
                                     <th>Carnet</th>
@@ -106,9 +111,11 @@
     function loadStudents() {
         var gradeId = document.getElementById('filterGrade').value || '';
         var groupId = document.getElementById('filterGroup').value || '';
+        var search = (document.getElementById('filterSearch').value || '').trim();
         var url = '/ClubParents/Api/Students?';
         if (gradeId) url += 'gradeId=' + encodeURIComponent(gradeId) + '&';
         if (groupId) url += 'groupId=' + encodeURIComponent(groupId) + '&';
+        if (search) url += 'search=' + encodeURIComponent(search) + '&';
 
         fetch(url, { credentials: 'include' })
             .then(function(r) { return r.json(); })
@@ -116,12 +123,12 @@
                 var tbody = document.querySelector('#studentsTable tbody');
                 tbody.innerHTML = '';
                 if (result.noSchool) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-warning"><i class="fas fa-exclamation-triangle me-1"></i>' + (result.message || 'Su usuario no tiene una escuela asignada. Asigne la escuela en el módulo Usuarios para ver los estudiantes.') + '</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-warning"><i class="fas fa-exclamation-triangle me-1"></i>' + (result.message || 'Su usuario no tiene una escuela asignada. Asigne la escuela en el módulo Usuarios para ver los estudiantes.') + '</td></tr>';
                     return;
                 }
                 var list = result.data || [];
                 if (list.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No hay estudiantes en su escuela con los filtros seleccionados.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No hay estudiantes en su escuela con los filtros seleccionados.</td></tr>';
                     return;
                 }
                 list.forEach(function(row) {
@@ -137,6 +144,7 @@
                     }
                     tr.innerHTML =
                         '<td>' + (row.fullName || '') + '</td>' +
+                        '<td>' + (row.documentId || '—') + '</td>' +
                         '<td>' + (row.grade || '') + '</td>' +
                         '<td>' + (row.group || '') + '</td>' +
                         '<td><span class="badge ' + carnetCls + '">' + (row.carnetStatus || 'Pendiente') + '</span></td>' +
@@ -147,7 +155,7 @@
             })
             .catch(function(e) {
                 console.error('Students', e);
-                document.querySelector('#studentsTable tbody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error al cargar la lista.</td></tr>';
+                document.querySelector('#studentsTable tbody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error al cargar la lista.</td></tr>';
             });
     }
 

@@ -1,4 +1,4 @@
-﻿namespace SchoolManager.ViewModels
+namespace SchoolManager.ViewModels
 {
     public class StudentAssignmentInputModel
     {

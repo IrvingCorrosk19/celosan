@@ -28,7 +28,7 @@ public class ClubParentsPaymentService : IClubParentsPaymentService
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ClubParentsStudentDto>> GetStudentsAsync(Guid? gradeId = null, Guid? groupId = null)
+    public async Task<IReadOnlyList<ClubParentsStudentDto>> GetStudentsAsync(Guid? gradeId = null, Guid? groupId = null, string? search = null)
     {
         var school = await _currentUserService.GetCurrentUserSchoolAsync();
         if (school == null)
@@ -45,6 +45,17 @@ public class ClubParentsPaymentService : IClubParentsPaymentService
             .Where(u => u.SchoolId == school.Id
                 || u.StudentAssignments.Any(sa => sa.IsActive && sa.Grade.SchoolId == school.Id));
 
+        var term = search?.Trim();
+        if (!string.IsNullOrEmpty(term))
+        {
+            var t = term.ToLower();
+            query = query.Where(u =>
+                (u.DocumentId != null && u.DocumentId.ToLower().Contains(t))
+                || u.Name.ToLower().Contains(t)
+                || u.LastName.ToLower().Contains(t)
+                || (u.Name + " " + u.LastName).ToLower().Contains(t));
+        }
+
         if (gradeId.HasValue || groupId.HasValue)
         {
             query = query.Where(u => u.StudentAssignments.Any(sa =>
@@ -59,6 +70,7 @@ public class ClubParentsPaymentService : IClubParentsPaymentService
             {
                 u.Id,
                 FullName = u.Name + " " + u.LastName,
+                u.DocumentId,
                 Grade = u.StudentAssignments.Where(sa => sa.IsActive)
                     .OrderByDescending(sa => gradeId.HasValue && sa.GradeId == gradeId.Value)
                     .ThenByDescending(sa => groupId.HasValue && sa.GroupId == groupId.Value)
@@ -95,6 +107,7 @@ public class ClubParentsPaymentService : IClubParentsPaymentService
             {
                 Id = x.Id,
                 FullName = x.FullName ?? "",
+                DocumentId = x.DocumentId,
                 Grade = x.Grade ?? "Sin asignar",
                 Group = x.Group ?? "Sin asignar",
                 CarnetStatus = access?.CarnetStatus ?? CarnetPendiente,

@@ -6,7 +6,7 @@ namespace SchoolManager.Services.Interfaces;
 public interface IClubParentsPaymentService
 {
     /// <summary>Lista estudiantes (User student/estudiante) de la escuela del usuario actual, con filtros opcionales. Incluye estado carnet y plataforma.</summary>
-    Task<IReadOnlyList<ClubParentsStudentDto>> GetStudentsAsync(Guid? gradeId = null, Guid? groupId = null);
+    Task<IReadOnlyList<ClubParentsStudentDto>> GetStudentsAsync(Guid? gradeId = null, Guid? groupId = null, string? search = null);
 
     /// <summary>Estado de carnet y plataforma de un estudiante. Si no hay registro, devuelve Pendiente/Pendiente.</summary>
     Task<StudentPaymentStatusDto> GetStudentPaymentStatusAsync(Guid studentId);
