@@ -204,8 +204,12 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
             .FirstOrDefaultAsync(u => u.Id == studentId)
             ?? throw new Exception("Estudiante no encontrado.");
 
-        var assignment = ActiveStudentAssignmentHelper.PickForDisplay(student.StudentAssignments)
-            ?? throw new Exception("El estudiante no tiene asignación activa.");
+        var assignment = ActiveStudentAssignmentHelper.PickForDisplay(student.StudentAssignments);
+        var subjectDisplay = assignment == null
+            ? await StudentCarnetDisplayResolver.TryResolveFromSubjectEnrollmentsAsync(_context, studentId)
+            : null;
+        if (assignment == null && subjectDisplay == null)
+            throw new Exception("El estudiante no tiene asignación activa.");
 
         // PAY-GATE (última línea de defensa)
         var payment = await _context.StudentPaymentAccesses
@@ -261,9 +265,9 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
                 StudentId              = studentId,
                 FullName               = $"{student.Name} {student.LastName}",
                 DocumentId             = student.DocumentId,
-                Grade                  = assignment.Grade?.Name ?? "",
-                Group                  = assignment.Group?.Name ?? "",
-                Shift                  = assignment.Shift?.Name ?? "",
+                Grade                  = assignment?.Grade?.Name ?? subjectDisplay?.GradeName ?? "",
+                Group                  = assignment?.Group?.Name ?? subjectDisplay?.GroupName ?? "",
+                Shift                  = assignment?.Shift?.Name ?? subjectDisplay?.ShiftDisplay ?? "",
                 CardNumber             = card.CardNumber,
                 QrToken                = token.Token,
                 EmergencyInfoPageUrl   = emergencyUrl,
@@ -272,7 +276,7 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
                 EmergencyContactName   = student.EmergencyContactName,
                 EmergencyContactPhone  = student.EmergencyContactPhone,
                 EmergencyRelationship  = student.EmergencyRelationship,
-                AcademicYear           = assignment.AcademicYear?.Name
+                AcademicYear           = assignment?.AcademicYear?.Name ?? subjectDisplay?.AcademicYearName
             };
         }
         catch

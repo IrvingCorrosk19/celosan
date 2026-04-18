@@ -80,10 +80,17 @@ public class StudentIdCardService : IStudentIdCardService
             .ToListAsync();
 
         var primary = ActiveStudentAssignmentHelper.PickForDisplay(assignments);
+        StudentCarnetDisplayResolver.Context? subjectCtx = null;
         if (primary == null)
-            return null;
+        {
+            subjectCtx = await StudentCarnetDisplayResolver.TryResolveFromSubjectEnrollmentsAsync(_context, studentId);
+            if (subjectCtx == null)
+                return null;
+        }
 
-        var multiSummary = ActiveStudentAssignmentHelper.BuildMultiEnrollmentSummary(assignments, primary);
+        var multiSummary = primary != null
+            ? ActiveStudentAssignmentHelper.BuildMultiEnrollmentSummary(assignments, primary)
+            : subjectCtx!.AdditionalEnrollmentsSummary;
 
         var card = await _context.StudentIdCards
             .AsNoTracking()
@@ -113,9 +120,11 @@ public class StudentIdCardService : IStudentIdCardService
             StudentId = studentId,
             CardNumber = card.CardNumber,
             FullName = $"{userRow.Name} {userRow.LastName}",
-            Grade = primary.Grade?.Name ?? "",
-            Group = primary.Group?.Name ?? "",
-            Shift = string.IsNullOrEmpty(primary.Shift?.Name) ? "N/A" : primary.Shift.Name,
+            Grade = primary?.Grade?.Name ?? subjectCtx?.GradeName ?? "",
+            Group = primary?.Group?.Name ?? subjectCtx?.GroupName ?? "",
+            Shift = primary != null
+                ? (string.IsNullOrEmpty(primary.Shift?.Name) ? "N/A" : primary.Shift.Name)
+                : (subjectCtx?.ShiftDisplay ?? "N/A"),
             AdditionalEnrollmentsSummary = multiSummary,
             QrToken = token?.Token ?? "",
             QrImageDataUrl = qrImageDataUrl,
@@ -168,11 +177,22 @@ public class StudentIdCardService : IStudentIdCardService
             }
 
             var activeAssignment = ActiveStudentAssignmentHelper.PickForDisplay(student.StudentAssignments);
+            StudentCarnetDisplayResolver.Context? subjectDisplay = null;
             if (activeAssignment == null)
             {
-                _logger.LogWarning(
-                    "[StudentIdCard] GenerateAsync estudiante sin asignación activa StudentId={StudentId}", studentId);
-                throw new Exception("Estudiante sin asignación activa");
+                subjectDisplay =
+                    await StudentCarnetDisplayResolver.TryResolveFromSubjectEnrollmentsAsync(_context, studentId);
+                if (subjectDisplay == null)
+                {
+                    _logger.LogWarning(
+                        "[StudentIdCard] GenerateAsync estudiante sin asignación activa ni materias StudentId={StudentId}",
+                        studentId);
+                    throw new Exception("Estudiante sin asignación activa");
+                }
+
+                _logger.LogInformation(
+                    "[StudentIdCard] GenerateAsync usando contexto desde inscripciones por materia StudentId={StudentId}",
+                    studentId);
             }
 
             // Revocar TODOS los carnets activos (cubre duplicados de race conditions previas)
@@ -233,16 +253,18 @@ public class StudentIdCardService : IStudentIdCardService
             var pngBytes = QrHelper.GenerateQrPng(newToken.Token, _qrSignatureService);
             var qrImageDataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
 
-            var multiSummary = ActiveStudentAssignmentHelper.BuildMultiEnrollmentSummary(student.StudentAssignments, activeAssignment);
+            var multiSummary = activeAssignment != null
+                ? ActiveStudentAssignmentHelper.BuildMultiEnrollmentSummary(student.StudentAssignments, activeAssignment)
+                : subjectDisplay!.AdditionalEnrollmentsSummary;
 
             return new StudentIdCardDto
             {
                 StudentId = studentId,
                 CardNumber = cardNumber,
                 FullName = $"{student.Name} {student.LastName}",
-                Grade = activeAssignment.Grade?.Name ?? "",
-                Group = activeAssignment.Group?.Name ?? "",
-                Shift = activeAssignment.Shift?.Name ?? "N/A",
+                Grade = activeAssignment?.Grade?.Name ?? subjectDisplay?.GradeName ?? "",
+                Group = activeAssignment?.Group?.Name ?? subjectDisplay?.GroupName ?? "",
+                Shift = activeAssignment?.Shift?.Name ?? subjectDisplay?.ShiftDisplay ?? "N/A",
                 AdditionalEnrollmentsSummary = multiSummary,
                 QrToken = newToken.Token,
                 QrImageDataUrl = qrImageDataUrl,
@@ -312,13 +334,16 @@ public class StudentIdCardService : IStudentIdCardService
             .Where(a => a.StudentId == tokenRecord.StudentId && a.IsActive)
             .ToListAsync();
         var assignment = ActiveStudentAssignmentHelper.PickForDisplay(assignmentCandidates);
+        var subjectDisplay = assignment == null
+            ? await StudentCarnetDisplayResolver.TryResolveFromSubjectEnrollmentsAsync(_context, tokenRecord.StudentId)
+            : null;
 
         var studentAccountActive = string.Equals(
             tokenRecord.Student.Status?.Trim(),
             "active",
             StringComparison.OrdinalIgnoreCase);
 
-        if (assignment == null)
+        if (assignment == null && subjectDisplay == null)
         {
             await SaveScanLogAsync(tokenRecord.StudentId, scanType, "denied", request.ScannedBy);
             return new ScanResultDto
@@ -374,7 +399,9 @@ public class StudentIdCardService : IStudentIdCardService
         var role = (request.AuthenticatedRole ?? "").Trim().ToLowerInvariant();
         var canSeeSensitiveData = role is "inspector" or "teacher" or "docente" or "admin" or "superadmin";
 
-        var shiftDisplay = assignment.Shift?.Name?.Trim();
+        var shiftDisplay = assignment?.Shift?.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(shiftDisplay))
+            shiftDisplay = subjectDisplay?.ShiftDisplay?.Trim();
         if (string.IsNullOrWhiteSpace(shiftDisplay))
             shiftDisplay = string.IsNullOrWhiteSpace(tokenRecord.Student.Shift)
                 ? null
@@ -383,10 +410,15 @@ public class StudentIdCardService : IStudentIdCardService
         string? counselorName = null;
         if (tokenRecord.Student.SchoolId.HasValue)
         {
-            counselorName = await ResolveCounselorFullNameAsync(
-                tokenRecord.Student.SchoolId.Value,
-                assignment.GradeId,
-                assignment.GroupId);
+            var gradeId = assignment?.GradeId ?? subjectDisplay?.GradeLevelId;
+            var groupId = assignment?.GroupId ?? subjectDisplay?.GroupId;
+            if (gradeId.HasValue && groupId.HasValue)
+            {
+                counselorName = await ResolveCounselorFullNameAsync(
+                    tokenRecord.Student.SchoolId.Value,
+                    gradeId.Value,
+                    groupId.Value);
+            }
         }
 
         // LÓGICA-7 fix: Allowed = AllowedToEnterSchool (decisión operativa real)
@@ -395,8 +427,8 @@ public class StudentIdCardService : IStudentIdCardService
             Allowed = allowedToEnterSchool,
             Message = allowedToEnterSchool ? "Acceso permitido" : "Acceso denegado",
             StudentName = $"{tokenRecord.Student.Name} {tokenRecord.Student.LastName}",
-            Grade = assignment.Grade?.Name ?? "N/A",
-            Group = assignment.Group?.Name ?? "N/A",
+            Grade = assignment?.Grade?.Name ?? subjectDisplay?.GradeName ?? "N/A",
+            Group = assignment?.Group?.Name ?? subjectDisplay?.GroupName ?? "N/A",
             StudentId = tokenRecord.StudentId,
             DisciplineCount = disciplineCount,
             StudentPhotoUrl = tokenRecord.Student.PhotoUrl,
