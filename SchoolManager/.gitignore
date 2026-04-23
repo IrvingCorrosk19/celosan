@@ -6,6 +6,7 @@ obj/
 *.cache
 *.log
 *.vsidx
+cache/
 *.dll
 *.pdb
 *.exe

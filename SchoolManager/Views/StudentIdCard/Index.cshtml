@@ -243,7 +243,7 @@ $(function(){
                 width: '52px',
                 render: function(data) {
                     var src = data
-                        ? '/File/GetUserPhoto?photoUrl=' + encodeURIComponent(data)
+                        ? '/File/GetUserPhoto?photoUrl=' + encodeURIComponent(data) + '&variant=thumb'
                         : '/File/GetUserPhoto';
                     return '<img src="' + src + '" class="rounded idcard-student-thumb" width="44" height="44" alt="" loading="lazy" />';
                 }

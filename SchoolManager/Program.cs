@@ -290,6 +290,16 @@ builder.Services.AddScoped<SchoolManager.Filters.PlatformAccessGuardFilter>();
 // HttpClient (p. ej. descarga de fotos en Cloudinary para PDFs)
 builder.Services.AddHttpClient();
 
+builder.Services.Configure<UserPhotoCacheOptions>(
+    builder.Configuration.GetSection(UserPhotoCacheOptions.SectionName));
+var userPhotoCacheBootstrap = builder.Configuration.GetSection(UserPhotoCacheOptions.SectionName)
+    .Get<UserPhotoCacheOptions>() ?? new UserPhotoCacheOptions();
+builder.Services.AddMemoryCache(o =>
+{
+    o.SizeLimit = Math.Clamp(userPhotoCacheBootstrap.MemoryCacheSizeLimitBytes, 16 * 1024 * 1024, 512 * 1024 * 1024);
+});
+builder.Services.AddSingleton<IHttpBytesDownloadCache, HttpBytesDownloadCache>();
+
 // Cloudinary: credenciales reales en producción (variables de entorno / Render) para que las fotos sobrevivan al deploy
 builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 

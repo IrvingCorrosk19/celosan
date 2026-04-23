@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -37,19 +37,19 @@ public sealed class LocalFileStorageService : IFileStorageService
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<LocalFileStorageService> _logger;
     private readonly ICloudinaryService _cloudinary;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IHttpBytesDownloadCache _httpBytesDownloadCache;
     private readonly string _basePath;
 
     public LocalFileStorageService(
         IWebHostEnvironment env,
         ILogger<LocalFileStorageService> logger,
         ICloudinaryService cloudinary,
-        IHttpClientFactory httpClientFactory)
+        IHttpBytesDownloadCache httpBytesDownloadCache)
     {
         _env = env;
         _logger = logger;
         _cloudinary = cloudinary;
-        _httpClientFactory = httpClientFactory;
+        _httpBytesDownloadCache = httpBytesDownloadCache;
         _basePath = Path.Combine(_env.WebRootPath ?? _env.ContentRootPath, "uploads", "users");
     }
 
@@ -371,9 +371,11 @@ public sealed class LocalFileStorageService : IFileStorageService
         {
             try
             {
-                var client = _httpClientFactory.CreateClient();
-                client.Timeout = TimeSpan.FromSeconds(45);
-                return await client.GetByteArrayAsync(new Uri(trimmed));
+                return await _httpBytesDownloadCache.GetOrDownloadAsync(
+                    trimmed,
+                    6 * 1024 * 1024,
+                    TimeSpan.FromSeconds(45),
+                    CancellationToken.None);
             }
             catch (Exception ex)
             {

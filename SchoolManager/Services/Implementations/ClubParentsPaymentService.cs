@@ -28,7 +28,11 @@ public class ClubParentsPaymentService : IClubParentsPaymentService
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<ClubParentsStudentDto>> GetStudentsAsync(Guid? gradeId = null, Guid? groupId = null, string? search = null)
+    public async Task<IReadOnlyList<ClubParentsStudentDto>> GetStudentsAsync(
+        Guid? gradeId = null,
+        Guid? groupId = null,
+        string? search = null,
+        string? cedula = null)
     {
         var school = await _currentUserService.GetCurrentUserSchoolAsync();
         if (school == null)
@@ -54,6 +58,18 @@ public class ClubParentsPaymentService : IClubParentsPaymentService
                 || u.Name.ToLower().Contains(t)
                 || u.LastName.ToLower().Contains(t)
                 || (u.Name + " " + u.LastName).ToLower().Contains(t));
+        }
+
+        var cedulaFilter = cedula?.Trim();
+        if (!string.IsNullOrEmpty(cedulaFilter))
+        {
+            var likeCed = "%" + cedulaFilter + "%";
+            var digitsOnlyCed = new string(cedulaFilter.Where(char.IsDigit).ToArray());
+            query = query.Where(u =>
+                u.DocumentId != null
+                && (EF.Functions.ILike(u.DocumentId, likeCed)
+                    || (digitsOnlyCed.Length > 0
+                        && u.DocumentId!.Replace(".", "").Replace("-", "").Replace(" ", "").Contains(digitsOnlyCed))));
         }
 
         if (gradeId.HasValue || groupId.HasValue)

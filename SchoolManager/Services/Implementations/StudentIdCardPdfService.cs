@@ -1,4 +1,5 @@
 using System.Data;
+using System.Threading;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
@@ -25,7 +26,7 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
 {
     private readonly SchoolDbContext _context;
     private readonly IFileStorageService _fileStorage;
-    private readonly HttpClient _http;
+    private readonly IHttpBytesDownloadCache _httpBytesDownloadCache;
     private readonly ILogger<StudentIdCardPdfService> _logger;
     private readonly IQrSignatureService _qrSignatureService;
     private readonly IWebHostEnvironment _environment;
@@ -39,21 +40,21 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
     public StudentIdCardPdfService(
         SchoolDbContext context,
         IFileStorageService fileStorage,
-        IHttpClientFactory httpClientFactory,
+        IHttpBytesDownloadCache httpBytesDownloadCache,
         ILogger<StudentIdCardPdfService> logger,
         IQrSignatureService qrSignatureService,
         IWebHostEnvironment environment,
         IStudentIdCardImageService imageService,
         IOptions<StudentIdCardOptions> studentIdCardOptions)
     {
-        _context      = context;
-        _fileStorage  = fileStorage;
-        _http         = httpClientFactory.CreateClient();
-        _logger       = logger;
-        _qrSignatureService = qrSignatureService;
-        _environment  = environment;
-        _imageService = imageService;
-        _studentIdCardOptions = studentIdCardOptions;
+        _context               = context;
+        _fileStorage            = fileStorage;
+        _httpBytesDownloadCache = httpBytesDownloadCache;
+        _logger                 = logger;
+        _qrSignatureService     = qrSignatureService;
+        _environment            = environment;
+        _imageService           = imageService;
+        _studentIdCardOptions   = studentIdCardOptions;
     }
 
     public async Task<byte[]> GenerateCardPdfAsync(Guid studentId, Guid createdBy)
@@ -300,8 +301,13 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
         {
             if (url.StartsWith("http://") || url.StartsWith("https://"))
             {
-                using var cts   = new CancellationTokenSource(ImageDownloadTimeout);
-                var bytes = await _http.GetByteArrayAsync(url, cts.Token);
+                var bytes = await _httpBytesDownloadCache.GetOrDownloadAsync(
+                    url,
+                    MaxImageDownloadBytes,
+                    ImageDownloadTimeout,
+                    CancellationToken.None);
+                if (bytes == null)
+                    return null;
                 if (bytes.Length > MaxImageDownloadBytes)
                 {
                     _logger.LogWarning(

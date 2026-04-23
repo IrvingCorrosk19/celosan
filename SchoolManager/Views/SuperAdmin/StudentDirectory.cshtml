@@ -149,7 +149,7 @@
                     {
                         <tr data-search="@($"{row.FullName} {row.DocumentId} {row.Email} {row.SchoolName} {row.GradeLevelName} {row.GroupName} {row.ShiftName} {row.UserShift} {row.Status}")">
                             <td>
-                                <img src="@UserPhotoLinks.Href(row.PhotoUrl)" alt="Foto @row.FullName" class="student-thumb" loading="lazy" decoding="async" />
+                                <img src="@UserPhotoLinks.HrefListThumbnail(row.PhotoUrl)" alt="Foto @row.FullName" class="student-thumb" loading="lazy" decoding="async" />
                             </td>
                             <td>@row.FullName</td>
                             <td>@(string.IsNullOrWhiteSpace(row.DocumentId) ? "—" : row.DocumentId)</td>
@@ -357,6 +357,10 @@
                 return '/File/GetUserPhoto?photoUrl=' + encodeURIComponent(stored || '');
             }
 
+            function buildUserPhotoThumbHref(stored) {
+                return buildUserPhotoHref(stored) + '&variant=thumb';
+            }
+
             if (input) {
                 var quickFilterTimer = null;
                 function applyQuickFilter() {
@@ -399,7 +403,7 @@
                 if (!row) return;
                 var thumbCell = row.children[0];
                 if (!thumbCell) return;
-                thumbCell.innerHTML = '<img src="' + buildUserPhotoHref(stored) + '" alt="Foto estudiante" class="student-thumb" loading="lazy" decoding="async" />';
+                thumbCell.innerHTML = '<img src="' + buildUserPhotoThumbHref(stored) + '" alt="Foto estudiante" class="student-thumb" loading="lazy" decoding="async" />';
             }
 
             function applyPendingToRow(userId, pending) {
