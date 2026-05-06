@@ -15,7 +15,8 @@
         var a = Model.Allergies.Trim();
         allergiesTxt = a.Length > maxAllergies ? a[..(maxAllergies - 3)] + "..." : a;
     }
-    var showBackFace = Model.ShowQr;
+    // Requerimiento funcional: sin QR, el carnet se muestra/imprime solo por el frente.
+    var showBackFace = false;
     var hasLogo = !string.IsNullOrWhiteSpace(Model.SchoolLogoUrl);
     var showWm = Model.ShowWatermark && hasLogo;
     var hasEmergencyQr = hasCard && Model.ShowQr && !string.IsNullOrEmpty(Model.Card?.EmergencyInfoQrImageDataUrl);
@@ -502,7 +503,7 @@
                     {
                         <div class="align-self-center text-muted small" style="max-width:220px">
                             <i class="fas fa-info-circle me-1"></i>
-                            Con <strong>QR desactivado</strong> en la configuración, el PDF solo incluye el frente (sin reverso).
+                            El carnet se emite solo por el frente (sin reverso).
                         </div>
                     }
                 </div>
