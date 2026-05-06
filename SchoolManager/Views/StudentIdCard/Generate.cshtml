@@ -201,34 +201,37 @@
     .idcard-policy-section {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-start;
         background: #E6EEF7;
         padding: 6px 6px;
         margin: 0;
         border-radius: 0 0 8px 8px;
         flex-shrink: 0;
-        min-height: 70px;
+        min-height: 48px;
     }
 
     .idcard-policy-section .policy-text {
-        flex: 1;
+        width: 100%;
         min-width: 0;
-        padding-right: 6px;
+        text-align: left;
     }
 
     .idcard-policy-section .policy-label {
-        font-size: 6.5pt;
+        font-size: 6pt;
         font-weight: 700;
         color: @primary;
-        line-height: 1.25;
+        line-height: 1.15;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
     }
 
     .idcard-policy-section .policy-number {
-        font-size: 6.5pt;
-        font-weight: 600;
+        font-size: 7pt;
+        font-weight: 800;
         color: @text;
-        line-height: 1.25;
+        line-height: 1.2;
         word-break: break-word;
+        margin-top: 2px;
     }
 
     .idcard-policy-section .policy-id {
@@ -436,24 +439,17 @@
                             @* SPACER: empuja el bloque inferior al fondo *@
                             <div class="idcard-spacer"></div>
 
-                            @* ZONA 4+5: Bloque unificado — Póliza + ID + QR (flush con bordes) *@
+                            @* ZONA 4: Bloque póliza (QR oculto por requerimiento) *@
                             <div class="idcard-policy-section idcard-z1">
                                 <div class="policy-text">
                                     @if (Model.ShowPolicyNumber && !string.IsNullOrWhiteSpace(Model.PolicyNumber))
                                     {
-                                        <div class="policy-label">
-                                            <i class="fas fa-shield-alt me-1" style="font-size:5pt"></i>Póliza de Seguro Educativo
-                                        </div>
+                                        <div class="policy-label">Póliza de seguro educativo</div>
                                         <div class="policy-number">@Model.PolicyNumber</div>
                                     }
                                     @* Se omite el ID visual en la vista previa (se mantiene en PDF y trazabilidad interna). *@
                                 </div>
-                                @if (Model.ShowQr && !string.IsNullOrEmpty(Model.Card!.QrImageDataUrl))
-                                {
-                                    <div class="policy-qr">
-                                        <img src="@Model.Card.QrImageDataUrl" alt="QR" />
-                                    </div>
-                                }
+                                @* QR frontal oculto por requerimiento: no mostrar en impresión singular ni masiva de la UI. *@
                             </div>
 
                             @* ZONA 6: Footer *@
@@ -471,13 +467,7 @@
                                     <div class="idcard-watermark" aria-hidden="true"><img src="/File/GetSchoolLogo?logoUrl=@Uri.EscapeDataString(Model.SchoolLogoUrl ?? "")" alt="" onerror="this.parentElement.style.display='none'" /></div>
                                 }
                                 <div class="idcard-back-inner idcard-z1 @(hasEmergencyQr ? "idcard-back-inner--emergency" : "")">
-                                    @if (Model.ShowQr && !string.IsNullOrEmpty(Model.Card!.QrImageDataUrl))
-                                    {
-                                        <div class="idcard-back-verify-wrap">
-                                            <div class="idcard-back-qr"><img src="@Model.Card.QrImageDataUrl" alt="QR verificación" /></div>
-                                            <div class="idcard-back-qr-caption">Verificación del carnet</div>
-                                        </div>
-                                    }
+                                    @* QR de verificación oculto por requerimiento. *@
                                     <div class="idcard-back-body">
                                         <div class="fw-bold" style="font-size:9pt">@Model.SchoolName</div>
                                         <div class="idcard-back-line opacity-90">Escanea el código superior para verificar la información del carnet</div>
@@ -503,13 +493,7 @@
                                             <div class="idcard-back-line">Alergias: @allergiesTxt</div>
                                         }
                                     </div>
-                                    @if (hasEmergencyQr)
-                                    {
-                                        <div class="idcard-back-emergency-footer">
-                                            <div class="idcard-back-qr"><img src="@Model.Card!.EmergencyInfoQrImageDataUrl" alt="QR emergencia" /></div>
-                                            <div class="idcard-back-emergency-caption">Escaneame en caso de emergencia</div>
-                                        </div>
-                                    }
+                                    @* QR de emergencia oculto por requerimiento. *@
                                 </div>
                             </div>
                         </div>

@@ -115,12 +115,13 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         float qrSz = bodyH * 0.42f;
         float qrX  = w - hPad - qrSz;
         float qrY  = bodyTop + (bodyH - qrSz) / 2f;
-        if (settings.ShowQr)
+        // Requerimiento funcional: no mostrar QR en impresión singular/masiva.
+        if (false && settings.ShowQr)
             DrawQr(canvas, dto.QrToken, SKRect.Create(qrX, qrY, qrSz, qrSz));
 
         // ── Datos ─────────────────────────────────────────────────────────────
         float dataX   = photoX + photoSz + hPad;
-        float dataW   = (settings.ShowQr ? qrX - hPad * 0.5f : w - hPad) - dataX;
+        float dataW   = ((false && settings.ShowQr) ? qrX - hPad * 0.5f : w - hPad) - dataX;
         float nameFs  = h * 0.058f;
         float cardFs  = h * 0.045f;
         float smallFs = h * 0.038f;
@@ -244,10 +245,11 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         float qrSz = bottomZH * 0.52f;
         float qrX  = w - hPad - qrSz;
         float qrY  = bottomZoneTop + (bottomZH - qrSz) / 2f;
-        if (settings.ShowQr)
+        // Requerimiento funcional: no mostrar QR en impresión singular/masiva.
+        if (false && settings.ShowQr)
             DrawQr(canvas, dto.QrToken, SKRect.Create(qrX, qrY, qrSz, qrSz));
 
-        float leftW    = qrX - hPad * 2f;
+        float leftW    = ((false && settings.ShowQr) ? qrX - hPad * 2f : w - hPad * 2f);
         float polFs    = h * 0.028f;
         float polIdFs  = h * 0.025f;
         float lty      = bottomZoneTop + bottomZH * 0.20f;
@@ -335,12 +337,13 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         float qrSz = bodyH * 0.42f;
         float qrX  = w - hPad - qrSz;
         float qrY  = bodyTop + (bodyH - qrSz) / 2f;
-        if (settings.ShowQr)
+        // Requerimiento funcional: no mostrar QR en impresión singular/masiva.
+        if (false && settings.ShowQr)
             DrawQr(canvas, dto.QrToken, SKRect.Create(qrX, qrY, qrSz, qrSz));
 
         // ── Datos ─────────────────────────────────────────────────────────────
         float dataX   = photoX + photoSz + hPad;
-        float dataW   = (settings.ShowQr ? qrX - hPad * 0.5f : w - hPad) - dataX;
+        float dataW   = ((false && settings.ShowQr) ? qrX - hPad * 0.5f : w - hPad) - dataX;
         float nameFs  = h * 0.055f;
         float cardFs  = h * 0.042f;
         float smallFs = h * 0.036f;
@@ -420,7 +423,8 @@ public class StudentIdCardImageService : IStudentIdCardImageService
                     AutoText(canvas, dto.CardNumber, fx, fy + fs, fw, fs, textCol);
                     break;
                 case "Qr":
-                    if (settings.ShowQr)
+                    // Requerimiento funcional: QR oculto en impresión singular/masiva.
+                    if (false && settings.ShowQr)
                         DrawQr(canvas, dto.QrToken, SKRect.Create(fx, fy, fw, fh));
                     break;
             }
@@ -446,7 +450,8 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         float availH   = h - footerH;
         float footerY  = h - footerH;
 
-        var hasEmergencyQr = settings.ShowQr && !string.IsNullOrWhiteSpace(dto.EmergencyInfoPageUrl);
+        // Requerimiento funcional: QR oculto en reverso para impresión singular/masiva.
+        var hasEmergencyQr = (false && settings.ShowQr) && !string.IsNullOrWhiteSpace(dto.EmergencyInfoPageUrl);
         float emgQrSz = hasEmergencyQr ? Math.Min(w, h) * 0.26f : 0f;
         float emgCaptionFs = h * 0.032f;
         float emgGap = h * 0.014f;
@@ -457,7 +462,7 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         float qrY = h * 0.03f;
         float qrBlockBottom = qrY;
 
-        if (settings.ShowQr)
+        if (false && settings.ShowQr)
         {
             float verifySz = hasEmergencyQr ? Math.Min(w, availH) * 0.36f : Math.Min(w, availH) * 0.45f;
             float qrX = (w - verifySz) / 2f;
@@ -477,7 +482,7 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         ty += lineH;
         if (Room(sLineH))
         {
-            AutoText(canvas, "Escanea el código superior para verificar el carnet",
+            AutoText(canvas, "Carnet institucional de uso escolar",
                 hPad, ty, contentW, smallFs * 0.88f, textCol, center: true);
             ty += sLineH;
         }
