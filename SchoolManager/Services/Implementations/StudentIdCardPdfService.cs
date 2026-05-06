@@ -138,8 +138,7 @@ public class StudentIdCardPdfService : IStudentIdCardPdfService
             IReadOnlyList<IdCardTemplateField>? customFields = fields.Count > 0 ? fields : null;
 
             var frontPng = _imageService.GenerateCardImage(renderDto, settings, customFields);
-            // Requerimiento funcional: sin QR, emitir/imprimir solo frente (sin reverso).
-            byte[]? backPng = (false && settings.ShowQr && customFields == null)
+            byte[]? backPng = (settings.ShowQr && customFields == null)
                 ? _imageService.GenerateCardBackImage(renderDto, settings)
                 : null;
 

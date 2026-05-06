@@ -15,8 +15,7 @@
         var a = Model.Allergies.Trim();
         allergiesTxt = a.Length > maxAllergies ? a[..(maxAllergies - 3)] + "..." : a;
     }
-    // Requerimiento funcional: sin QR, el carnet se muestra/imprime solo por el frente.
-    var showBackFace = false;
+    var showBackFace = Model.ShowQr;
     var hasLogo = !string.IsNullOrWhiteSpace(Model.SchoolLogoUrl);
     var showWm = Model.ShowWatermark && hasLogo;
     var hasEmergencyQr = hasCard && Model.ShowQr && !string.IsNullOrEmpty(Model.Card?.EmergencyInfoQrImageDataUrl);
@@ -468,7 +467,13 @@
                                     <div class="idcard-watermark" aria-hidden="true"><img src="/File/GetSchoolLogo?logoUrl=@Uri.EscapeDataString(Model.SchoolLogoUrl ?? "")" alt="" onerror="this.parentElement.style.display='none'" /></div>
                                 }
                                 <div class="idcard-back-inner idcard-z1 @(hasEmergencyQr ? "idcard-back-inner--emergency" : "")">
-                                    @* QR de verificación oculto por requerimiento. *@
+                                @if (Model.ShowQr && !string.IsNullOrEmpty(Model.Card!.QrImageDataUrl))
+                                {
+                                    <div class="idcard-back-verify-wrap">
+                                        <div class="idcard-back-qr"><img src="@Model.Card.QrImageDataUrl" alt="QR verificación" /></div>
+                                        <div class="idcard-back-qr-caption">Verificación del carnet</div>
+                                    </div>
+                                }
                                     <div class="idcard-back-body">
                                         <div class="fw-bold" style="font-size:9pt">@Model.SchoolName</div>
                                         <div class="idcard-back-line opacity-90">Escanea el código superior para verificar la información del carnet</div>
@@ -494,7 +499,13 @@
                                             <div class="idcard-back-line">Alergias: @allergiesTxt</div>
                                         }
                                     </div>
-                                    @* QR de emergencia oculto por requerimiento. *@
+                                    @if (hasEmergencyQr)
+                                    {
+                                        <div class="idcard-back-emergency-footer">
+                                            <div class="idcard-back-qr"><img src="@Model.Card!.EmergencyInfoQrImageDataUrl" alt="QR emergencia" /></div>
+                                            <div class="idcard-back-emergency-caption">Escaneame en caso de emergencia</div>
+                                        </div>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -503,7 +514,7 @@
                     {
                         <div class="align-self-center text-muted small" style="max-width:220px">
                             <i class="fas fa-info-circle me-1"></i>
-                            El carnet se emite solo por el frente (sin reverso).
+                            Con <strong>QR desactivado</strong> en la configuración, el PDF solo incluye el frente (sin reverso).
                         </div>
                     }
                 </div>

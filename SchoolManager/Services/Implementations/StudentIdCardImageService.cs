@@ -450,8 +450,7 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         float availH   = h - footerH;
         float footerY  = h - footerH;
 
-        // Requerimiento funcional: QR oculto en reverso para impresión singular/masiva.
-        var hasEmergencyQr = (false && settings.ShowQr) && !string.IsNullOrWhiteSpace(dto.EmergencyInfoPageUrl);
+        var hasEmergencyQr = settings.ShowQr && !string.IsNullOrWhiteSpace(dto.EmergencyInfoPageUrl);
         float emgQrSz = hasEmergencyQr ? Math.Min(w, h) * 0.26f : 0f;
         float emgCaptionFs = h * 0.032f;
         float emgGap = h * 0.014f;
@@ -462,7 +461,7 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         float qrY = h * 0.03f;
         float qrBlockBottom = qrY;
 
-        if (false && settings.ShowQr)
+        if (settings.ShowQr)
         {
             float verifySz = hasEmergencyQr ? Math.Min(w, availH) * 0.36f : Math.Min(w, availH) * 0.45f;
             float qrX = (w - verifySz) / 2f;
@@ -482,7 +481,7 @@ public class StudentIdCardImageService : IStudentIdCardImageService
         ty += lineH;
         if (Room(sLineH))
         {
-            AutoText(canvas, "Carnet institucional de uso escolar",
+            AutoText(canvas, "Escanea el código superior para verificar el carnet",
                 hPad, ty, contentW, smallFs * 0.88f, textCol, center: true);
             ty += sLineH;
         }
