@@ -1,8 +1,10 @@
-@model List<SchoolManager.ViewModels.StudentAssignmentOverviewViewModel>
+@model SchoolManager.ViewModels.StudentAssignmentIndexViewModel
+@using System.Text.Json
 
 @{
     Layout = "_AdminLayout";
     ViewData["Title"] = "Asignación de Estudiantes";
+    var students = Model.Students ?? new List<SchoolManager.ViewModels.StudentAssignmentOverviewViewModel>();
 }
 
 <style>
@@ -152,6 +154,19 @@
         background-size: contain;
         opacity: 0.5;
     }
+    .assignment-filters {
+        background: var(--light-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.25rem;
+    }
+    .assignment-filters .form-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--secondary-color);
+        margin-bottom: 0.35rem;
+    }
 </style>
 
 <div class="student-portal">
@@ -173,10 +188,50 @@
             <span class="fw-bold fs-4">Asignaciones Actuales</span>
         </div>
         <div class="card-body">
+            <div class="assignment-filters">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="filterGrade" class="form-label"><i class="bi bi-mortarboard me-1"></i>Grado</label>
+                        <select id="filterGrade" class="form-select">
+                            <option value="">Todos los grados</option>
+                            @foreach (var g in Model.GradeFilterOptions)
+                            {
+                                <option value="@g">@g</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filterGroup" class="form-label"><i class="bi bi-people me-1"></i>Grupo</label>
+                        <select id="filterGroup" class="form-select">
+                            <option value="">Todos los grupos</option>
+                            @foreach (var g in Model.GroupFilterOptions)
+                            {
+                                <option value="@g">@g</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filterShift" class="form-label"><i class="bi bi-clock me-1"></i>Jornada</label>
+                        <select id="filterShift" class="form-select">
+                            <option value="">Todas las jornadas</option>
+                            @foreach (var s in Model.ShiftFilterOptions)
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" id="btnClearFilters" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-x-circle me-1"></i>Limpiar filtros
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-2 small text-muted" id="filterSummary"></div>
+            </div>
             <div class="mb-4 d-flex justify-content-center">
                 <div class="search-input position-relative w-50">
                     <i class="bi bi-search position-absolute" style="left: 1rem; top: 50%; transform: translateY(-50%); font-size: 1.3rem; color: var(--secondary-color);"></i>
-                    <input type="text" id="customSearch" class="form-control form-control-lg ps-5" placeholder="Buscar estudiante, correo o grupo..." autocomplete="off" />
+                    <input type="text" id="customSearch" class="form-control form-control-lg ps-5" placeholder="Buscar estudiante, correo o identificación..." autocomplete="off" />
                 </div>
             </div>
             <div class="table-responsive">
@@ -195,10 +250,11 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @for (int i = 0; i < Model.Count; i++)
+                        @for (int i = 0; i < students.Count; i++)
                         {
-                            var est = Model[i];
-                            <tr data-student-id="@est.StudentId">
+                            var est = students[i];
+                            var enrollmentsJson = JsonSerializer.Serialize(est.Enrollments ?? new List<SchoolManager.ViewModels.StudentEnrollmentFilterItem>());
+                            <tr data-student-id="@est.StudentId" data-enrollments='@Html.Raw(enrollmentsJson)'>
                                 <td>@(i + 1)</td>
                                 <td class="text-start">@est.FirstName</td>
                                 <td class="text-start">@est.LastName</td>
@@ -375,13 +431,68 @@
             inst.hide();
         }
 
+        function normalizeFilterToken(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        function parseRowEnrollments($row) {
+            try {
+                const raw = $row.attr('data-enrollments');
+                if (!raw) return [];
+                return JSON.parse(raw);
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function rowMatchesEnrollmentFilters($row) {
+            const grade = $('#filterGrade').val();
+            const group = $('#filterGroup').val();
+            const shift = $('#filterShift').val();
+            if (!grade && !group && !shift) return true;
+
+            const enrollments = parseRowEnrollments($row);
+            if (!enrollments.length) return false;
+
+            const g = normalizeFilterToken(grade);
+            const gr = normalizeFilterToken(group);
+            const s = normalizeFilterToken(shift);
+
+            return enrollments.some(function (e) {
+                const rowGrade = e.Grade || e.grade || '';
+                const rowGroup = e.Group || e.group || '';
+                const rowShift = e.Shift || e.shift || '';
+                if (g && normalizeFilterToken(rowGrade) !== g) return false;
+                if (gr && normalizeFilterToken(rowGroup) !== gr) return false;
+                if (s && normalizeFilterToken(rowShift) !== s) return false;
+                return true;
+            });
+        }
+
+        function updateFilterSummary(table) {
+            const grade = $('#filterGrade').val();
+            const group = $('#filterGroup').val();
+            const shift = $('#filterShift').val();
+            const parts = [];
+            if (grade) parts.push('Grado: ' + grade);
+            if (group) parts.push('Grupo: ' + group);
+            if (shift) parts.push('Jornada: ' + shift);
+            const visible = table.rows({ search: 'applied' }).count();
+            const total = table.rows().count();
+            let text = parts.length
+                ? 'Filtros: ' + parts.join(' · ') + ' — '
+                : '';
+            text += 'Mostrando ' + visible + ' de ' + total + ' estudiantes';
+            $('#filterSummary').text(text);
+        }
+
         $(function () {
-            // Inicializar DataTables
-            // Muchas filas (~1.8k): evita clases CSS de orden por celda (reduce trabajo al inicializar).
+            // Muchas filas: evita clases CSS de orden por celda (reduce trabajo al inicializar).
             var table = $('#asignacionesTable').DataTable({
                 language: {
                     search: "", lengthMenu: "Mostrar _MENU_",
                     info: "Mostrando _START_ a _END_ de _TOTAL_",
+                    infoFiltered: " (filtrado de _MAX_ registros)",
                     zeroRecords: "Sin coincidencias",
                     paginate: { first: "«", last: "»", next: "›", previous: "‹" }
                 },
@@ -389,13 +500,33 @@
                 responsive: true,
                 autoWidth: false,
                 orderClasses: false,
-                dom: 'rtip', // Oculta el buscador nativo
+                dom: 'rtip',
             });
 
-            // Conectar búsqueda personalizada
-            $('#customSearch').on('keyup', function () {
-                table.search(this.value).draw();
+            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                if (settings.nTable.id !== 'asignacionesTable') return true;
+                const $row = $(table.row(dataIndex).node());
+                return rowMatchesEnrollmentFilters($row);
             });
+
+            function redrawTable() {
+                table.draw();
+                updateFilterSummary(table);
+            }
+
+            $('#customSearch').on('keyup', function () {
+                table.search(this.value);
+                redrawTable();
+            });
+
+            $('#filterGrade, #filterGroup, #filterShift').on('change', redrawTable);
+
+            $('#btnClearFilters').on('click', function () {
+                $('#filterGrade, #filterGroup, #filterShift').val('');
+                redrawTable();
+            });
+
+            updateFilterSummary(table);
 
             $('tr[data-student-id]').each(function () {
                 const studentId = $(this).data('student-id');

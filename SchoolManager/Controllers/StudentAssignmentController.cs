@@ -383,7 +383,7 @@ namespace SchoolManager.Controllers
             var students = await _userService.GetAllStudentsAsync();
             var allGroups = await _groupService.GetAllAsync();
             var allGrades = await _gradeLevelService.GetAllAsync();
-            var allShifts = await _shiftService.GetAllAsync(); // Obtener jornadas del catálogo
+            var allShifts = await _shiftService.GetAllAsync();
 
             var assignmentsByStudent =
                 await _studentAssignmentService.GetActiveAssignmentsForCurrentSchoolAsync();
@@ -393,35 +393,60 @@ namespace SchoolManager.Controllers
             var shiftById = allShifts.ToDictionary(s => s.Id);
 
             var viewModelList = new List<StudentAssignmentOverviewViewModel>();
+            var gradesInUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var groupsInUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var shiftsInUse = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var student in students)
             {
                 assignmentsByStudent.TryGetValue(student.Id, out var assignments);
                 assignments ??= new List<StudentAssignment>();
 
-                var gradeGroupPairs = assignments
-                    .Select(a =>
+                var enrollmentItems = new List<StudentEnrollmentFilterItem>();
+                var gradeGroupPairs = new List<string>();
+
+                foreach (var a in assignments)
+                {
+                    var gradeName = gradeById.TryGetValue(a.GradeId, out var gr) ? gr.Name : "?";
+                    groupById.TryGetValue(a.GroupId, out var group);
+                    var groupName = group?.Name ?? "?";
+
+                    string shiftName;
+                    if (a.ShiftId.HasValue && shiftById.TryGetValue(a.ShiftId.Value, out var shDirect))
+                        shiftName = shDirect.Name ?? "Sin jornada";
+                    else if (group?.ShiftId != null && shiftById.TryGetValue(group.ShiftId.Value, out var shGroup))
+                        shiftName = shGroup.Name ?? "Sin jornada";
+                    else if (!string.IsNullOrEmpty(group?.Shift))
+                        shiftName = group.Shift;
+                    else
+                        shiftName = "Sin jornada";
+
+                    enrollmentItems.Add(new StudentEnrollmentFilterItem
                     {
-                        var gradeName = gradeById.TryGetValue(a.GradeId, out var gr) ? gr.Name : "?";
-                        groupById.TryGetValue(a.GroupId, out var group);
-                        var groupName = group?.Name ?? "?";
+                        Grade = gradeName,
+                        Group = groupName,
+                        Shift = shiftName
+                    });
 
-                        string shiftName;
-                        if (a.ShiftId.HasValue && shiftById.TryGetValue(a.ShiftId.Value, out var shDirect))
-                            shiftName = shDirect.Name ?? "Sin jornada";
-                        else if (group?.ShiftId != null && shiftById.TryGetValue(group.ShiftId.Value, out var shGroup))
-                            shiftName = shGroup.Name ?? "Sin jornada";
-                        else if (!string.IsNullOrEmpty(group?.Shift))
-                            shiftName = group.Shift;
-                        else
-                            shiftName = "Sin jornada";
+                    var tipo = string.IsNullOrWhiteSpace(a.EnrollmentType) ? "Regular" : a.EnrollmentType;
+                    gradeGroupPairs.Add($"{gradeName} - {groupName} | Jornada: {shiftName} | Matrícula: {tipo}");
+                }
 
-                        var tipo = string.IsNullOrWhiteSpace(a.EnrollmentType) ? "Regular" : a.EnrollmentType;
-                        // Formato: Grado - Grupo | Jornada | Tipo de matrícula
-                        return $"{gradeName} - {groupName} | Jornada: {shiftName} | Matrícula: {tipo}";
-                    })
-                    .Distinct()
+                gradeGroupPairs = gradeGroupPairs.Distinct().ToList();
+                enrollmentItems = enrollmentItems
+                    .GroupBy(e => $"{e.Grade}|{e.Group}|{e.Shift}")
+                    .Select(g => g.First())
                     .ToList();
+
+                foreach (var e in enrollmentItems)
+                {
+                    if (!string.IsNullOrWhiteSpace(e.Grade) && e.Grade != "?")
+                        gradesInUse.Add(e.Grade);
+                    if (!string.IsNullOrWhiteSpace(e.Group) && e.Group != "?")
+                        groupsInUse.Add(e.Group);
+                    if (!string.IsNullOrWhiteSpace(e.Shift) && e.Shift != "Sin jornada")
+                        shiftsInUse.Add(e.Shift);
+                }
 
                 viewModelList.Add(new StudentAssignmentOverviewViewModel
                 {
@@ -432,11 +457,30 @@ namespace SchoolManager.Controllers
                     DocumentId = student.DocumentId ?? "",
                     Email = student.Email,
                     IsActive = string.Equals(student.Status, "active", StringComparison.OrdinalIgnoreCase),
-                    GradeGroupPairs = gradeGroupPairs
+                    GradeGroupPairs = gradeGroupPairs,
+                    Enrollments = enrollmentItems
                 });
             }
 
-            return View(viewModelList);
+            static List<string> MergeFilterOptions(IEnumerable<string> fromCatalog, HashSet<string> inUse)
+            {
+                return fromCatalog
+                    .Concat(inUse)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            var indexModel = new StudentAssignmentIndexViewModel
+            {
+                Students = viewModelList,
+                GradeFilterOptions = MergeFilterOptions(allGrades.Select(g => g.Name), gradesInUse),
+                GroupFilterOptions = MergeFilterOptions(allGroups.Select(g => g.Name), groupsInUse),
+                ShiftFilterOptions = MergeFilterOptions(allShifts.Select(s => s.Name), shiftsInUse)
+            };
+
+            return View(indexModel);
         }
 
         public IActionResult Upload()

@@ -10,6 +10,8 @@
         public string Email { get; set; }
         public bool IsActive { get; set; }
         public List<string> GradeGroupPairs { get; set; } = new();
+        /// <summary>Matrículas activas desglosadas (grado, grupo, jornada) para filtros en Index.</summary>
+        public List<StudentEnrollmentFilterItem> Enrollments { get; set; } = new();
     }
 
 
