@@ -291,7 +291,7 @@
                 const errores = [];
                 let rowNumber = 1;
                 
-                // Arrays para validar duplicados (eliminado - los profesores pueden tener documentos duplicados)
+                const combinacionesAcademicas = [];
 
                 $('#excelTable tbody tr').each(function () {
                     rowNumber++;
@@ -328,7 +328,14 @@
                         // NOTA: Los emails de profesores SÍ se pueden duplicar, no validamos duplicados
                     }
                     
-                    // NOTA: Los documentos ID de profesores SÍ se pueden duplicar, no validamos duplicados
+                    const combinacionAcademica = [
+                        especialidad, area, materia, grado, grupo
+                    ].map(v => v.trim().toUpperCase()).join('|');
+                    if (combinacionesAcademicas.includes(combinacionAcademica)) {
+                        camposFaltantes.push("Combinación académica duplicada en el archivo");
+                    } else {
+                        combinacionesAcademicas.push(combinacionAcademica);
+                    }
 
                     // Validar formato de fecha DD/MM/YYYY o número de Excel
                     if (fechaNacimiento && fechaNacimiento.trim() !== "") {
@@ -427,7 +434,31 @@
                             success: function (response) {
                                 $('#loadingOverlay').hide();
                                 $('#btnGuardarAsignaciones').prop('disabled', false);
-                                Swal.fire("Éxito", response.message || "Asignaciones guardadas correctamente.", "success");
+
+                                let resumen = `
+                                    <b>Asignaciones creadas:</b> ${response.asignacionesInsertadas ?? 0}<br>
+                                    <b>Duplicadas en archivo:</b> ${response.duplicadasEnArchivo ?? 0}<br>
+                                    <b>Ya existían en sistema:</b> ${response.duplicadasEnBd ?? 0}<br>
+                                    <b>Profesores creados:</b> ${response.profesoresCreadosCount ?? 0}<br>
+                                `;
+                                if (response.errores && response.errores.length > 0) {
+                                    resumen += `<b>Detalle:</b><ul style="text-align:left;max-height:200px;overflow-y:auto;">`;
+                                    response.errores.slice(0, 10).forEach(err => {
+                                        resumen += `<li>${err}</li>`;
+                                    });
+                                    if (response.errores.length > 10) {
+                                        resumen += `<li>...y ${response.errores.length - 10} más.</li>`;
+                                    }
+                                    resumen += `</ul>`;
+                                }
+
+                                Swal.fire({
+                                    icon: (response.asignacionesInsertadas ?? 0) > 0 ? 'success' : 'warning',
+                                    title: 'Resultado de la carga',
+                                    html: resumen,
+                                    width: '50%',
+                                    confirmButtonText: 'Aceptar'
+                                });
                             },
                             error: function () {
                                 $('#loadingOverlay').hide();

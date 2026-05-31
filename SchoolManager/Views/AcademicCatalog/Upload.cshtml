@@ -30,6 +30,7 @@
                 <li><strong>Grado:</strong> Nivel o grado académico</li>
                 <li><strong>Grupo:</strong> Grupo o sección</li>
             </ol>
+            <p class="mb-0 mt-2 text-muted small">No se permiten combinaciones repetidas en el archivo ni filas que ya existan en el catálogo académico del colegio.</p>
         </div>
         <div class="ms-3">
             <a href="@Url.Action("DownloadTemplate", "File", new { fileName = "catalogo_academico.xlsx" })" 
@@ -223,10 +224,12 @@
                     if (!grado) camposFaltantes.push("Grado");
                     if (!grupo) camposFaltantes.push("Grupo");
                     
-                    // Validar combinación duplicada
-                    const combinacion = `${especialidad}-${area}-${materia}-${grado}-${grupo}`.toLowerCase();
+                    // Validar combinación duplicada (misma clave que el servidor)
+                    const combinacion = [
+                        especialidad, area, materia, grado, grupo
+                    ].map(v => v.trim().toUpperCase()).join('|');
                     if (combinaciones.includes(combinacion)) {
-                        camposFaltantes.push("Combinación duplicada");
+                        camposFaltantes.push("Combinación duplicada en el archivo");
                     } else {
                         combinaciones.push(combinacion);
                     }
@@ -288,11 +291,9 @@
                                 $('#btnGuardarCatalogo').prop('disabled', false);
                                 
                                 let resumen = `
-                                    <b>Especialidades creadas:</b> ${response.especialidadesCreadas}<br>
-                                    <b>Áreas creadas:</b> ${response.areasCreadas}<br>
-                                    <b>Materias creadas:</b> ${response.materiasCreadas}<br>
-                                    <b>Grados creados:</b> ${response.gradosCreados}<br>
-                                    <b>Grupos creados:</b> ${response.gruposCreados}<br>
+                                    <b>Asignaciones creadas:</b> ${response.asignacionesCreadas ?? 0}<br>
+                                    <b>Duplicadas en archivo:</b> ${response.duplicadasEnArchivo ?? 0}<br>
+                                    <b>Ya existían en sistema:</b> ${response.duplicadasEnBd ?? 0}<br>
                                 `;
 
                                 if (response.errores && response.errores.length > 0) {
@@ -307,7 +308,7 @@
                                 }
 
                                 Swal.fire({
-                                    icon: 'success',
+                                    icon: (response.asignacionesCreadas ?? 0) > 0 ? 'success' : 'warning',
                                     title: 'Resultado de la carga',
                                     html: resumen,
                                     width: '50%',

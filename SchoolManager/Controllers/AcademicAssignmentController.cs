@@ -62,20 +62,35 @@ public class AcademicAssignmentController : Controller
             return BadRequest(new { message = "No se recibió información válida." });
 
         var asignacionesInsertadas = 0;
+        var duplicadasEnArchivo = 0;
+        var duplicadasEnBd = 0;
+        var errores = new List<string>();
+        var combinacionesEnArchivo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var profesoresCreados = new List<string>();
         var currentUser = await _currentUserService.GetCurrentUserAsync();
         var schoolId = currentUser?.SchoolId;
 
         var user = await _currentUserService.GetCurrentUserAsync();
 
-        foreach (var asignacion in asignaciones)
+        for (var index = 0; index < asignaciones.Count; index++)
         {
+            var asignacion = asignaciones[index];
+            var fila = index + 1;
+
             // Normalizar entradas
             var especialidad = string.IsNullOrWhiteSpace(asignacion.Especialidad) ? "N/A" : asignacion.Especialidad.Trim().ToUpper();
             var area = string.IsNullOrWhiteSpace(asignacion.Area) ? "N/A" : asignacion.Area.Trim().ToUpper();
             var materia = string.IsNullOrWhiteSpace(asignacion.Materia) ? "N/A" : asignacion.Materia.Trim().ToUpper();
             var grado = string.IsNullOrWhiteSpace(asignacion.Grado) ? "N/A" : asignacion.Grado.Trim().ToUpper();
             var grupo = string.IsNullOrWhiteSpace(asignacion.Grupo) ? "N/A" : asignacion.Grupo.Trim().ToUpper();
+            var combinacionKey = $"{especialidad}|{area}|{materia}|{grado}|{grupo}";
+
+            if (!combinacionesEnArchivo.Add(combinacionKey))
+            {
+                duplicadasEnArchivo++;
+                errores.Add($"Fila {fila}: Combinación duplicada en el archivo ({especialidad} / {area} / {materia} / {grado} / {grupo}).");
+                continue;
+            }
             
             // Usar EmailDocente si está disponible, sino usar Docente (compatibilidad)
             var correoDocente = !string.IsNullOrWhiteSpace(asignacion.EmailDocente) 
@@ -88,13 +103,16 @@ public class AcademicAssignmentController : Controller
             var grade = await _gradeLevelService.GetOrCreateAsync(grado);
             var groupEntity = await _groupService.GetOrCreateAsync(grupo);
 
-            // Verifica si ya existe la asignación académica
-            bool yaExiste = await _academicAssignmentService.ExisteAsignacionAsync(
+            var yaExiste = await _academicAssignmentService.ExisteAsignacionAsync(
                 specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, user.SchoolId
             );
 
-            // Si no existe, se crea
-            if (!yaExiste)
+            if (yaExiste)
+            {
+                duplicadasEnBd++;
+                errores.Add($"Fila {fila}: La combinación ya existe en el sistema ({especialidad} / {area} / {materia} / {grado} / {grupo}).");
+            }
+            else
             {
                 await _academicAssignmentService.CreateAsignacionAsync(
                     specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, user.SchoolId
@@ -174,7 +192,11 @@ public class AcademicAssignmentController : Controller
         {
             message = asignacionesInsertadas > 0
                 ? $"Se insertaron {asignacionesInsertadas} nuevas asignaciones."
-                : "No se insertaron nuevas asignaciones. Todas ya existían.",
+                : "No se insertaron nuevas asignaciones.",
+            asignacionesInsertadas,
+            duplicadasEnArchivo,
+            duplicadasEnBd,
+            errores,
             profesoresCreados = profesoresCreados,
             profesoresCreadosCount = profesoresCreados.Count,
             success = true
