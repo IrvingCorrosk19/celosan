@@ -9,6 +9,11 @@ namespace SchoolManager.Services.Implementations;
 
 public class StaffInstitutionalProfileService : IStaffInstitutionalProfileService
 {
+    private static readonly HashSet<string> AllowedBloodTypes = new(StringComparer.Ordinal)
+    {
+        "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+    };
+
     private readonly SchoolDbContext _context;
     private readonly ILogger<StaffInstitutionalProfileService> _logger;
 
@@ -37,7 +42,12 @@ public class StaffInstitutionalProfileService : IStaffInstitutionalProfileServic
                 u.Role,
                 u.SchoolId,
                 u.PhotoUrl,
-                u.Status
+                u.Status,
+                u.BloodType,
+                u.Allergies,
+                u.EmergencyContactName,
+                u.EmergencyContactPhone,
+                u.EmergencyRelationship
             })
             .FirstOrDefaultAsync();
 
@@ -77,6 +87,11 @@ public class StaffInstitutionalProfileService : IStaffInstitutionalProfileServic
             DateOfBirth = user.DateOfBirth,
             CellphonePrimary = user.CellphonePrimary,
             CellphoneSecondary = user.CellphoneSecondary,
+            BloodType = user.BloodType,
+            Allergies = user.Allergies,
+            EmergencyContactName = user.EmergencyContactName,
+            EmergencyContactPhone = user.EmergencyContactPhone,
+            EmergencyRelationship = user.EmergencyRelationship,
             JobTitle = staffRow?.JobTitle,
             Department = staffRow?.Department,
             EmployeeCode = staffRow?.EmployeeCode,
@@ -126,6 +141,11 @@ public class StaffInstitutionalProfileService : IStaffInstitutionalProfileServic
         user.DateOfBirth = model.DateOfBirth;
         user.CellphonePrimary = string.IsNullOrWhiteSpace(model.CellphonePrimary) ? null : model.CellphonePrimary.Trim();
         user.CellphoneSecondary = string.IsNullOrWhiteSpace(model.CellphoneSecondary) ? null : model.CellphoneSecondary.Trim();
+        user.BloodType = NormalizeBloodType(model.BloodType);
+        user.Allergies = string.IsNullOrWhiteSpace(model.Allergies) ? null : model.Allergies.Trim();
+        user.EmergencyContactName = string.IsNullOrWhiteSpace(model.EmergencyContactName) ? null : model.EmergencyContactName.Trim();
+        user.EmergencyContactPhone = string.IsNullOrWhiteSpace(model.EmergencyContactPhone) ? null : model.EmergencyContactPhone.Trim();
+        user.EmergencyRelationship = string.IsNullOrWhiteSpace(model.EmergencyRelationship) ? null : model.EmergencyRelationship.Trim();
         user.UpdatedAt = DateTime.UtcNow;
         user.UpdatedBy = actorId;
 
@@ -192,5 +212,13 @@ public class StaffInstitutionalProfileService : IStaffInstitutionalProfileServic
         if (string.IsNullOrWhiteSpace(status))
             return "—";
         return status.Equals("active", StringComparison.OrdinalIgnoreCase) ? "Activo" : status;
+    }
+
+    private static string? NormalizeBloodType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var t = value.Trim();
+        return AllowedBloodTypes.Contains(t) ? t : null;
     }
 }

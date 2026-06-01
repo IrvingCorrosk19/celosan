@@ -43,6 +43,26 @@ public class StaffInstitutionalProfileViewModel
     [Display(Name = "Teléfono secundario")]
     public string? CellphoneSecondary { get; set; }
 
+    [Display(Name = "Tipo de sangre")]
+    [StringLength(10)]
+    public string? BloodType { get; set; }
+
+    [Display(Name = "Alergias")]
+    [StringLength(500)]
+    public string? Allergies { get; set; }
+
+    [Display(Name = "Contacto de emergencia")]
+    [StringLength(200)]
+    public string? EmergencyContactName { get; set; }
+
+    [Display(Name = "Teléfono emergencia")]
+    [StringLength(30)]
+    public string? EmergencyContactPhone { get; set; }
+
+    [Display(Name = "Relación")]
+    [StringLength(50)]
+    public string? EmergencyRelationship { get; set; }
+
     [StringLength(200)]
     [Display(Name = "Cargo")]
     public string? JobTitle { get; set; }

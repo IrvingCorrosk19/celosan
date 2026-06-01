@@ -11,6 +11,11 @@ public class StaffMemberPublicProfileVm
     public string? SchoolName { get; set; }
     public string? EmployeeCode { get; set; }
     public string? Email { get; set; }
+    public string? BloodType { get; set; }
+    public string? Allergies { get; set; }
+    public string? EmergencyContactName { get; set; }
+    public string? EmergencyContactPhone { get; set; }
+    public string? EmergencyRelationship { get; set; }
     public string CredentialStatusDisplay { get; set; } = "";
     public bool IsAccountActive { get; set; }
 }

@@ -134,6 +134,31 @@
                     <dt>Correo institucional</dt>
                     <dd class="muted" style="word-break:break-all;">@Model.Email</dd>
                 }
+                @if (!string.IsNullOrWhiteSpace(Model.BloodType))
+                {
+                    <dt>Tipo de sangre</dt>
+                    <dd>@Model.BloodType</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.Allergies))
+                {
+                    <dt>Alergias</dt>
+                    <dd>@Model.Allergies</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.EmergencyContactName))
+                {
+                    <dt>Contacto de emergencia</dt>
+                    <dd>@Model.EmergencyContactName</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.EmergencyContactPhone))
+                {
+                    <dt>Teléfono de emergencia</dt>
+                    <dd>@Model.EmergencyContactPhone</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.EmergencyRelationship))
+                {
+                    <dt>Relación (emergencia)</dt>
+                    <dd>@Model.EmergencyRelationship</dd>
+                }
             </dl>
 
             <div class="eduplaner-cta">

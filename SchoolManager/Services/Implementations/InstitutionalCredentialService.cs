@@ -236,7 +236,12 @@ public class InstitutionalCredentialService : IInstitutionalCredentialService
                 u.Role,
                 u.Email,
                 u.SchoolId,
-                u.Status
+                u.Status,
+                u.BloodType,
+                u.Allergies,
+                u.EmergencyContactName,
+                u.EmergencyContactPhone,
+                u.EmergencyRelationship
             })
             .FirstOrDefaultAsync();
 
@@ -286,6 +291,11 @@ public class InstitutionalCredentialService : IInstitutionalCredentialService
             SchoolName = schoolName,
             EmployeeCode = string.IsNullOrWhiteSpace(profile?.EmployeeCode) ? null : profile.EmployeeCode,
             Email = string.IsNullOrWhiteSpace(user.Email) ? null : user.Email,
+            BloodType = string.IsNullOrWhiteSpace(user.BloodType) ? null : user.BloodType,
+            Allergies = string.IsNullOrWhiteSpace(user.Allergies) ? null : user.Allergies,
+            EmergencyContactName = string.IsNullOrWhiteSpace(user.EmergencyContactName) ? null : user.EmergencyContactName,
+            EmergencyContactPhone = string.IsNullOrWhiteSpace(user.EmergencyContactPhone) ? null : user.EmergencyContactPhone,
+            EmergencyRelationship = string.IsNullOrWhiteSpace(user.EmergencyRelationship) ? null : user.EmergencyRelationship,
             CredentialStatusDisplay = credentialStatus,
             IsAccountActive = isActive
         };

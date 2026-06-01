@@ -73,6 +73,11 @@ public class StaffInstitutionalProfileController : Controller
                 refreshed.DateOfBirth = model.DateOfBirth;
                 refreshed.CellphonePrimary = model.CellphonePrimary;
                 refreshed.CellphoneSecondary = model.CellphoneSecondary;
+                refreshed.BloodType = model.BloodType;
+                refreshed.Allergies = model.Allergies;
+                refreshed.EmergencyContactName = model.EmergencyContactName;
+                refreshed.EmergencyContactPhone = model.EmergencyContactPhone;
+                refreshed.EmergencyRelationship = model.EmergencyRelationship;
                 refreshed.JobTitle = model.JobTitle;
                 refreshed.Department = model.Department;
                 refreshed.EmployeeCode = model.EmployeeCode;
