@@ -22,6 +22,7 @@
         "inspector" => "Inspector",
         _ => userRole
     };
+    var showStaffInstitutionalProfileMenu = SchoolManager.Helpers.StaffInstitutionalProfileAccess.IsAllowedRole(userRole);
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -232,6 +233,14 @@
                                 <a href="@Url.Action("MySchedule", "StudentSchedule")" class="nav-link">
                                 <i class="nav-icon fas fa-calendar-alt"></i>
                                 <p>Mi horario</p>
+                            </a>
+                        </li>
+                        }
+                        @if (showStaffInstitutionalProfileMenu) {
+                        <li class="nav-item">
+                            <a href="@Url.Action("Index", "StaffInstitutionalProfile")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "StaffInstitutionalProfile" ? "active" : "")">
+                                <i class="nav-icon fas fa-id-badge"></i>
+                                <p>Mi perfil institucional</p>
                             </a>
                         </li>
                         }

@@ -1,0 +1,366 @@
+@model SchoolManager.ViewModels.StaffInstitutionalProfileViewModel
+@{
+    ViewData["Title"] = "Mi perfil institucional";
+    Layout = "_AdminLayout";
+}
+
+<style>
+    .profile-header {
+        background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+    .profile-header h2 { margin: 0; font-size: 2rem; font-weight: 700; }
+    .profile-card {
+        border-radius: 1rem;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08);
+        border: none;
+    }
+    .profile-card .card-header {
+        background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+        color: white;
+        border-radius: 1rem 1rem 0 0 !important;
+        font-weight: 600;
+        font-size: 1.2rem;
+        padding: 1.25rem;
+    }
+    .info-section {
+        background: #f8fafc;
+        border-left: 4px solid #0f766e;
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+    .info-section h5 { color: #1e293b; font-weight: 600; margin-bottom: 1rem; }
+    .info-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0;
+        color: #475569;
+    }
+    .info-item i { width: 30px; color: #0f766e; }
+    .btn-primary {
+        background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+        border: none;
+        padding: 0.75rem 2rem;
+        font-weight: 600;
+        border-radius: 0.5rem;
+    }
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #115e59 0%, #134e4a 100%);
+        transform: translateY(-1px);
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="profile-header">
+        <div class="d-flex align-items-center gap-3">
+            <i class="bi bi-person-badge" style="font-size: 3rem;"></i>
+            <div>
+                <h2>Mi perfil institucional</h2>
+                <p class="mb-0 opacity-90">Datos para tu credencial institucional de personal</p>
+            </div>
+        </div>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="info-section">
+                <h5><i class="bi bi-building me-2"></i>Institución</h5>
+                <div class="info-item">
+                    <i class="bi bi-building"></i>
+                    <div>
+                        <small class="text-muted d-block">Escuela</small>
+                        <strong>@(Model.SchoolName ?? "No asignada")</strong>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-person-badge"></i>
+                    <div>
+                        <small class="text-muted d-block">Rol</small>
+                        <strong>@(Model.RoleDisplay ?? "—")</strong>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-toggle-on"></i>
+                    <div>
+                        <small class="text-muted d-block">Estado</small>
+                        <strong>@(Model.Status ?? "—")</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h5><i class="bi bi-briefcase me-2"></i>Datos laborales (credencial)</h5>
+                <div class="info-item">
+                    <i class="bi bi-briefcase"></i>
+                    <div>
+                        <small class="text-muted d-block">Cargo</small>
+                        <strong>@(string.IsNullOrWhiteSpace(Model.JobTitle) ? "—" : Model.JobTitle)</strong>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-diagram-3"></i>
+                    <div>
+                        <small class="text-muted d-block">Departamento</small>
+                        <strong>@(string.IsNullOrWhiteSpace(Model.Department) ? "—" : Model.Department)</strong>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-hash"></i>
+                    <div>
+                        <small class="text-muted d-block">Código institucional</small>
+                        <strong>@(string.IsNullOrWhiteSpace(Model.EmployeeCode) ? "—" : Model.EmployeeCode)</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h5><i class="bi bi-camera me-2"></i>Mi foto</h5>
+                <p class="text-muted small mb-2">Se usará en tu credencial institucional. JPEG o PNG; máx. de subida 12 MB.</p>
+                <div class="d-flex align-items-start gap-3">
+                    <img id="photoPreview" src="@UserPhotoLinks.Href(Model.PhotoUrl)" alt="Foto" class="rounded shadow-sm" style="width:120px;height:120px;object-fit:cover;" />
+                    <div class="flex-grow-1">
+                        <form asp-action="UpdatePhoto" method="post" enctype="multipart/form-data" class="mb-2">
+                            @Html.AntiForgeryToken()
+                            <input type="file" name="photo" id="photoInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png" class="form-control form-control-sm mb-1" />
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>Subir foto</button>
+                        </form>
+                        @if (!string.IsNullOrEmpty(Model.PhotoUrl))
+                        {
+                            <form asp-action="RemovePhoto" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('¿Eliminar tu foto?');"><i class="bi bi-trash me-1"></i>Eliminar</button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h5><i class="bi bi-id-badge me-2"></i>Credencial institucional</h5>
+                @if (Model.CanOpenInstitutionalCredentialUi && Model.HasSchoolAssigned)
+                {
+                    <a href="/InstitutionalCredential/ui/generate/@Model.Id" class="btn btn-primary btn-sm w-100 mb-2">
+                        <i class="bi bi-id-badge me-1"></i> Ver / generar credencial
+                    </a>
+                }
+                else if (Model.CanOpenInstitutionalCredentialUi && !Model.HasSchoolAssigned)
+                {
+                    <div class="alert alert-warning small mb-0">Debes tener una escuela asignada para emitir la credencial.</div>
+                }
+                else
+                {
+                    <p class="small text-muted mb-0">
+                        Tu perfil institucional está listo. La emisión del carnet debe ser realizada por un usuario autorizado.
+                    </p>
+                }
+            </div>
+
+            <div class="alert alert-info small">
+                <i class="bi bi-info-circle me-2"></i>
+                Para cambiar tu contraseña, usa <strong>Cambiar Contraseña</strong> en el menú.
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card profile-card">
+                <div class="card-header">
+                    <i class="bi bi-pencil-square me-2"></i>Editar perfil
+                </div>
+                <div class="card-body">
+                    <form asp-action="Update" method="post" id="profileForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" asp-for="Id" />
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="Name" class="form-label"></label>
+                                <input asp-for="Name" class="form-control" />
+                                <span asp-validation-for="Name" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="LastName" class="form-label"></label>
+                                <input asp-for="LastName" class="form-control" />
+                                <span asp-validation-for="LastName" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Email" class="form-label"></label>
+                            <input asp-for="Email" type="email" class="form-control" id="emailInput" />
+                            <span asp-validation-for="Email" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="DocumentId" class="form-label"></label>
+                            <input asp-for="DocumentId" class="form-control" id="documentInput" />
+                            <span asp-validation-for="DocumentId" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="DateOfBirth" class="form-label"></label>
+                            <input asp-for="DateOfBirth" type="date" class="form-control" />
+                            <span asp-validation-for="DateOfBirth" class="text-danger"></span>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="CellphonePrimary" class="form-label"></label>
+                                <input asp-for="CellphonePrimary" type="tel" class="form-control" />
+                                <span asp-validation-for="CellphonePrimary" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="CellphoneSecondary" class="form-label"></label>
+                                <input asp-for="CellphoneSecondary" type="tel" class="form-control" />
+                                <span asp-validation-for="CellphoneSecondary" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <hr class="my-3" />
+                        <h6 class="text-muted mb-3"><i class="bi bi-briefcase me-1"></i>Información laboral (credencial)</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="JobTitle" class="form-label"></label>
+                                <input asp-for="JobTitle" class="form-control" maxlength="200" placeholder="Ej. Docente de Matemáticas" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="Department" class="form-label"></label>
+                                <input asp-for="Department" class="form-control" maxlength="200" placeholder="Ej. Académico" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label asp-for="EmployeeCode" class="form-label"></label>
+                                <input asp-for="EmployeeCode" class="form-control" maxlength="80" placeholder="Código interno" />
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 mt-4">
+                            <a href="@Url.Action("Index", "Home")" class="btn btn-secondary">Cancelar</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-1"></i> Guardar cambios
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        $(document).ready(function() {
+            var atSymbol = String.fromCharCode(64);
+            let emailTimeout;
+            $('#emailInput').on('input', function() {
+                clearTimeout(emailTimeout);
+                const email = $(this).val();
+                const userId = $('#Id').val();
+                if (email && email.indexOf(atSymbol) > -1) {
+                    emailTimeout = setTimeout(function() {
+                        $.get('@Url.Action("CheckEmailAvailability")', { email: email, userId: userId }, function(data) {
+                            if (!data.available) {
+                                $('#emailInput').addClass('is-invalid');
+                                if ($('#emailInput').next('.invalid-feedback').length === 0) {
+                                    $('#emailInput').after('<div class="invalid-feedback">Este correo ya está en uso.</div>');
+                                }
+                            } else {
+                                $('#emailInput').removeClass('is-invalid');
+                                $('#emailInput').next('.invalid-feedback').remove();
+                            }
+                        });
+                    }, 500);
+                }
+            });
+
+            let documentTimeout;
+            $('#documentInput').on('input', function() {
+                clearTimeout(documentTimeout);
+                const documentId = $(this).val();
+                const userId = $('#Id').val();
+                if (documentId && documentId.length > 3) {
+                    documentTimeout = setTimeout(function() {
+                        $.get('@Url.Action("CheckDocumentAvailability")', { documentId: documentId, userId: userId }, function(data) {
+                            if (!data.available) {
+                                $('#documentInput').addClass('is-invalid');
+                                if ($('#documentInput').next('.invalid-feedback').length === 0) {
+                                    $('#documentInput').after('<div class="invalid-feedback">Este documento ya está en uso.</div>');
+                                }
+                            } else {
+                                $('#documentInput').removeClass('is-invalid');
+                                $('#documentInput').next('.invalid-feedback').remove();
+                            }
+                        });
+                    }, 500);
+                }
+            });
+
+            $('#photoInput').on('change', function() {
+                var file = this.files && this.files[0];
+                if (!file) return;
+                if (file.size > 12 * 1024 * 1024) {
+                    if (window.SchoolUi) {
+                        window.SchoolUi.warning('Archivo demasiado grande', 'Elija una imagen de hasta 12 MB.');
+                    } else alert('El archivo no debe superar 12 MB.');
+                    this.value = '';
+                    return;
+                }
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    $('#photoPreview').attr('src', e.target.result);
+                };
+                reader.readAsDataURL(file);
+            });
+
+            $('#profileForm').on('submit', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    title: '¿Guardar cambios?',
+                    text: '¿Actualizar tu perfil institucional?',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#0f766e',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Sí, guardar',
+                    cancelButtonText: 'Cancelar'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        e.currentTarget.submit();
+                    }
+                });
+            });
+        });
+    </script>
+    @if (TempData["Success"] != null)
+    {
+        <script>
+            $(document).ready(function() {
+                Swal.fire({
+                    title: '¡Éxito!',
+                    text: '@TempData["Success"]',
+                    icon: 'success',
+                    confirmButtonColor: '#0f766e'
+                });
+            });
+        </script>
+    }
+}
