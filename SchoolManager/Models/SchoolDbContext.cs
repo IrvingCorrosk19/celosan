@@ -83,6 +83,12 @@ public partial class SchoolDbContext : DbContext
 
     public virtual DbSet<StudentIdCard> StudentIdCards { get; set; }
 
+    public virtual DbSet<StaffInstitutionalProfile> StaffInstitutionalProfiles { get; set; }
+
+    public virtual DbSet<InstitutionalCredentialCard> InstitutionalCredentialCards { get; set; }
+
+    public virtual DbSet<StaffQrToken> StaffQrTokens { get; set; }
+
     public virtual DbSet<StudentPaymentAccess> StudentPaymentAccesses { get; set; }
 
     public virtual DbSet<StudentQrToken> StudentQrTokens { get; set; }
@@ -2986,6 +2992,56 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.Summary).HasMaxLength(500).HasColumnName("summary");
             entity.HasOne(d => d.TeacherWorkPlan).WithMany().HasForeignKey(d => d.TeacherWorkPlanId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("teacher_work_plan_review_logs_plan_id_fkey");
             entity.HasOne(d => d.PerformedByUser).WithMany().HasForeignKey(d => d.PerformedByUserId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("teacher_work_plan_review_logs_user_fkey");
+        });
+
+        modelBuilder.Entity<StaffInstitutionalProfile>(entity =>
+        {
+            entity.HasKey(e => e.UserId).HasName("staff_institutional_profiles_pkey");
+            entity.ToTable("staff_institutional_profiles");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.JobTitle).HasMaxLength(200).HasColumnName("job_title");
+            entity.Property(e => e.Department).HasMaxLength(200).HasColumnName("department");
+            entity.Property(e => e.EmployeeCode).HasMaxLength(80).HasColumnName("employee_code");
+            entity.HasOne(d => d.User).WithMany().HasForeignKey(d => d.UserId)
+                .HasConstraintName("staff_institutional_profiles_user_id_fkey")
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<InstitutionalCredentialCard>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("institutional_credential_cards_pkey");
+            entity.ToTable("institutional_credential_cards");
+            entity.HasIndex(e => e.CardNumber, "IX_institutional_credential_cards_card_number").IsUnique();
+            entity.HasIndex(e => e.UserId, "IX_institutional_credential_cards_user_id");
+            entity.HasIndex(e => new { e.UserId, e.Status }, "IX_institutional_credential_cards_user_id_status");
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.CardNumber).IsRequired().HasMaxLength(50).HasColumnName("card_number");
+            entity.Property(e => e.IssuedAt).HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("timestamp with time zone").HasColumnName("issued_at");
+            entity.Property(e => e.ExpiresAt).HasColumnType("timestamp with time zone").HasColumnName("expires_at");
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20).HasDefaultValue("active").HasColumnName("status");
+            entity.Property(e => e.IsPrinted).HasDefaultValue(false).HasColumnName("is_printed");
+            entity.Property(e => e.PrintedAt).HasColumnType("timestamp with time zone").HasColumnName("printed_at");
+            entity.HasOne(d => d.User).WithMany().HasForeignKey(d => d.UserId)
+                .HasConstraintName("institutional_credential_cards_user_id_fkey")
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StaffQrToken>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("staff_qr_tokens_pkey");
+            entity.ToTable("staff_qr_tokens");
+            entity.HasIndex(e => e.Token, "IX_staff_qr_tokens_token").IsUnique();
+            entity.HasIndex(e => e.UserId, "IX_staff_qr_tokens_user_id");
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Token).IsRequired().HasMaxLength(500).HasColumnName("token");
+            entity.Property(e => e.ExpiresAt).HasColumnType("timestamp with time zone").HasColumnName("expires_at");
+            entity.Property(e => e.IsRevoked).HasDefaultValue(false).HasColumnName("is_revoked");
+            entity.HasOne(d => d.User).WithMany().HasForeignKey(d => d.UserId)
+                .HasConstraintName("staff_qr_tokens_user_id_fkey")
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

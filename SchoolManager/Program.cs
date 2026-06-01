@@ -251,6 +251,8 @@ builder.Services.Configure<StudentIdCardPdfPrintOptions>(
     builder.Configuration.GetSection(StudentIdCardPdfPrintOptions.SectionName));
 builder.Services.Configure<StudentIdCardOptions>(
     builder.Configuration.GetSection(StudentIdCardOptions.SectionName));
+builder.Services.Configure<InstitutionalCredentialOptions>(
+    builder.Configuration.GetSection(InstitutionalCredentialOptions.SectionName));
 builder.Services.AddSingleton<SchoolManager.Services.Security.IQrSignatureService, SchoolManager.Services.Security.QrSignatureService>();
 
 // SEG-2: Rate limiting para el endpoint público de escaneo QR.
@@ -271,6 +273,11 @@ builder.Services.AddScoped<IStudentIdCardService, StudentIdCardService>();
 builder.Services.AddScoped<IStudentIdCardImageService, StudentIdCardImageService>();
 builder.Services.AddScoped<IStudentIdCardPdfService, StudentIdCardPdfService>();
 builder.Services.AddScoped<IStudentIdCardHtmlCaptureService, StudentIdCardHtmlCaptureService>();
+builder.Services.AddScoped<IStaffInstitutionalProfileService, StaffInstitutionalProfileService>();
+builder.Services.AddScoped<IInstitutionalCredentialImageService, InstitutionalCredentialImageService>();
+builder.Services.AddScoped<IInstitutionalCredentialPdfService, InstitutionalCredentialPdfService>();
+builder.Services.AddScoped<IInstitutionalCredentialHtmlCaptureService, InstitutionalCredentialHtmlCaptureService>();
+builder.Services.AddScoped<IInstitutionalCredentialService, InstitutionalCredentialService>();
 builder.Services.AddScoped<ITeacherWorkPlanService, TeacherWorkPlanService>();
 builder.Services.AddScoped<ITeacherWorkPlanPdfService, TeacherWorkPlanPdfService>();
 builder.Services.AddScoped<IDirectorWorkPlanService, DirectorWorkPlanService>();

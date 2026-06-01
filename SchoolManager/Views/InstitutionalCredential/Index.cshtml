@@ -1,0 +1,588 @@
+@{
+    ViewData["Title"] = "Credencial institucional";
+    Layout = "_SuperAdminLayout";
+}
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+<link rel="stylesheet" href="~/css/superadmin-staff-pages.css" asp-append-version="true" />
+
+<style>
+    .print-loading-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 3000;
+        background: rgba(15, 23, 42, 0.42);
+        backdrop-filter: blur(2px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .print-loading-card {
+        width: min(90vw, 420px);
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.2);
+        padding: 1.25rem 1.4rem;
+        text-align: center;
+    }
+
+    .print-loading-spinner {
+        width: 50px;
+        height: 50px;
+        margin: 0 auto 0.85rem auto;
+        border-radius: 50%;
+        border: 4px solid #dbeafe;
+        border-top-color: #2563eb;
+        animation: spin-loading 0.9s linear infinite;
+    }
+
+    @@keyframes spin-loading {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+<div class="sm-staff-page">
+    @Html.AntiForgeryToken()
+
+    <div class="sm-page-hero d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <h2><i class="fas fa-id-badge text-primary me-2"></i>Credencial institucional</h2>
+            <p class="sm-page-subtitle">Emisión, vista previa, impresión PDF y códigos QR para personal institucional.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/SuperAdmin/StaffDirectory" class="btn btn-outline-primary btn-sm shadow-sm">
+                <i class="fas fa-users me-1"></i> Directorio de personal
+            </a>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="sm-stat-pill" id="recordCountPill">
+            <i class="fas fa-list-ol"></i>
+            <span id="recordCountLabel">Cargando…</span>
+        </span>
+    </div>
+
+    <div class="card sm-filter-card shadow-sm mb-3">
+        <div class="card-header">
+            <h3 class="card-title mb-0"><i class="fas fa-filter me-2 text-primary"></i>Filtros</h3>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="filterSchool" class="form-label">Escuela</label>
+                    <select id="filterSchool" class="form-select">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterRole" class="form-label">Rol</label>
+                    <select id="filterRole" class="form-select">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterCredentialStatus" class="form-label">Estado credencial</label>
+                    <select id="filterCredentialStatus" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="active">Activa</option>
+                        <option value="expired">Expirada</option>
+                        <option value="revoked">Revocada</option>
+                        <option value="none">No generada</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="filterPrinted" class="form-label">Estado impresión</label>
+                    <select id="filterPrinted" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="printed">Impresos</option>
+                        <option value="not_printed">No impresos</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="filterSearch" class="form-label">Buscar</label>
+                    <input type="text" id="filterSearch" class="form-control"
+                           placeholder="Nombre, apellido o correo" autocomplete="off" />
+                </div>
+                <div class="col-md-4">
+                    <label for="filterDocumentId" class="form-label">Documento</label>
+                    <input type="text" id="filterDocumentId" class="form-control"
+                           placeholder="Cédula (contiene)" autocomplete="off" />
+                </div>
+                <div class="col-md-4 d-flex align-items-end gap-2">
+                    <button type="button" id="btnApplyFilters" class="btn btn-primary">
+                        <i class="fas fa-search me-1"></i> Aplicar filtros
+                    </button>
+                    <button type="button" id="btnClearFilters" class="btn btn-outline-secondary">
+                        <i class="fas fa-undo me-1"></i> Limpiar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sm-toolbar d-flex flex-wrap justify-content-end align-items-center gap-2 mb-3">
+        <div class="input-group input-group-sm" style="max-width: 280px;">
+            <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+            <input type="text" class="form-control" id="tableQuickFilter" placeholder="Buscar en la tabla…" autocomplete="off" />
+        </div>
+    </div>
+
+    <div class="card sm-table-card">
+        <div class="card-header">
+            <span class="fw-semibold text-secondary small text-uppercase" style="letter-spacing:.04em;">
+                <i class="fas fa-table me-1"></i> Personal con credencial
+            </span>
+        </div>
+        <div class="sm-instcred-panel p-0 border-0">
+            <table id="staffCredTable" class="table table-hover mb-0 w-100">
+                <thead>
+                    <tr>
+                        <th class="text-center">Foto</th>
+                        <th>Nombre completo</th>
+                        <th>Documento</th>
+                        <th>Correo</th>
+                        <th>Rol</th>
+                        <th>Cargo</th>
+                        <th>Departamento</th>
+                        <th>Código institucional</th>
+                        <th>Nº credencial</th>
+                        <th>Emisión</th>
+                        <th>Vencimiento</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</div>
+
+<div id="printLoadingOverlay" class="print-loading-overlay d-none" aria-live="polite" aria-busy="true">
+    <div class="print-loading-card">
+        <div class="print-loading-spinner"></div>
+        <h5 class="mb-1">Generando PDF…</h5>
+        <p id="printLoadingMessage" class="mb-0 text-muted small">Por favor espere.</p>
+    </div>
+</div>
+
+<div class="modal fade" id="qrPreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title"><i class="fas fa-qrcode me-2"></i>QR credencial</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p class="small text-muted mb-2" id="qrCardNumberLabel"></p>
+                <img id="qrPreviewImg" src="" alt="QR" class="img-fluid border rounded" style="max-width:200px;" />
+                <p class="small text-muted mt-2 mb-0 text-break" id="qrTokenLabel"></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="statusDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title"><i class="fas fa-info-circle me-2"></i>Estado de credencial</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" id="statusDetailBody"></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+$(function () {
+    const token = $('input[name="__RequestVerificationToken"]').val();
+    const qrModal = new bootstrap.Modal(document.getElementById('qrPreviewModal'));
+    const statusModal = new bootstrap.Modal(document.getElementById('statusDetailModal'));
+
+    function formatDate(iso) {
+        if (!iso) return '—';
+        try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '—';
+            return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch { return '—'; }
+    }
+
+    function escapeHtml(t) {
+        if (!t) return '';
+        return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function credentialStatusBadge(status) {
+        const map = {
+            active: '<span class="badge rounded-pill bg-success"><i class="fas fa-check-circle me-1"></i>Activa</span>',
+            expired: '<span class="badge rounded-pill bg-warning text-dark"><i class="fas fa-hourglass-end me-1"></i>Expirada</span>',
+            revoked: '<span class="badge rounded-pill bg-danger"><i class="fas fa-ban me-1"></i>Revocada</span>',
+            none: '<span class="badge rounded-pill bg-secondary"><i class="fas fa-minus-circle me-1"></i>No generada</span>'
+        };
+        return map[status] || map.none;
+    }
+
+    function printBadge(isPrinted) {
+        return isPrinted
+            ? '<span class="badge rounded-pill bg-info text-dark"><i class="fas fa-print me-1"></i>Impreso</span>'
+            : '<span class="badge rounded-pill bg-light text-muted border">Sin imprimir</span>';
+    }
+
+    function currentFilterParams() {
+        return {
+            schoolId: $('#filterSchool').val() || '',
+            role: $('#filterRole').val() || '',
+            search: ($('#filterSearch').val() || '').trim(),
+            documentId: ($('#filterDocumentId').val() || '').trim(),
+            credentialStatus: $('#filterCredentialStatus').val() || '',
+            printed: $('#filterPrinted').val() || ''
+        };
+    }
+
+    function showPrintLoading(msg) {
+        $('#printLoadingMessage').text(msg || 'Por favor espere.');
+        $('#printLoadingOverlay').removeClass('d-none');
+    }
+
+    function hidePrintLoading() {
+        $('#printLoadingOverlay').addClass('d-none');
+    }
+
+    const table = $('#staffCredTable').DataTable({
+        ajax: {
+            url: '/InstitutionalCredential/api/list-json',
+            data: function (d) {
+                const p = currentFilterParams();
+                d.schoolId = p.schoolId;
+                d.role = p.role;
+                d.search = p.search;
+                d.documentId = p.documentId;
+                d.credentialStatus = p.credentialStatus;
+                d.printed = p.printed;
+            },
+            dataSrc: function (json) {
+                const rows = (json && json.data) ? json.data : [];
+                const n = rows.length;
+                $('#recordCountLabel').text(n === 0 ? 'Sin registros' : (n + ' en listado'));
+                return rows;
+            },
+            xhrFields: { withCredentials: true },
+            error: function (xhr, err, msg) {
+                console.error('[InstitutionalCredential] Ajax error:', xhr.status, msg);
+                $('#recordCountLabel').text('Error al cargar datos');
+                if (window.SchoolUi) {
+                    window.SchoolUi.error('Error de carga', 'No se pudo obtener el listado de personal.');
+                }
+            }
+        },
+        columns: [
+            {
+                data: 'photoUrl',
+                orderable: false,
+                searchable: false,
+                className: 'text-center',
+                width: '52px',
+                render: function (data) {
+                    const src = data
+                        ? '/File/GetUserPhoto?photoUrl=' + encodeURIComponent(data) + '&variant=thumb'
+                        : '/File/GetUserPhoto';
+                    return '<img src="' + src + '" class="sm-person-thumb" width="46" height="46" alt="" loading="lazy" />';
+                }
+            },
+            {
+                data: 'fullName',
+                render: function (data) {
+                    return '<span class="sm-person-name">' + escapeHtml(data || '') + '</span>';
+                }
+            },
+            {
+                data: 'documentId',
+                defaultContent: '—',
+                render: function (data) {
+                    const t = (data || '').trim();
+                    return t ? escapeHtml(t) : '<span class="text-muted">—</span>';
+                }
+            },
+            {
+                data: 'email',
+                render: function (data) {
+                    return data ? '<small>' + escapeHtml(data) + '</small>' : '<span class="text-muted">—</span>';
+                }
+            },
+            {
+                data: 'roleDisplay',
+                render: function (data) {
+                    return '<span class="badge rounded-pill sm-badge-role">' + escapeHtml(data || '') + '</span>';
+                }
+            },
+            {
+                data: 'jobTitle',
+                defaultContent: '—',
+                render: function (data) {
+                    const t = (data || '').trim();
+                    return t ? escapeHtml(t) : '<span class="text-muted">—</span>';
+                }
+            },
+            {
+                data: 'department',
+                defaultContent: '—',
+                render: function (data) {
+                    const t = (data || '').trim();
+                    return t ? escapeHtml(t) : '<span class="text-muted">—</span>';
+                }
+            },
+            {
+                data: 'employeeCode',
+                defaultContent: '—',
+                render: function (data) {
+                    const t = (data || '').trim();
+                    return t ? '<span class="sm-code-chip">' + escapeHtml(t) + '</span>' : '<span class="text-muted">—</span>';
+                }
+            },
+            {
+                data: 'cardNumber',
+                defaultContent: '—',
+                render: function (data) {
+                    const t = (data || '').trim();
+                    return t ? '<span class="sm-code-chip">' + escapeHtml(t) + '</span>' : '<span class="text-muted">—</span>';
+                }
+            },
+            {
+                data: 'issuedAt',
+                render: function (data) { return formatDate(data); }
+            },
+            {
+                data: 'expiresAt',
+                render: function (data) { return formatDate(data); }
+            },
+            {
+                data: null,
+                orderable: false,
+                searchable: false,
+                render: function (data, type, row) {
+                    return '<div class="sm-cred-status-stack d-flex flex-column align-items-start gap-1">' +
+                        credentialStatusBadge(row.credentialStatus) +
+                        printBadge(row.isPrinted) +
+                        '</div>';
+                }
+            },
+            {
+                data: 'id',
+                orderable: false,
+                searchable: false,
+                render: function (data, type, row) {
+                    const hasCard = row.credentialStatus === 'active' || row.credentialStatus === 'expired';
+                    const isRegen = hasCard;
+                    const genTitle = isRegen ? 'Regenerar credencial' : 'Generar credencial';
+                    const genIcon = isRegen ? 'fa-sync-alt' : 'fa-plus-circle';
+                    const qrDisabled = !(hasCard && row.credentialStatus === 'active');
+                    return `
+                        <div class="btn-group btn-group-sm sm-action-group" role="group">
+                            <a href="/InstitutionalCredential/ui/generate/${data}" class="btn btn-primary" title="Ver credencial">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <button type="button" class="btn btn-outline-primary btn-generate" data-user-id="${data}" data-regenerate="${isRegen}" title="${genTitle}">
+                                <i class="fas ${genIcon}"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-dark btn-print" data-user-id="${data}" ${hasCard ? '' : 'disabled'} title="Imprimir PDF">
+                                <i class="fas fa-print"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-info btn-qr" data-user-id="${data}" ${qrDisabled ? 'disabled' : ''} title="Ver QR">
+                                <i class="fas fa-qrcode"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-status" data-user-id="${data}" title="Detalle de estado">
+                                <i class="fas fa-info-circle"></i>
+                            </button>
+                        </div>`;
+                }
+            }
+        ],
+        language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json' },
+        responsive: true,
+        pageLength: 25,
+        order: [[1, 'asc']],
+        dom: '<"row align-items-center mb-2 px-2"<"col-sm-6"l><"col-sm-6 text-sm-end"i>>rtip'
+    });
+
+    let searchTimer = null;
+    function reloadTable() {
+        table.ajax.reload();
+    }
+
+    $('#btnApplyFilters').on('click', reloadTable);
+    $('#filterSchool, #filterRole, #filterCredentialStatus, #filterPrinted').on('change', reloadTable);
+
+    $('#filterSearch, #filterDocumentId').on('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(reloadTable, 400);
+    });
+
+    $('#btnClearFilters').on('click', function () {
+        $('#filterSchool, #filterRole, #filterCredentialStatus, #filterPrinted').val('');
+        $('#filterSearch, #filterDocumentId, #tableQuickFilter').val('');
+        reloadTable();
+    });
+
+    let quickTimer = null;
+    $('#tableQuickFilter').on('input', function () {
+        clearTimeout(quickTimer);
+        quickTimer = setTimeout(function () {
+            table.search($('#tableQuickFilter').val() || '').draw();
+        }, 200);
+    });
+
+    function loadFilters() {
+        $.ajax({
+            url: '/InstitutionalCredential/api/list-filters',
+            type: 'GET',
+            xhrFields: { withCredentials: true },
+            success: function (res) {
+                const schoolSel = $('#filterSchool');
+                const roleSel = $('#filterRole');
+                (res.schools || []).forEach(function (s) {
+                    schoolSel.append(new Option(s.name, s.id));
+                });
+                (res.roles || []).forEach(function (r) {
+                    roleSel.append(new Option(r.label, r.value));
+                });
+            }
+        });
+    }
+
+    $(document).on('click', '.btn-generate', async function () {
+        const btn = $(this);
+        const userId = btn.data('user-id');
+        const isRegen = String(btn.data('regenerate')) === 'true';
+        let ok = true;
+        if (isRegen && window.SchoolUi) {
+            const c = await window.SchoolUi.confirmWarning(
+                '¿Regenerar credencial?',
+                'Se revocará la credencial y el QR actuales y se emitirán nuevos.');
+            ok = c.isConfirmed;
+        } else if (isRegen) {
+            ok = confirm('¿Regenerar credencial? Se revocará la actual.');
+        }
+        if (!ok) return;
+
+        btn.prop('disabled', true);
+        const prev = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i>');
+        try {
+            const res = await fetch('/InstitutionalCredential/api/generate/' + userId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
+                },
+                credentials: 'same-origin'
+            });
+            const data = await res.json().catch(function () { return null; });
+            if (!res.ok) {
+                const m = (data && data.message) ? data.message : 'No se pudo generar la credencial.';
+                if (window.SchoolUi) window.SchoolUi.error('Error', m);
+                else alert(m);
+                return;
+            }
+            if (window.SchoolUi) window.SchoolUi.toastSuccess('Credencial generada correctamente');
+            window.location.href = '/InstitutionalCredential/ui/generate/' + userId;
+        } catch {
+            if (window.SchoolUi) window.SchoolUi.error('Sin conexión', 'No se pudo completar la operación.');
+            else alert('Error de red.');
+        } finally {
+            btn.prop('disabled', false);
+            btn.html(prev);
+        }
+    });
+
+    $(document).on('click', '.btn-print', async function () {
+        const userId = $(this).data('user-id');
+        showPrintLoading('Generando PDF de credencial…');
+        try {
+            const res = await fetch('/InstitutionalCredential/ui/print/' + userId, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            const ct = (res.headers.get('content-type') || '').toLowerCase();
+            if (!res.ok || !ct.includes('pdf')) {
+                const text = await res.text();
+                const m = text || 'No se pudo generar el PDF.';
+                if (window.SchoolUi) window.SchoolUi.error('Impresión', m.length > 400 ? m.substring(0, 400) + '…' : m);
+                else alert(m);
+                return;
+            }
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'credencial-institucional-' + userId + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            table.ajax.reload(null, false);
+            if (window.SchoolUi) window.SchoolUi.toastSuccess('PDF descargado');
+        } catch {
+            if (window.SchoolUi) window.SchoolUi.error('Sin conexión', 'No se pudo imprimir la credencial.');
+            else alert('Error de red.');
+        } finally {
+            hidePrintLoading();
+        }
+    });
+
+    $(document).on('click', '.btn-qr', async function () {
+        const userId = $(this).data('user-id');
+        const btn = $(this);
+        btn.prop('disabled', true);
+        try {
+            const res = await fetch('/InstitutionalCredential/api/qr-preview/' + userId, { credentials: 'same-origin' });
+            const data = await res.json();
+            if (!data.success) {
+                const m = data.message || 'QR no disponible.';
+                if (window.SchoolUi) window.SchoolUi.warning('QR', m);
+                else alert(m);
+                return;
+            }
+            $('#qrCardNumberLabel').text('Credencial: ' + (data.cardNumber || '—'));
+            $('#qrPreviewImg').attr('src', data.qrImageDataUrl || '');
+            $('#qrTokenLabel').text(data.qrToken ? ('Token: ' + data.qrToken) : '');
+            qrModal.show();
+        } catch {
+            if (window.SchoolUi) window.SchoolUi.error('Sin conexión', 'No se pudo cargar el QR.');
+            else alert('Error de red.');
+        } finally {
+            btn.prop('disabled', false);
+        }
+    });
+
+    $(document).on('click', '.btn-status', function () {
+        const tr = $(this).closest('tr');
+        const row = table.row(tr).data();
+        if (!row) return;
+        const html = `
+            <dl class="row mb-0 small">
+                <dt class="col-sm-4">Personal</dt><dd class="col-sm-8">${escapeHtml(row.fullName)}</dd>
+                <dt class="col-sm-4">Estado</dt><dd class="col-sm-8">${credentialStatusBadge(row.credentialStatus)}</dd>
+                <dt class="col-sm-4">Nº credencial</dt><dd class="col-sm-8">${escapeHtml(row.cardNumber || '—')}</dd>
+                <dt class="col-sm-4">Emisión</dt><dd class="col-sm-8">${formatDate(row.issuedAt)}</dd>
+                <dt class="col-sm-4">Vencimiento</dt><dd class="col-sm-8">${formatDate(row.expiresAt)}</dd>
+                <dt class="col-sm-4">Impresión</dt><dd class="col-sm-8">${row.isPrinted ? 'Impreso' : 'Pendiente de imprimir'}</dd>
+            </dl>`;
+        $('#statusDetailBody').html(html);
+        statusModal.show();
+    });
+
+    loadFilters();
+});
+</script>
+}

@@ -1,0 +1,202 @@
+@model SchoolManager.ViewModels.InstitutionalCredentialGenerateViewModel
+@{
+    Layout = "_SuperAdminLayout";
+    ViewData["Title"] = Model.UserNotFound ? "Credencial" : (Model.HasActiveCard ? "Credencial — " + Model.Card!.FullName : "Generar credencial");
+    var primary = Model.PrimaryColor;
+    var bg = Model.BackgroundColor;
+    var text = Model.TextColor;
+    var borderColor = "#e5e7eb";
+    var showBackFace = Model.ShowQr;
+    var hasLogo = !string.IsNullOrWhiteSpace(Model.SchoolLogoUrl);
+    var showWm = Model.ShowWatermark && hasLogo;
+}
+<style>
+    .idcard-faces-row { display:flex; flex-wrap:wrap; justify-content:center; gap:2rem; padding:1.5rem; background:#f0f2f5; border-radius:12px; }
+    .idcard-face {
+        width:210px; max-width:100%; aspect-ratio:55/85; height:334px; max-height:334px;
+        background:@bg; border-radius:0 0 8px 8px; border:1px solid @borderColor; border-top:none;
+        box-shadow:0 4px 14px rgba(0,0,0,.12); color:@text; font-family:'Segoe UI',Tahoma,sans-serif;
+        display:flex; flex-direction:column; overflow:hidden; position:relative; box-sizing:border-box;
+    }
+    .idcard-face-back-screen .idcard-face { border-top:1px solid @borderColor; }
+    .idcard-col-front .idcard-face::before { content:''; position:absolute; top:0; left:0; right:0; height:14px; background:@primary; z-index:1; }
+    .idcard-watermark { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:0; }
+    .idcard-watermark img { width:42%; max-width:100px; opacity:.14; object-fit:contain; }
+    .idcard-z1 { position:relative; z-index:2; }
+    .idcard-header { display:flex; flex-direction:column; align-items:center; padding:8px 6px 5px; background:@primary; width:100%; }
+    .idcard-logo-center { max-width:48px; max-height:48px; object-fit:contain; }
+    .idcard-school-name { font-size:8.5pt; font-weight:800; color:#fff; text-align:center; line-height:1.2; text-transform:uppercase; }
+    .idcard-photo-center { display:flex; justify-content:center; padding-top:6px; }
+    .idcard-photo-inner { width:100px; height:100px; border:1.5px solid @primary; overflow:hidden; display:flex; align-items:center; justify-content:center; border-radius:3px; background:rgba(0,0,0,.04); }
+    .idcard-photo-inner img { width:100%; height:100%; object-fit:cover; }
+    .idcard-data-center { display:flex; flex-direction:column; align-items:center; text-align:center; padding:6px 8px 0; gap:2px; flex:1; }
+    .idcard-name { font-size:11pt; font-weight:700; line-height:1.15; }
+    .idcard-line { font-size:7.5pt; opacity:.95; }
+    .idcard-back-qr { text-align:center; padding:10px; }
+    .idcard-back-qr img { width:120px; height:120px; }
+</style>
+
+<div class="container py-3">
+    @Html.AntiForgeryToken()
+
+    @if (Model.UserNotFound)
+    {
+        <div class="alert alert-warning">Usuario no encontrado.</div>
+        <a href="/InstitutionalCredential/ui" class="btn btn-secondary">Volver</a>
+    }
+    else if (Model.NotEligible)
+    {
+        <div class="alert alert-warning">@(Model.NotEligibleReason ?? "No elegible.")</div>
+        <a href="/InstitutionalCredential/ui" class="btn btn-secondary">Volver</a>
+    }
+    else if (!Model.HasActiveCard)
+    {
+        <div class="text-center py-4">
+            <h4>Generar credencial institucional</h4>
+            <p class="text-muted">@Model.SchoolName</p>
+            <button type="button" class="btn btn-primary btn-lg" id="btnGenerate" onclick="generateCard('@Model.UserId')">
+                <i class="fas fa-id-badge"></i> Generar credencial
+            </button>
+            <a href="/InstitutionalCredential/ui" class="btn btn-outline-secondary ms-2">Volver</a>
+        </div>
+    }
+    else
+    {
+        <div class="idcard-faces-row">
+            <div class="idcard-col-front">
+                <div class="text-center text-muted small mb-1">Frente</div>
+                <div id="idCardFront" class="idcard-face">
+                    @if (showWm && hasLogo)
+                    {
+                        <div class="idcard-watermark"><img src="@Model.SchoolLogoUrl" alt="" /></div>
+                    }
+                    <div class="idcard-z1">
+                        <div class="idcard-header">
+                            @if (hasLogo)
+                            {
+                                <img class="idcard-logo-center" src="@Model.SchoolLogoUrl" alt="logo" />
+                            }
+                            <div class="idcard-school-name">@Model.SchoolName</div>
+                        </div>
+                        <div class="idcard-photo-center">
+                            <div class="idcard-photo-inner">
+                                @if (Model.ShowPhoto && !string.IsNullOrEmpty(Model.Card!.PhotoUrl))
+                                {
+                                    <img src="@UserPhotoLinks.HrefForCarnetPreview(Model.Card.PhotoUrl, 360)" alt="foto" />
+                                }
+                                else
+                                {
+                                    <span class="small">FOTO</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="idcard-data-center">
+                            <div class="idcard-name">@Model.Card!.FullName</div>
+                            @if (Model.ShowDocumentId && !string.IsNullOrWhiteSpace(Model.DocumentId))
+                            {
+                                <div class="idcard-line">Cédula: @Model.DocumentId</div>
+                            }
+                            <div class="idcard-line"><strong>Rol:</strong> @Model.Card.RoleDisplay</div>
+                            <div class="idcard-line"><strong>Cargo:</strong> @Model.Card.JobTitle</div>
+                            <div class="idcard-line"><strong>Área:</strong> @Model.Card.Department</div>
+                            <div class="idcard-line small text-muted mt-1">@Model.Card.CardNumber</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @if (showBackFace)
+            {
+                <div class="idcard-face-back-screen">
+                    <div class="text-center text-muted small mb-1">Reverso</div>
+                    <div class="idcard-face">
+                        <div class="idcard-z1 p-2 d-flex flex-column align-items-center h-100">
+                            <div class="idcard-back-qr">
+                                @if (!string.IsNullOrEmpty(Model.Card!.QrImageDataUrl))
+                                {
+                                    <img src="@Model.Card.QrImageDataUrl" alt="QR" />
+                                }
+                            </div>
+                            <div class="small text-center mt-2 px-2">
+                                <div class="fw-bold">@Model.SchoolName</div>
+                                <div>Credencial: @Model.Card.CardNumber</div>
+                                @if (Model.ShowSchoolPhone && !string.IsNullOrWhiteSpace(Model.SchoolPhone))
+                                {
+                                    <div>Tel: @Model.SchoolPhone</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="text-center mt-3">
+            <button type="button" class="btn btn-primary btn-lg" id="btnDownloadPdf"
+                    data-pdf-url="@Url.Action("Print", "InstitutionalCredential", new { userId = Model.Card!.UserId })"
+                    data-filename="@($"credencial-{Model.Card.UserId:N}.pdf")">
+                <i class="fas fa-file-pdf"></i> Descargar PDF
+            </button>
+            <button type="button" class="btn btn-warning btn-lg ms-2" onclick="generateCard('@Model.Card.UserId')"><i class="fas fa-sync-alt"></i> Regenerar</button>
+            <a href="/InstitutionalCredential/ui" class="btn btn-secondary btn-lg ms-2">Volver</a>
+        </div>
+    }
+</div>
+
+<script>
+    (function () {
+        var btn = document.getElementById('btnDownloadPdf');
+        if (!btn) return;
+        btn.addEventListener('click', async function () {
+            var url = btn.getAttribute('data-pdf-url');
+            var name = btn.getAttribute('data-filename') || 'credencial.pdf';
+            btn.disabled = true;
+            var prev = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando PDF...';
+            try {
+                var r = await fetch(url, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+                var ct = (r.headers.get('content-type') || '').toLowerCase();
+                if (!r.ok || !ct.includes('pdf')) {
+                    var errText = await r.text();
+                    alert(errText || 'No se pudo generar el PDF.');
+                    return;
+                }
+                var blob = await r.blob();
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(a.href);
+            } catch {
+                alert('Error de red al descargar el PDF.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = prev;
+            }
+        });
+    })();
+    function generateCard(id) {
+        var btn = document.getElementById('btnGenerate');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
+        var antiforgeryInput = document.querySelector('input[name="__RequestVerificationToken"]');
+        fetch('/InstitutionalCredential/api/generate/' + id, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': antiforgeryInput ? antiforgeryInput.value : ''
+            }
+        }).then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data && data.cardNumber) {
+                window.location.href = '/InstitutionalCredential/ui/generate/' + id;
+            } else {
+                alert((data && data.message) ? data.message : 'No se pudo generar.');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-id-badge"></i> Generar credencial'; }
+            }
+        }).catch(function () {
+            alert('Error de red.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-id-badge"></i> Generar credencial'; }
+        });
+    }
+</script>

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
@@ -1139,6 +1140,107 @@ public class SuperAdminService : ISuperAdminService
             Status = u.Status ?? "",
             HasActiveAssignment = false
         });
+    }
+
+    #endregion
+
+    #region Directorio de personal (SuperAdmin)
+
+    public async Task<SuperAdminStaffDirectoryPageVm> GetStaffDirectoryPageAsync(SuperAdminStaffDirectoryFilterVm filter)
+    {
+        filter ??= new SuperAdminStaffDirectoryFilterVm();
+        if (filter.Page < 1)
+            filter.Page = 1;
+        filter.PageSize = Math.Clamp(filter.PageSize <= 0 ? 25 : filter.PageSize, 1, 100);
+
+        var page = new SuperAdminStaffDirectoryPageVm { Filter = filter };
+
+        var baseQuery = _context.Users.AsNoTracking()
+            .Where(u => u.Role != null && StaffInstitutionalProfileAccess.StaffDirectoryAllowlist.Contains(u.Role));
+
+        if (filter.SchoolId.HasValue)
+            baseQuery = baseQuery.Where(u => u.SchoolId == filter.SchoolId.Value);
+
+        if (!string.IsNullOrWhiteSpace(filter.Role))
+        {
+            var r = filter.Role.Trim();
+            baseQuery = baseQuery.Where(u => u.Role == r);
+        }
+
+        if (filter.UserStatus == "active")
+            baseQuery = baseQuery.Where(u => u.Status == "active");
+        else if (filter.UserStatus == "inactive")
+            baseQuery = baseQuery.Where(u => u.Status != "active" || u.Status == null);
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var p = "%" + filter.Search.Trim() + "%";
+            baseQuery = baseQuery.Where(u =>
+                EF.Functions.ILike(u.Name, p) ||
+                EF.Functions.ILike(u.LastName, p) ||
+                (u.Email != null && EF.Functions.ILike(u.Email, p)) ||
+                (u.DocumentId != null && EF.Functions.ILike(u.DocumentId, p)));
+        }
+
+        page.SchoolOptions = await _context.Schools.IgnoreQueryFilters()
+            .OrderBy(s => s.Name)
+            .Select(s => new SelectListItem { Value = s.Id.ToString(), Text = s.Name })
+            .ToListAsync();
+        page.SchoolOptions.Insert(0, new SelectListItem { Value = "", Text = "Todas las escuelas" });
+
+        var roleRows = await _context.Users.AsNoTracking()
+            .Where(u => u.Role != null && StaffInstitutionalProfileAccess.StaffDirectoryAllowlist.Contains(u.Role))
+            .Select(u => u.Role!)
+            .Distinct()
+            .OrderBy(r => r)
+            .ToListAsync();
+        page.RoleOptions = roleRows
+            .Select(r => new SelectListItem { Value = r, Text = StaffInstitutionalRoleFilter.FormatRoleDisplay(r) })
+            .ToList();
+        page.RoleOptions.Insert(0, new SelectListItem { Value = "", Text = "Todos los roles" });
+
+        MarkSelected(page.SchoolOptions, filter.SchoolId);
+        if (!string.IsNullOrWhiteSpace(filter.Role))
+        {
+            var fr = filter.Role.Trim();
+            foreach (var o in page.RoleOptions)
+                o.Selected = o.Value == fr;
+        }
+
+        var rowsQuery = baseQuery.Select(u => new SuperAdminStaffDirectoryRowVm
+        {
+            UserId = u.Id,
+            PhotoUrl = u.PhotoUrl,
+            FullName = u.Name + " " + u.LastName,
+            DocumentId = u.DocumentId,
+            Email = u.Email ?? "",
+            SchoolName = u.SchoolNavigation != null ? u.SchoolNavigation.Name : null,
+            SchoolId = u.SchoolId,
+            RoleRaw = u.Role ?? "",
+            RoleDisplay = StaffInstitutionalRoleFilter.FormatRoleDisplay(u.Role),
+            JobTitle = _context.Set<StaffInstitutionalProfile>()
+                .Where(p => p.UserId == u.Id).Select(p => p.JobTitle).FirstOrDefault(),
+            Department = _context.Set<StaffInstitutionalProfile>()
+                .Where(p => p.UserId == u.Id).Select(p => p.Department).FirstOrDefault(),
+            EmployeeCode = _context.Set<StaffInstitutionalProfile>()
+                .Where(p => p.UserId == u.Id).Select(p => p.EmployeeCode).FirstOrDefault(),
+            Status = u.Status ?? ""
+        });
+
+        var ordered = rowsQuery.OrderBy(r => r.SchoolName ?? "").ThenBy(r => r.FullName);
+
+        page.TotalCount = await ordered.CountAsync();
+        page.TotalPages = page.TotalCount == 0 ? 0 : (int)Math.Ceiling(page.TotalCount / (double)filter.PageSize);
+
+        if (filter.Page > page.TotalPages && page.TotalPages > 0)
+            filter.Page = page.TotalPages;
+
+        page.Rows = await ordered
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        return page;
     }
 
     #endregion

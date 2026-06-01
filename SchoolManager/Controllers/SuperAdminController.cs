@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SchoolManager.Models;
 using SchoolManager.Services;
 using SchoolManager.ViewModels;
+using SchoolManager.Helpers;
 using BCrypt.Net;
 using SchoolManager.Services.Interfaces;
 
@@ -171,6 +172,105 @@ public class SuperAdminController : Controller
         {
             _logger.LogError(ex, "Error eliminando foto de estudiante {UserId} desde StudentDirectory", userId);
             return Json(new { success = false, message = "No se pudo eliminar la foto." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> StaffDirectory([FromQuery] SuperAdminStaffDirectoryFilterVm? filter)
+    {
+        filter ??= new SuperAdminStaffDirectoryFilterVm();
+        var page = await _superAdminService.GetStaffDirectoryPageAsync(filter);
+        return View(page);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(12 * 1024 * 1024)]
+    public async Task<IActionResult> StaffDirectoryUpdatePhoto(Guid userId, IFormFile? photo)
+    {
+        if (photo == null || photo.Length == 0)
+            return Json(new { success = false, message = "Seleccione una imagen (JPEG o PNG)." });
+
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+            return Json(new { success = false, message = "Usuario no encontrado." });
+
+        if (!StaffInstitutionalProfileAccess.IsStaffDirectoryEligibleRole(user.Role))
+            return Json(new { success = false, message = "El usuario no es personal institucional elegible para el directorio." });
+
+        try
+        {
+            await _userPhotoService.UpdatePhotoAsync(userId, photo);
+            var updated = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+            return Json(new { success = true, photoUrl = updated?.PhotoUrl });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error actualizando foto de personal {UserId}", userId);
+            return Json(new { success = false, message = "No se pudo actualizar la foto." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StaffDirectoryRemovePhoto(Guid userId)
+    {
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+            return Json(new { success = false, message = "Usuario no encontrado." });
+
+        if (!StaffInstitutionalProfileAccess.IsStaffDirectoryEligibleRole(user.Role))
+            return Json(new { success = false, message = "El usuario no es personal institucional elegible para el directorio." });
+
+        try
+        {
+            await _userPhotoService.RemovePhotoAsync(userId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error eliminando foto de personal {UserId}", userId);
+            return Json(new { success = false, message = "No se pudo eliminar la foto." });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StaffDirectorySaveProfile(
+        Guid userId,
+        string? jobTitle,
+        string? department,
+        string? employeeCode)
+    {
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+            return Json(new { success = false, message = "Usuario no encontrado." });
+
+        if (!StaffInstitutionalProfileAccess.IsStaffDirectoryEligibleRole(user.Role))
+            return Json(new { success = false, message = "El usuario no es personal institucional elegible para el directorio." });
+
+        try
+        {
+            var profile = await _db.Set<StaffInstitutionalProfile>().FirstOrDefaultAsync(p => p.UserId == userId);
+            if (profile == null)
+            {
+                profile = new StaffInstitutionalProfile { UserId = userId };
+                _db.Set<StaffInstitutionalProfile>().Add(profile);
+            }
+            profile.JobTitle = string.IsNullOrWhiteSpace(jobTitle) ? null : jobTitle.Trim();
+            profile.Department = string.IsNullOrWhiteSpace(department) ? null : department.Trim();
+            profile.EmployeeCode = string.IsNullOrWhiteSpace(employeeCode) ? null : employeeCode.Trim();
+            await _db.SaveChangesAsync();
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error guardando perfil laboral {UserId}", userId);
+            return Json(new { success = false, message = "No se pudo guardar el perfil." });
         }
     }
 

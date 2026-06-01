@@ -35,4 +35,6 @@ public interface ISuperAdminService
     Task<PagedResult<AuditLogViewModel>> GetActivityLogsAsync(int page = 1, int pageSize = 50);
 
     Task<SuperAdminStudentDirectoryPageVm> GetStudentDirectoryPageAsync(SuperAdminStudentDirectoryFilterVm filter);
+
+    Task<SuperAdminStaffDirectoryPageVm> GetStaffDirectoryPageAsync(SuperAdminStaffDirectoryFilterVm filter);
 } 

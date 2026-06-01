@@ -1,0 +1,285 @@
+/* SuperAdmin: StaffDirectory + InstitutionalCredential */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+.sm-staff-page {
+    font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
+    color: #334155;
+}
+
+.sm-page-hero {
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 50%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.sm-page-hero h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+
+.sm-page-subtitle {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-top: 0.35rem;
+    max-width: 42rem;
+}
+
+.sm-stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.sm-stat-pill i {
+    color: #3b82f6;
+    opacity: 0.9;
+}
+
+.sm-stat-pill--success i { color: #16a34a; }
+.sm-stat-pill--muted i { color: #94a3b8; }
+
+.sm-filter-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    margin-bottom: 1.25rem;
+}
+
+.sm-filter-card > .card-header {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.75rem 1.25rem;
+}
+
+.sm-filter-card > .card-header .card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.sm-filter-card .form-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.35rem;
+}
+
+.sm-toolbar {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.sm-table-card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06) !important;
+}
+
+.sm-table-card > .card-header {
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.65rem 1.25rem;
+}
+
+.sm-table-card .table {
+    margin-bottom: 0;
+    font-size: 0.875rem;
+}
+
+.sm-table-card .table thead th {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    background: #f1f5f9;
+    border-bottom: 2px solid #e2e8f0;
+    white-space: nowrap;
+    vertical-align: middle;
+    padding: 0.65rem 0.75rem;
+}
+
+.sm-table-card .table tbody td {
+    vertical-align: middle;
+    padding: 0.65rem 0.75rem;
+    border-color: #f1f5f9;
+}
+
+.sm-table-card .table tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+.sm-person-name {
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.3;
+}
+
+.sm-person-meta {
+    font-size: 0.8125rem;
+    color: #64748b;
+}
+
+.sm-badge-role {
+    background: #e0e7ff !important;
+    color: #3730a3 !important;
+    font-weight: 600;
+    font-size: 0.72rem;
+    padding: 0.35em 0.65em;
+}
+
+.sm-badge-active {
+    font-weight: 600;
+    font-size: 0.72rem;
+}
+
+.sm-code-chip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    background: #f1f5f9;
+    color: #475569;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+.sm-person-thumb {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #e2e8f0, 0 2px 6px rgba(15, 23, 42, 0.1);
+}
+
+.sm-action-group {
+    flex-wrap: nowrap;
+}
+
+.sm-action-group .btn {
+    padding: 0.35rem 0.55rem;
+    line-height: 1.2;
+}
+
+.sm-action-group .btn i {
+    font-size: 0.85rem;
+}
+
+.sm-empty-state {
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: #94a3b8;
+}
+
+.sm-empty-state > i {
+    font-size: 2.75rem;
+    margin-bottom: 0.75rem;
+    display: block;
+    opacity: 0.45;
+    color: #cbd5e1;
+}
+
+.sm-empty-state p {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.sm-pagination-footer {
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+}
+
+.sm-pagination-footer .pagination .page-link {
+    border-radius: 6px;
+    margin: 0 2px;
+    color: #475569;
+}
+
+.sm-pagination-footer .page-item.active .page-link {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+
+/* Modales */
+.sm-staff-page .modal-header {
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.sm-staff-page .modal-title {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+/* InstitutionalCredential / DataTables */
+.sm-instcred-panel {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+}
+
+.sm-instcred-panel .dataTables_wrapper .dataTables_length,
+.sm-instcred-panel .dataTables_wrapper .dataTables_info {
+    font-size: 0.8125rem;
+    color: #64748b;
+}
+
+.sm-instcred-panel .dataTables_wrapper .dataTables_length select {
+    border-radius: 6px;
+    border-color: #e2e8f0;
+}
+
+.sm-instcred-panel table.dataTable thead th {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    background: #f1f5f9;
+}
+
+.sm-instcred-panel table.dataTable tbody td {
+    vertical-align: middle;
+    font-size: 0.875rem;
+}
+
+.sm-instcred-panel table.dataTable tbody tr:hover {
+    background: #f8fafc !important;
+}
+
+.sm-cred-status-stack .badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+@media (max-width: 991.98px) {
+    .sm-action-group {
+        flex-wrap: wrap;
+    }
+
+    .sm-page-hero {
+        padding: 1rem;
+    }
+}
