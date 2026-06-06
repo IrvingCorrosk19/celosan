@@ -23,7 +23,10 @@ public class NocturnalEnrollmentSettingsService : INocturnalEnrollmentSettingsSe
             return true;
 
         if (!schoolId.HasValue || schoolId.Value == Guid.Empty)
-            return false;
+            return true;
+
+        if (_options.EnabledSchoolIds.Count == 0)
+            return true;
 
         return _options.EnabledSchoolIds.Any(id =>
             Guid.TryParse(id, out var g) && g == schoolId.Value);

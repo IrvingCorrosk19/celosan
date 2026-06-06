@@ -22,19 +22,19 @@
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div class="flex-grow-1">
             <h5 class="mb-2"><i class="bi bi-info-circle me-2"></i>Carga masiva (colegio nocturna)</h5>
-            <p class="mb-2 small text-muted">Una sola pantalla y un solo formato Excel: inscripciones por asignatura (una fila por materia). El turno operativo del sistema sigue siendo <strong>Noche</strong>; la columna Jornada del archivo es informativa u opcional.</p>
+            <p class="mb-2 small text-muted">Una sola pantalla y un solo formato Excel: inscripciones por asignatura (una fila por materia). Turno operativo: <strong>Noche</strong>. Las materias de niveles anteriores se marcan como <strong>Refuerzo</strong> automáticamente o con la columna opcional <em>Tipo inscripción</em>.</p>
             <p class="small mb-1"><strong>Columnas</strong> (orden flexible; deben existir los encabezados con estos nombres):</p>
             <div class="table-responsive small mb-2">
                 <table class="table table-bordered table-sm mb-0 bg-white">
                     <thead class="table-light"><tr>
-                        <th>Estudiante (Email)</th><th>Nombre</th><th>Apellido</th><th>Documento ID</th><th>Asignatura</th><th>Nivel</th><th>Grupo académico</th><th>Jornada</th><th>Resultado (Inscrito)</th>
+                        <th>Estudiante (Email)</th><th>Nombre</th><th>Apellido</th><th>Documento ID</th><th>Asignatura</th><th>Nivel</th><th>Grupo académico</th><th>Jornada</th><th>Tipo inscripción</th><th>Resultado (Inscrito)</th>
                     </tr></thead>
                     <tbody><tr>
-                        <td>maria@colegio.edu</td><td>María</td><td>López</td><td>8-1234-567</td><td>Matemática</td><td>10°</td><td>10-A</td><td><em>(opcional)</em></td><td>SI / NO</td>
+                        <td>maria@colegio.edu</td><td>María</td><td>López</td><td>8-1234-567</td><td>Matemática</td><td>11°</td><td>11-A</td><td><em>(opcional)</em></td><td>Nocturno / Refuerzo</td><td>SI / NO</td>
                     </tr></tbody>
                 </table>
             </div>
-            <p class="small text-muted mb-0">Obligatorios: email del estudiante, asignatura, nivel, grupo académico y resultado (SI/NO, 1/0, etc.). Opcionales: nombre, apellido, documento, jornada.</p>
+            <p class="small text-muted mb-0">Obligatorios: email, asignatura, nivel, grupo académico y resultado (SI/NO). Opcionales: nombre, apellido, documento, jornada, tipo inscripción (<code>Nocturno</code>, <code>Refuerzo</code>, <code>Libre</code>). Si omite tipo, el nivel más alto del estudiante queda como Nocturno y los demás como Refuerzo.</p>
         </div>
         <div>
             <a href="@Url.Action("DownloadTemplate", "File", new { fileName = "asignaciones_estudiantes_grado_grupo.xlsx" })"
@@ -59,6 +59,7 @@
             <th>Nivel</th>
             <th>Grupo académico</th>
             <th>Jornada</th>
+            <th>Tipo inscripción</th>
             <th>Resultado (Inscrito)</th>
         </tr>
     </thead>
@@ -149,6 +150,8 @@
                     const idxNivel = headersObtenidos.findIndex(h => h === "NIVEL");
                     const idxGrupo = headersObtenidos.findIndex(h => h.includes("GRUPO") && h.includes("ACADEMICO"));
                     const idxJornada = headersObtenidos.findIndex(h => h === "JORNADA");
+                    const idxTipoInscripcion = headersObtenidos.findIndex(h =>
+                        h.includes("TIPO") && h.includes("INSCRIPCION"));
                     let idxResultado = headersObtenidos.findIndex(h => h.includes("RESULTADO") && h.includes("INSCRITO"));
                     if (idxResultado < 0)
                         idxResultado = headersObtenidos.findIndex(h => h === "RESULTADO");
@@ -190,6 +193,7 @@
                         const nivel = (row[idxNivel] ?? "").toString().trim();
                         const grupo = (row[idxGrupo] ?? "").toString().trim();
                         const jornada = idxJornada >= 0 ? (row[idxJornada] ?? "").toString().trim() : "";
+                        const tipoInscripcion = idxTipoInscripcion >= 0 ? (row[idxTipoInscripcion] ?? "").toString().trim() : "";
                         const inscrito = parseInscrito(row[idxResultado]);
                         const resultadoRaw = (row[idxResultado] ?? "").toString().trim();
 
@@ -215,6 +219,7 @@
                                 nivel || "-",
                                 grupo || "-",
                                 jornada || "-",
+                                tipoInscripcion || "-",
                                 resultadoRaw || "-"
                             ])}</tr>`);
                             marcarFilaConError(tbody.find('tr').last());
@@ -230,6 +235,7 @@
                             nivel: nivel,
                             grupoAcademico: grupo,
                             jornada: jornada || null,
+                            tipoInscripcion: tipoInscripcion || null,
                             inscrito: inscrito
                         });
 
@@ -242,6 +248,7 @@
                             nivel,
                             grupo,
                             jornada || "-",
+                            tipoInscripcion || "-",
                             inscrito ? "SI" : "NO"
                         ])}</tr>`);
                     }

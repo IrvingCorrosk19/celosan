@@ -8,6 +8,9 @@ public static class EnrollmentTypeConstants
     public const string Refuerzo = "Refuerzo";
     public const string Libre = "Libre";
 
+    /// <summary>Tipo por defecto de matrícula e inscripción en Eduplaner Noche.</summary>
+    public const string DefaultPrimary = Nocturno;
+
     public static bool IsCarryOver(string? enrollmentType) =>
         !string.IsNullOrWhiteSpace(enrollmentType) &&
         (enrollmentType.Trim().Equals(Refuerzo, StringComparison.OrdinalIgnoreCase) ||
@@ -17,4 +20,21 @@ public static class EnrollmentTypeConstants
         string.IsNullOrWhiteSpace(enrollmentType) ||
         enrollmentType.Trim().Equals(Regular, StringComparison.OrdinalIgnoreCase) ||
         enrollmentType.Trim().Equals(Nocturno, StringComparison.OrdinalIgnoreCase);
+
+    public static string NormalizePrimary(string? enrollmentType) =>
+        string.IsNullOrWhiteSpace(enrollmentType) ? DefaultPrimary : enrollmentType.Trim();
+
+    public static string ResolveSubjectEnrollmentType(string? explicitType, bool isCarryOverGrade) =>
+        !string.IsNullOrWhiteSpace(explicitType)
+            ? explicitType.Trim()
+            : isCarryOverGrade ? Refuerzo : DefaultPrimary;
+
+    public static int? ParseGradeNumber(string? gradeName)
+    {
+        if (string.IsNullOrWhiteSpace(gradeName))
+            return null;
+
+        var digits = new string(gradeName.Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var n) ? n : null;
+    }
 }

@@ -16,7 +16,7 @@ public partial class StudentSubjectAssignment
 
     public Guid? ShiftId { get; set; }
 
-    public string EnrollmentType { get; set; } = "Regular";
+    public string EnrollmentType { get; set; } = "Nocturno";
 
     public string Status { get; set; } = "Active";
 

@@ -68,7 +68,7 @@ namespace SchoolManager.Services.Implementations
                 GradeName = a.Grade?.Name ?? "—",
                 GroupName = a.Group?.Name ?? "—",
                 ShiftName = a.Shift?.Name,
-                EnrollmentType = a.EnrollmentType ?? EnrollmentTypeConstants.Regular,
+                EnrollmentType = a.EnrollmentType ?? EnrollmentTypeConstants.DefaultPrimary,
                 IsPrimary = primary != null && a.Id == primary.Id,
                 IsCarryOver = EnrollmentTypeConstants.IsCarryOver(a.EnrollmentType)
             }).ToList();

@@ -24,7 +24,7 @@ public partial class StudentAssignment
     public Guid? AcademicYearId { get; set; }
 
     /// <summary>Tipo de matrícula: Regular, Nocturno, Refuerzo, Libre.</summary>
-    public string EnrollmentType { get; set; } = "Regular";
+    public string EnrollmentType { get; set; } = "Nocturno";
 
     /// <summary>Inicio efectivo de esta matrícula (por defecto alineado con <see cref="CreatedAt"/>).</summary>
     public DateTime? StartDate { get; set; }

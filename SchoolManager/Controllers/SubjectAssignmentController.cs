@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Models.ViewModels;
 using SchoolManager.Services.Interfaces;
@@ -24,6 +25,7 @@ namespace SchoolManager.Controllers
         private readonly ISpecialtyService _specialtyService;
         private readonly IStudentAssignmentService _studentAssignmentService;
         private readonly ISubjectAssignmentService _subjectAssignmentService;
+        private readonly IShiftService _shiftService;
 
 
         public SubjectAssignmentController(
@@ -36,7 +38,8 @@ namespace SchoolManager.Controllers
             IAreaService areaService,
             ISpecialtyService specialtyService,
             IStudentAssignmentService studentAssignmentService,
-            ISubjectAssignmentService subjectAssignmentService)
+            ISubjectAssignmentService subjectAssignmentService,
+            IShiftService shiftService)
         {
             _context = context;
             _userService = userService;
@@ -48,6 +51,7 @@ namespace SchoolManager.Controllers
             _specialtyService = specialtyService;
             _studentAssignmentService = studentAssignmentService;
             _subjectAssignmentService = subjectAssignmentService;
+            _shiftService = shiftService;
 
         }
 
@@ -715,9 +719,21 @@ namespace SchoolManager.Controllers
                         }
                     }
 
+                    var currentSchoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
+                    const string jornadaNocturna = "Noche";
+                    var shift = await _shiftService.GetOrCreateAsync(jornadaNocturna);
+
                     var student = await _userService.GetByEmailAsync(item.Estudiante);
                     var grade = await _gradeLevelService.GetByNameAsync(item.Grado);
-                    var group = await _groupService.GetByNameAndGradeAsync(item.Grupo);
+                    var group = await _groupService.GetByNameAndGradeAsync(item.Grupo, currentSchoolId, shift.Id);
+
+                    if (group != null && (group.ShiftId == null || group.ShiftId != shift.Id))
+                    {
+                        group.ShiftId = shift.Id;
+                        group.Shift = shift.Name;
+                        group.UpdatedAt = DateTime.UtcNow;
+                        await _groupService.UpdateAsync(group);
+                    }
 
                     if (student == null || grade == null || group == null)
                     {
@@ -725,12 +741,16 @@ namespace SchoolManager.Controllers
                         continue;
                     }
 
-                    bool exists = await _studentAssignmentService.ExistsAsync(student.Id, grade.Id, group.Id);
+                    bool exists = await _studentAssignmentService.ExistsWithShiftAsync(student.Id, grade.Id, group.Id, shift.Id);
                     if (exists)
                     {
                         duplicadas++;
                         continue;
                     }
+
+                    var tipoMatricula = string.IsNullOrWhiteSpace(item.TipoMatricula)
+                        ? EnrollmentTypeConstants.DefaultPrimary
+                        : item.TipoMatricula.Trim();
 
                     var assignment = new StudentAssignment
                     {
@@ -738,7 +758,10 @@ namespace SchoolManager.Controllers
                         StudentId = student.Id,
                         GradeId = grade.Id,
                         GroupId = group.Id,
-                        CreatedAt = DateTime.UtcNow
+                        ShiftId = shift.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        EnrollmentType = tipoMatricula,
+                        StartDate = DateTime.UtcNow
                     };
 
                     await _studentAssignmentService.InsertAsync(assignment);

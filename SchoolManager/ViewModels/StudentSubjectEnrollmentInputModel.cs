@@ -20,6 +20,9 @@ namespace SchoolManager.ViewModels
         // Jornada opcional (Mañana/Tarde/Noche).
         public string? Jornada { get; set; }
 
+        // Jornada/Tipo inscripcion opcional (Refuerzo, Libre, Nocturno).
+        public string? TipoInscripcion { get; set; }
+
         // Si viene false, se desactiva (IsActive=false) la inscripción para esa materia en el año académico.
         public bool Inscrito { get; set; } = true;
     }

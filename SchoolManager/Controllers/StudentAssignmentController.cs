@@ -27,7 +27,6 @@ namespace SchoolManager.Controllers
         private readonly IDateTimeHomologationService _dateTimeHomologationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly IShiftService _shiftService;
-        private readonly INocturnalEnrollmentSettingsService _nocturnalSettings;
         private readonly SchoolDbContext _context;
 
         public StudentAssignmentController(
@@ -40,7 +39,6 @@ namespace SchoolManager.Controllers
             IDateTimeHomologationService dateTimeHomologationService,
             ICurrentUserService currentUserService,
             IShiftService shiftService,
-            INocturnalEnrollmentSettingsService nocturnalSettings,
             SchoolDbContext context)
         {
             _userService = userService;
@@ -52,7 +50,6 @@ namespace SchoolManager.Controllers
             _dateTimeHomologationService = dateTimeHomologationService;
             _currentUserService = currentUserService;
             _shiftService = shiftService;
-            _nocturnalSettings = nocturnalSettings;
             _context = context;
         }
 
@@ -80,18 +77,14 @@ namespace SchoolManager.Controllers
                 currentUser.SchoolId != student.SchoolId)
                 return Json(new { success = false, message = "No puede modificar estudiantes de otra institución." });
 
-            var advancedMode = _nocturnalSettings.IsAdvancedEnabled(currentUser.SchoolId);
-            if (advancedMode && !forceReplaceAll)
+            if (!forceReplaceAll)
                 additive = true;
 
             var group = await _groupService.GetByIdAsync(groupId);
             if (group == null)
                 return Json(new { success = false, message = "Grupo no válido." });
 
-            // Determinar EnrollmentType según la jornada real del grupo, no según el flag additive
-            var shift = group.ShiftId.HasValue ? await _shiftService.GetByIdAsync(group.ShiftId.Value) : null;
-            var isNightShift = shift?.Name?.ToLower().Contains("noche") == true;
-            var enrollmentType = isNightShift ? "Nocturno" : "Regular";
+            var enrollmentType = EnrollmentTypeConstants.DefaultPrimary;
 
             if (!additive)
             {
@@ -276,15 +269,13 @@ namespace SchoolManager.Controllers
         public async Task<IActionResult> GetAvailableSubjectCatalog(Guid studentId)
         {
             var currentUser = await _currentUserService.GetCurrentUserAsync();
-            var advancedMode = _nocturnalSettings.IsAdvancedEnabled(currentUser?.SchoolId);
-
             var catalog = await _studentAssignmentService.GetAvailableSubjectCatalogAsync(
-                studentId, currentUser?.SchoolId, advancedMode);
+                studentId, currentUser?.SchoolId, advancedMode: true);
 
             return Json(new
             {
                 success = true,
-                advancedMode,
+                advancedMode = true,
                 data = catalog.Select(c => new
                 {
                     subjectAssignmentId = c.SubjectAssignmentId,
@@ -383,7 +374,7 @@ namespace SchoolManager.Controllers
                         Shift = shiftName
                     });
 
-                    var tipo = string.IsNullOrWhiteSpace(a.EnrollmentType) ? "Regular" : a.EnrollmentType;
+                    var tipo = EnrollmentTypeConstants.NormalizePrimary(a.EnrollmentType);
                     gradeGroupPairs.Add($"{gradeName} - {groupName} | Jornada: {shiftName} | Matrícula: {tipo}");
                 }
 
@@ -514,11 +505,15 @@ namespace SchoolManager.Controllers
             var now = DateTime.UtcNow;
             var errors = new List<string>();
 
-            // Resolución previa: convertimos cada fila a ids reales.
-            // Además, construimos el “keepSet” (materias a mantener activas) por estudiante + (nivel, grupo, jornada/shift).
-            var resolvedRows = new List<(Guid StudentId, Guid GradeId, Guid GroupId, Guid? ShiftId, Guid SubjectAssignmentId, bool Inscrito)>();
-            var keepSetByKey = new Dictionary<string, HashSet<Guid>>();
-            var enrollmentTypeByKey = new Dictionary<string, string>();
+            var pendingRows = new List<(
+                Guid StudentId,
+                Guid GradeId,
+                string GradeName,
+                Guid GroupId,
+                Guid? ShiftId,
+                Guid SubjectAssignmentId,
+                bool Inscrito,
+                string? TipoInscripcion)>();
 
             foreach (var row in rows)
             {
@@ -557,7 +552,8 @@ namespace SchoolManager.Controllers
                             PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"),
                             TwoFactorEnabled = false,
                             LastLogin = null,
-                            Inclusivo = null
+                            Inclusivo = null,
+                            Shift = "Noche"
                         };
 
                         await _userService.CreateAsync(student, new List<Guid>(), new List<Guid>());
@@ -613,21 +609,15 @@ namespace SchoolManager.Controllers
                         subjectAssignment = createdSa;
                     }
 
-                    var shiftId = group.ShiftId ?? shift.Id;
-                    var key = $"{student.Id}::{grade.Id}::{group.Id}::{shiftId}";
-                    if (!keepSetByKey.TryGetValue(key, out var keepSet))
-                    {
-                        keepSet = new HashSet<Guid>();
-                        keepSetByKey[key] = keepSet;
-                    }
-
-                    if (!enrollmentTypeByKey.ContainsKey(key))
-                        enrollmentTypeByKey[key] = "Nocturno";
-
-                    if (row.Inscrito)
-                        keepSet.Add(subjectAssignment.Id);
-
-                    resolvedRows.Add((student.Id, grade.Id, group.Id, shiftId, subjectAssignment.Id, row.Inscrito));
+                    pendingRows.Add((
+                        student.Id,
+                        grade.Id,
+                        grade.Name,
+                        group.Id,
+                        group.ShiftId ?? shift.Id,
+                        subjectAssignment.Id,
+                        row.Inscrito,
+                        row.TipoInscripcion));
                 }
                 catch (Exception ex)
                 {
@@ -635,7 +625,7 @@ namespace SchoolManager.Controllers
                 }
             }
 
-            if (resolvedRows.Count == 0)
+            if (pendingRows.Count == 0)
             {
                 return Ok(new
                 {
@@ -647,12 +637,89 @@ namespace SchoolManager.Controllers
                 });
             }
 
+            var studentIds = pendingRows.Select(r => r.StudentId).Distinct().ToList();
+            var primaryGradeIdsByStudent = new Dictionary<Guid, HashSet<Guid>>();
+
+            var existingPrimaryGrades = await _context.StudentAssignments
+                .Where(sa => studentIds.Contains(sa.StudentId) && sa.IsActive)
+                .Select(sa => new { sa.StudentId, sa.GradeId, sa.EnrollmentType })
+                .ToListAsync();
+
+            foreach (var sa in existingPrimaryGrades.Where(x => EnrollmentTypeConstants.IsPrimaryLevel(x.EnrollmentType)))
+            {
+                if (!primaryGradeIdsByStudent.TryGetValue(sa.StudentId, out var set))
+                {
+                    set = new HashSet<Guid>();
+                    primaryGradeIdsByStudent[sa.StudentId] = set;
+                }
+                set.Add(sa.GradeId);
+            }
+
+            foreach (var groupRows in pendingRows.Where(r => r.Inscrito).GroupBy(r => r.StudentId))
+            {
+                var studentId = groupRows.Key;
+                if (!primaryGradeIdsByStudent.TryGetValue(studentId, out var primarySet))
+                {
+                    primarySet = new HashSet<Guid>();
+                    primaryGradeIdsByStudent[studentId] = primarySet;
+                }
+
+                foreach (var row in groupRows.Where(r =>
+                             !string.IsNullOrWhiteSpace(r.TipoInscripcion) &&
+                             r.TipoInscripcion.Trim().Equals(EnrollmentTypeConstants.Nocturno, StringComparison.OrdinalIgnoreCase)))
+                {
+                    primarySet.Add(row.GradeId);
+                }
+
+                if (primarySet.Count == 0)
+                {
+                    var candidate = groupRows
+                        .Where(r => string.IsNullOrWhiteSpace(r.TipoInscripcion) ||
+                                    !EnrollmentTypeConstants.IsCarryOver(r.TipoInscripcion))
+                        .Select(r => new { r.GradeId, Level = EnrollmentTypeConstants.ParseGradeNumber(r.GradeName) ?? -1 })
+                        .OrderByDescending(x => x.Level)
+                        .FirstOrDefault();
+
+                    if (candidate != null)
+                        primarySet.Add(candidate.GradeId);
+                }
+            }
+
+            var keepSetByKey = new Dictionary<string, HashSet<Guid>>();
+            var enrollmentTypeByKey = new Dictionary<string, string>();
+            var ssaEnrollmentTypeBySubject = new Dictionary<string, string>();
+
+            foreach (var row in pendingRows)
+            {
+                var key = $"{row.StudentId}::{row.GradeId}::{row.GroupId}::{row.ShiftId}";
+
+                primaryGradeIdsByStudent.TryGetValue(row.StudentId, out var primaryGrades);
+                primaryGrades ??= new HashSet<Guid>();
+
+                var isCarryOverGrade = EnrollmentTypeConstants.IsCarryOver(row.TipoInscripcion) ||
+                                       (primaryGrades.Count > 0 && !primaryGrades.Contains(row.GradeId));
+
+                var ssaType = EnrollmentTypeConstants.ResolveSubjectEnrollmentType(row.TipoInscripcion, isCarryOverGrade);
+                var baseType = isCarryOverGrade
+                    ? EnrollmentTypeConstants.Refuerzo
+                    : EnrollmentTypeConstants.DefaultPrimary;
+
+                if (!keepSetByKey.TryGetValue(key, out var keepSet))
+                {
+                    keepSet = new HashSet<Guid>();
+                    keepSetByKey[key] = keepSet;
+                }
+
+                enrollmentTypeByKey[key] = baseType;
+                ssaEnrollmentTypeBySubject[$"{row.StudentId}::{row.SubjectAssignmentId}"] = ssaType;
+
+                if (row.Inscrito)
+                    keepSet.Add(row.SubjectAssignmentId);
+            }
+
             int activadas = 0;
             int desactivadas = 0;
 
-            // Para cada “matrícula base” (estudiante + grado + grupo + shift), garantizamos:
-            // 1) existe StudentAssignment
-            // 2) StudentSubjectAssignments coincide con el keepSet (activar lo indicado, desactivar el resto)
             foreach (var kvp in keepSetByKey)
             {
                 var key = kvp.Key;
@@ -665,16 +732,14 @@ namespace SchoolManager.Controllers
                 var groupId = Guid.Parse(parts[2]);
                 Guid? shiftId = parts[3] == "null" ? null : Guid.Parse(parts[3]);
 
-                var enrollmentType = enrollmentTypeByKey.TryGetValue(key, out var t) ? t : "Nocturno";
+                var enrollmentType = enrollmentTypeByKey.TryGetValue(key, out var t)
+                    ? t
+                    : EnrollmentTypeConstants.DefaultPrimary;
 
-                // Asegurar StudentAssignment existente
                 var shiftFilter = shiftId;
                 var existsAssignment = await _studentAssignmentService.ExistsWithShiftAsync(studentId, gradeId, groupId, shiftFilter);
                 if (!existsAssignment)
-                {
-                    // AddEnrollmentAsync disparará SyncStudentSubjectAssignmentsAsync (crea todas y luego afinamos con keepSet).
                     await _studentAssignmentService.AddEnrollmentAsync(studentId, gradeId, groupId, enrollmentType);
-                }
 
                 var baseAssignment = await _context.StudentAssignments
                     .Where(sa =>
@@ -690,6 +755,12 @@ namespace SchoolManager.Controllers
                 {
                     errors.Add($"No se pudo determinar StudentAssignment base para el estudiante {studentId} | grado {gradeId} | grupo {groupId}.");
                     continue;
+                }
+
+                if (!string.Equals(baseAssignment.EnrollmentType, enrollmentType, StringComparison.OrdinalIgnoreCase))
+                {
+                    baseAssignment.EnrollmentType = enrollmentType;
+                    await AuditHelper.SetAuditFieldsForUpdateAsync(baseAssignment, _currentUserService);
                 }
 
                 var academicYearId = baseAssignment.AcademicYearId;
@@ -720,19 +791,36 @@ namespace SchoolManager.Controllers
                         await AuditHelper.SetAuditFieldsForUpdateAsync(enrollment, _currentUserService);
                         desactivadas++;
                     }
+                    else if (ssaEnrollmentTypeBySubject.TryGetValue($"{studentId}::{enrollment.SubjectAssignmentId}", out var existingType) &&
+                             !string.Equals(enrollment.EnrollmentType, existingType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        enrollment.EnrollmentType = existingType;
+                        await AuditHelper.SetAuditFieldsForUpdateAsync(enrollment, _currentUserService);
+                    }
                 }
 
-                // Activar (o asegurar) las materias del keepSet.
                 foreach (var subjectAssignmentId in keepSet)
                 {
-                    var exists = await _context.StudentSubjectAssignments.AnyAsync(ssa =>
-                        ssa.StudentId == studentId &&
-                        ssa.SubjectAssignmentId == subjectAssignmentId &&
-                        ssa.AcademicYearId == academicYearId.Value &&
-                        ssa.IsActive);
+                    var ssaType = ssaEnrollmentTypeBySubject.TryGetValue($"{studentId}::{subjectAssignmentId}", out var resolvedType)
+                        ? resolvedType
+                        : EnrollmentTypeConstants.NormalizePrimary(baseAssignment.EnrollmentType);
 
-                    if (exists)
+                    var existing = await _context.StudentSubjectAssignments
+                        .FirstOrDefaultAsync(ssa =>
+                            ssa.StudentId == studentId &&
+                            ssa.SubjectAssignmentId == subjectAssignmentId &&
+                            ssa.AcademicYearId == academicYearId.Value &&
+                            ssa.IsActive);
+
+                    if (existing != null)
+                    {
+                        if (!string.Equals(existing.EnrollmentType, ssaType, StringComparison.OrdinalIgnoreCase))
+                        {
+                            existing.EnrollmentType = ssaType;
+                            await AuditHelper.SetAuditFieldsForUpdateAsync(existing, _currentUserService);
+                        }
                         continue;
+                    }
 
                     var enrollment = new StudentSubjectAssignment
                     {
@@ -742,7 +830,7 @@ namespace SchoolManager.Controllers
                         StudentAssignmentId = baseAssignment.Id,
                         AcademicYearId = academicYearId.Value,
                         ShiftId = baseAssignment.ShiftId,
-                        EnrollmentType = string.IsNullOrWhiteSpace(baseAssignment.EnrollmentType) ? "Regular" : baseAssignment.EnrollmentType,
+                        EnrollmentType = ssaType,
                         Status = "Active",
                         IsActive = true,
                         StartDate = now,
@@ -1005,7 +1093,7 @@ namespace SchoolManager.Controllers
                     }
 
                     var tipoMatricula = string.IsNullOrWhiteSpace(item.TipoMatricula)
-                        ? "Nocturno"
+                        ? EnrollmentTypeConstants.DefaultPrimary
                         : item.TipoMatricula.Trim();
                     var assignment = new StudentAssignment
                     {

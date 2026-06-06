@@ -77,7 +77,7 @@ namespace SchoolManager.Services.Implementations
                     StudentAssignmentId = assignment.Id,
                     AcademicYearId = assignment.AcademicYearId,
                     ShiftId = assignment.ShiftId,
-                    EnrollmentType = string.IsNullOrWhiteSpace(assignment.EnrollmentType) ? EnrollmentTypeConstants.Regular : assignment.EnrollmentType,
+                    EnrollmentType = EnrollmentTypeConstants.NormalizePrimary(assignment.EnrollmentType),
                     Status = "Active",
                     IsActive = true,
                     StartDate = assignment.StartDate ?? assignment.CreatedAt ?? DateTime.UtcNow,
@@ -120,7 +120,7 @@ namespace SchoolManager.Services.Implementations
                 }
 
                 if (string.IsNullOrWhiteSpace(assignment.EnrollmentType))
-                    assignment.EnrollmentType = EnrollmentTypeConstants.Regular;
+                    assignment.EnrollmentType = EnrollmentTypeConstants.DefaultPrimary;
                 assignment.StartDate ??= assignment.CreatedAt ?? DateTime.UtcNow;
                 
                 _context.StudentAssignments.Add(assignment);
@@ -296,7 +296,7 @@ namespace SchoolManager.Services.Implementations
                         IsActive = true, // Nueva asignación activa
                         AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
                         CreatedAt = DateTime.UtcNow,
-                        EnrollmentType = "Regular",
+                        EnrollmentType = EnrollmentTypeConstants.DefaultPrimary,
                         StartDate = DateTime.UtcNow
                     });
                 }
@@ -383,7 +383,7 @@ namespace SchoolManager.Services.Implementations
                     IsActive = true,
                     AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
                     CreatedAt = DateTime.UtcNow,
-                    EnrollmentType = "Regular",
+                    EnrollmentType = EnrollmentTypeConstants.DefaultPrimary,
                     StartDate = DateTime.UtcNow
                 };
 
@@ -450,7 +450,7 @@ namespace SchoolManager.Services.Implementations
                         IsActive = true,
                         AcademicYearId = activeAcademicYear?.Id, // Asignar año académico si existe
                         CreatedAt = DateTime.UtcNow,
-                        EnrollmentType = "Regular",
+                        EnrollmentType = EnrollmentTypeConstants.DefaultPrimary,
                         StartDate = DateTime.UtcNow
                     });
                 }
@@ -583,18 +583,11 @@ namespace SchoolManager.Services.Implementations
 
             if (baseAssignment == null)
             {
-                if (advanced)
-                {
-                    var enrollmentType = asCarryOver ? EnrollmentTypeConstants.Refuerzo : EnrollmentTypeConstants.Regular;
-                    baseAssignment = await EnsureEnrollmentBaseAsync(
-                        studentId, subjectAssignment.GradeLevelId, subjectAssignment.GroupId, enrollmentType);
-                }
-                else
-                {
-                    return (false,
-                        "No hay matrícula activa para el grado y grupo de esta materia. Asigne primero la matrícula correspondiente.",
-                        null);
-                }
+                var enrollmentType = asCarryOver
+                    ? EnrollmentTypeConstants.Refuerzo
+                    : EnrollmentTypeConstants.DefaultPrimary;
+                baseAssignment = await EnsureEnrollmentBaseAsync(
+                    studentId, subjectAssignment.GradeLevelId, subjectAssignment.GroupId, enrollmentType);
             }
 
             if (baseAssignment == null)
@@ -611,9 +604,7 @@ namespace SchoolManager.Services.Implementations
 
             var ssaType = asCarryOver
                 ? EnrollmentTypeConstants.Refuerzo
-                : (string.IsNullOrWhiteSpace(baseAssignment.EnrollmentType)
-                    ? EnrollmentTypeConstants.Regular
-                    : baseAssignment.EnrollmentType);
+                : EnrollmentTypeConstants.NormalizePrimary(baseAssignment.EnrollmentType);
 
             var enrollment = new StudentSubjectAssignment
             {
@@ -661,13 +652,6 @@ namespace SchoolManager.Services.Implementations
             {
                 query = query.Where(sa =>
                     _context.Groups.Any(g => g.Id == sa.GroupId && g.SchoolId == schoolId.Value));
-            }
-
-            if (!advancedMode)
-            {
-                var gradeIds = activeAssignments.Select(x => x.GradeId).Distinct().ToList();
-                var groupIds = activeAssignments.Select(x => x.GroupId).Distinct().ToList();
-                query = query.Where(sa => gradeIds.Contains(sa.GradeLevelId) || groupIds.Contains(sa.GroupId));
             }
 
             var rows = await query
