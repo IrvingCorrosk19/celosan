@@ -25,7 +25,7 @@ namespace SchoolManager.Services.Implementations
 
         public async Task<(bool success, string message, User? user)> LoginAsync(string email, string password)
         {
-            var user = await _userService.GetByEmailAsync(email);
+            var user = await _userService.GetByEmailIgnoringTenantAsync(email);
             
             if (user == null)
             {
