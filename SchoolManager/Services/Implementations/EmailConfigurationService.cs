@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using System.Net.Mail;
@@ -11,18 +12,29 @@ namespace SchoolManager.Services.Implementations
     public class EmailConfigurationService : IEmailConfigurationService
     {
         private readonly SchoolDbContext _context;
+        private readonly ITenantContext _tenantContext;
         private readonly ILogger<EmailConfigurationService> _logger;
 
-        public EmailConfigurationService(SchoolDbContext context, ILogger<EmailConfigurationService> logger)
+        public EmailConfigurationService(
+            SchoolDbContext context,
+            ITenantContext tenantContext,
+            ILogger<EmailConfigurationService> logger)
         {
             _context = context;
+            _tenantContext = tenantContext;
             _logger = logger;
         }
 
         public async Task<List<EmailConfigurationDto>> GetAllAsync()
         {
-            var configurations = await _context.EmailConfigurations
+            var query = _context.EmailConfigurations
                 .Include(ec => ec.School)
+                .AsQueryable();
+
+            if (!_tenantContext.BypassTenantFilter && _tenantContext.SchoolId.HasValue)
+                query = query.Where(ec => ec.SchoolId == _tenantContext.SchoolId.Value);
+
+            var configurations = await query
                 .OrderBy(ec => ec.SchoolId)
                 .ThenBy(ec => ec.CreatedAt)
                 .ToListAsync();
@@ -36,7 +48,13 @@ namespace SchoolManager.Services.Implementations
                 .Include(ec => ec.School)
                 .FirstOrDefaultAsync(ec => ec.Id == id);
 
-            return configuration != null ? MapToDto(configuration) : null;
+            if (configuration == null)
+                return null;
+
+            if (!SchoolTenantHelper.CanAccessResource(configuration.SchoolId, _tenantContext))
+                return null;
+
+            return MapToDto(configuration);
         }
 
         public async Task<EmailConfigurationDto?> GetBySchoolIdAsync(Guid schoolId)
@@ -133,6 +151,9 @@ namespace SchoolManager.Services.Implementations
             if (configuration == null)
                 throw new ArgumentException("Configuración de email no encontrada");
 
+            if (!SchoolTenantHelper.CanAccessResource(configuration.SchoolId, _tenantContext))
+                throw new UnauthorizedAccessException("No tiene permisos para modificar la configuración de otra escuela.");
+
             configuration.SmtpServer = updateDto.SmtpServer;
             configuration.SmtpPort = updateDto.SmtpPort;
             configuration.SmtpUsername = updateDto.SmtpUsername;
@@ -157,6 +178,9 @@ namespace SchoolManager.Services.Implementations
             if (configuration == null)
                 return false;
 
+            if (!SchoolTenantHelper.CanAccessResource(configuration.SchoolId, _tenantContext))
+                throw new UnauthorizedAccessException("No tiene permisos para eliminar la configuración de otra escuela.");
+
             _context.EmailConfigurations.Remove(configuration);
             await _context.SaveChangesAsync();
 
@@ -169,6 +193,9 @@ namespace SchoolManager.Services.Implementations
                 .FirstOrDefaultAsync(ec => ec.Id == id);
 
             if (configuration == null)
+                return false;
+
+            if (!SchoolTenantHelper.CanAccessResource(configuration.SchoolId, _tenantContext))
                 return false;
 
             return await TestSmtpConnection(configuration);

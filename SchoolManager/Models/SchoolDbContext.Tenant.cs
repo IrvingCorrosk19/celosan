@@ -115,5 +115,17 @@ public partial class SchoolDbContext
         modelBuilder.Entity<TeacherAssignment>().HasQueryFilter(ta =>
             _tenantContext.BypassTenantFilter ||
             (ta.SubjectAssignment.SchoolId != null && ta.SubjectAssignment.SchoolId == _tenantContext.SchoolId));
+
+        modelBuilder.Entity<EmailConfiguration>().HasQueryFilter(ec =>
+            _tenantContext.BypassTenantFilter ||
+            ec.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<PaymentConcept>().HasQueryFilter(pc =>
+            _tenantContext.BypassTenantFilter ||
+            pc.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<PrematriculationPeriod>().HasQueryFilter(p =>
+            _tenantContext.BypassTenantFilter ||
+            p.SchoolId == _tenantContext.SchoolId);
     }
 }

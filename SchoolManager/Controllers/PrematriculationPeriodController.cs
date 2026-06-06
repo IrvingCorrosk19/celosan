@@ -80,6 +80,10 @@ public class PrematriculationPeriodController : Controller
         if (period == null)
             return NotFound();
 
+        var currentUser = await _currentUserService.GetCurrentUserAsync();
+        if (currentUser?.SchoolId == null || period.SchoolId != currentUser.SchoolId.Value)
+            return Unauthorized();
+
         var dto = new PrematriculationPeriodDto
         {
             Id = period.Id,
@@ -110,6 +114,9 @@ public class PrematriculationPeriodController : Controller
             if (period == null)
                 return NotFound();
 
+            if (currentUser.SchoolId == null || period.SchoolId != currentUser.SchoolId.Value)
+                return Unauthorized();
+
             period.StartDate = dto.StartDate;
             period.EndDate = dto.EndDate;
             period.IsActive = dto.IsActive;
@@ -132,6 +139,17 @@ public class PrematriculationPeriodController : Controller
     [HttpPost]
     public async Task<IActionResult> Delete(Guid id)
     {
+        var currentUser = await _currentUserService.GetCurrentUserAsync();
+        var period = await _periodService.GetByIdAsync(id);
+        if (period == null)
+        {
+            TempData["ErrorMessage"] = "Período no encontrado.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (currentUser?.SchoolId == null || period.SchoolId != currentUser.SchoolId.Value)
+            return Unauthorized();
+
         var deleted = await _periodService.DeleteAsync(id);
         
         if (deleted)

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 
@@ -8,23 +9,34 @@ namespace SchoolManager.Services.Implementations;
 public class PaymentConceptService : IPaymentConceptService
 {
     private readonly SchoolDbContext _context;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<PaymentConceptService> _logger;
 
     public PaymentConceptService(
         SchoolDbContext context,
+        ITenantContext tenantContext,
         ILogger<PaymentConceptService> logger)
     {
         _context = context;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
     public async Task<PaymentConcept?> GetByIdAsync(Guid id)
     {
-        return await _context.PaymentConcepts
+        var concept = await _context.PaymentConcepts
             .Include(pc => pc.CreatedByUser)
             .Include(pc => pc.UpdatedByUser)
             .Include(pc => pc.School)
             .FirstOrDefaultAsync(pc => pc.Id == id);
+
+        if (concept == null)
+            return null;
+
+        if (!SchoolTenantHelper.CanAccessResource(concept.SchoolId, _tenantContext))
+            return null;
+
+        return concept;
     }
 
     public async Task<List<PaymentConceptDto>> GetAllAsync(Guid schoolId)
@@ -78,6 +90,12 @@ public class PaymentConceptService : IPaymentConceptService
         if (concept == null)
             throw new Exception("Concepto de pago no encontrado");
 
+        if (!SchoolTenantHelper.CanAccessResource(concept.SchoolId, _tenantContext))
+            throw new UnauthorizedAccessException("No tiene permisos para modificar conceptos de otra escuela.");
+
+        if (dto.SchoolId != Guid.Empty && dto.SchoolId != concept.SchoolId)
+            throw new UnauthorizedAccessException("No se puede cambiar la escuela del concepto de pago.");
+
         concept.Name = dto.Name;
         concept.Description = dto.Description;
         concept.Amount = dto.Amount;
@@ -99,6 +117,9 @@ public class PaymentConceptService : IPaymentConceptService
         var concept = await _context.PaymentConcepts.FindAsync(id);
         if (concept == null)
             return false;
+
+        if (!SchoolTenantHelper.CanAccessResource(concept.SchoolId, _tenantContext))
+            throw new UnauthorizedAccessException("No tiene permisos para eliminar conceptos de otra escuela.");
 
         // Verificar si hay pagos asociados
         var hasPayments = await _context.Payments.AnyAsync(p => p.PaymentConceptId == id);

@@ -34,6 +34,13 @@ public class AttendanceService : IAttendanceService
 
     public async Task UpdateAsync(Attendance attendance)
     {
+        var existing = await _context.Attendances.FindAsync(attendance.Id);
+        if (existing == null)
+            throw new InvalidOperationException("Asistencia no encontrada.");
+
+        if (existing.SchoolId.HasValue)
+            attendance.SchoolId = existing.SchoolId;
+
         // Configurar campos de auditoría para actualización
         await AuditHelper.SetAuditFieldsForUpdateAsync(attendance, _currentUserService);
         

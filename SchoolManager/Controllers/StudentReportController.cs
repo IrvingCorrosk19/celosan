@@ -14,7 +14,9 @@ using System.Text;
 using System.IO;
 using System.Text.Json;
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 
+[Authorize(Roles = "student,estudiante,admin,director,secretaria,acudiente,parent")]
 public class StudentReportController : Controller
 {
     private readonly IStudentReportService _reportService;
@@ -143,6 +145,11 @@ public class StudentReportController : Controller
             if (role is "student" or "estudiante")
             {
                 if (currentUser.Id != studentId)
+                    return Forbid();
+            }
+            else if (role is "parent" or "acudiente")
+            {
+                if (!await IsParentOfStudentAsync(currentUser.Id, studentId, currentUser.SchoolId))
                     return Forbid();
             }
             else if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
@@ -282,6 +289,11 @@ public class StudentReportController : Controller
             if (role is "student" or "estudiante")
             {
                 if (currentUser.Id != studentId)
+                    return Forbid();
+            }
+            else if (role is "parent" or "acudiente")
+            {
+                if (!await IsParentOfStudentAsync(currentUser.Id, studentId, currentUser.SchoolId))
                     return Forbid();
             }
             else if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
@@ -437,6 +449,17 @@ public class StudentReportController : Controller
         }
     }
 
+    private async Task<bool> IsParentOfStudentAsync(Guid parentId, Guid studentId, Guid? schoolId)
+    {
+        return await _context.Prematriculations.AsNoTracking()
+            .Where(p => p.ParentId == parentId && p.StudentId == studentId)
+            .Join(_context.Users.AsNoTracking(),
+                p => p.StudentId,
+                u => u.Id,
+                (p, u) => u)
+            .AnyAsync(u =>
+                (u.Role.ToLower() == "student" || u.Role.ToLower() == "estudiante") &&
+                (!schoolId.HasValue || u.SchoolId == schoolId));
+    }
+
 }
-
-

@@ -1,15 +1,19 @@
 using SchoolManager.Models;
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.ViewModels;
+using SchoolManager.Services.Interfaces;
+using SchoolManager.Services.Implementations;
 
 
 public class TeacherAssignmentService : ITeacherAssignmentService
 {
     private readonly SchoolDbContext _context;
+    private readonly ICurrentUserService _currentUserService;
 
-    public TeacherAssignmentService(SchoolDbContext context)
+    public TeacherAssignmentService(SchoolDbContext context, ICurrentUserService currentUserService)
     {
         _context = context;
+        _currentUserService = currentUserService;
     }
 
     public async Task<TeacherAssignment?> GetExistingAssignmentAsync(
@@ -245,8 +249,12 @@ public class TeacherAssignmentService : ITeacherAssignmentService
             GradeLevelId = gradeLevelId,
             AreaId = areaId,
             SpecialtyId = specialtyId,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            Status = "Active"
         };
+
+        await AuditHelper.SetAuditFieldsForCreateAsync(newAssignment, _currentUserService);
+        await AuditHelper.SetSchoolIdAsync(newAssignment, _currentUserService);
 
         _context.SubjectAssignments.Add(newAssignment);
         await _context.SaveChangesAsync();

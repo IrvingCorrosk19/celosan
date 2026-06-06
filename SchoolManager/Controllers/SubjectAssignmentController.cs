@@ -5,6 +5,7 @@ using SchoolManager.Dtos;
 using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Models.ViewModels;
+using SchoolManager.Services.Implementations;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
 using System;
@@ -793,6 +794,11 @@ namespace SchoolManager.Controllers
             if (asignaciones == null || asignaciones.Count == 0)
                 return BadRequest(new { success = false, message = "No se recibieron asignaciones." });
 
+            var currentUser = await _currentUserService.GetCurrentUserAsync();
+            if (currentUser?.SchoolId == null)
+                return BadRequest(new { success = false, message = "No se pudo determinar la escuela del usuario." });
+
+            var schoolId = currentUser.SchoolId.Value;
             var asignacionesCreadas = new List<string>();
 
             foreach (var item in asignaciones)
@@ -801,24 +807,42 @@ namespace SchoolManager.Controllers
                 var grado = await _context.GradeLevels.FirstOrDefaultAsync(g => g.Name.ToLower() == item.Grado.ToLower());
                 var grupo = await _context.Groups.FirstOrDefaultAsync(g => g.Name.ToLower() == item.Grupo.ToLower());
 
-                if (materia != null && grado != null && grupo != null)
+                if (materia == null || grado == null || grupo == null)
+                    continue;
+
+                var area = await _context.Areas.FirstOrDefaultAsync(a => a.Name == "N/A" || a.IsGlobal)
+                    ?? await _context.Areas.FirstOrDefaultAsync();
+
+                var specialty = await _context.Specialties.FirstOrDefaultAsync(s => s.Name == "N/A")
+                    ?? await _context.Specialties.FirstOrDefaultAsync();
+
+                if (area == null || specialty == null)
+                    continue;
+
+                bool yaExiste = await _context.SubjectAssignments.AnyAsync(a =>
+                    a.SubjectId == materia.Id &&
+                    a.GradeLevelId == grado.Id &&
+                    a.GroupId == grupo.Id &&
+                    a.SchoolId == schoolId);
+
+                if (!yaExiste)
                 {
-                    bool yaExiste = await _context.SubjectAssignments.AnyAsync(a =>
-                        a.SubjectId == materia.Id &&
-                        a.GroupId == grupo.Id);
-
-                    if (!yaExiste)
+                    var assignment = new SubjectAssignment
                     {
-                        _context.SubjectAssignments.Add(new SubjectAssignment
-                        {
-                            Id = Guid.NewGuid(),
-                            SubjectId = materia.Id,
-                            GroupId = grupo.Id,
-                            CreatedAt = DateTime.UtcNow
-                        });
+                        Id = Guid.NewGuid(),
+                        SubjectId = materia.Id,
+                        GradeLevelId = grado.Id,
+                        GroupId = grupo.Id,
+                        AreaId = area.Id,
+                        SpecialtyId = specialty.Id,
+                        SchoolId = schoolId,
+                        Status = "Active",
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-                        asignacionesCreadas.Add($"{materia.Name} - {grado.Name} - {grupo.Name}");
-                    }
+                    await AuditHelper.SetAuditFieldsForCreateAsync(assignment, _currentUserService);
+                    _context.SubjectAssignments.Add(assignment);
+                    asignacionesCreadas.Add($"{materia.Name} - {grado.Name} - {grupo.Name}");
                 }
             }
 

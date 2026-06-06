@@ -62,6 +62,24 @@ public static class SchoolTenantHelper
     public static bool UserBelongsToSchool(User? user, Guid schoolId) =>
         user?.SchoolId != null && user.SchoolId.Value == schoolId;
 
+    public static bool CanAccessResource(Guid? resourceSchoolId, ITenantContext tenant) =>
+        CanAccessSchool(resourceSchoolId, tenant);
+
+    public static async Task<bool> TeacherHasSubjectGroupGradeAssignmentAsync(
+        SchoolDbContext context,
+        Guid teacherId,
+        Guid subjectId,
+        Guid gradeLevelId,
+        Guid groupId,
+        CancellationToken cancellationToken = default) =>
+        await context.TeacherAssignments.AsNoTracking()
+            .AnyAsync(ta =>
+                ta.TeacherId == teacherId &&
+                ta.SubjectAssignment.SubjectId == subjectId &&
+                ta.SubjectAssignment.GradeLevelId == gradeLevelId &&
+                ta.SubjectAssignment.GroupId == groupId,
+                cancellationToken);
+
     public static async Task<BulkUploadSchoolContext?> TryGetBulkUploadSchoolContextAsync(
         SchoolDbContext context,
         ICurrentUserService currentUserService,

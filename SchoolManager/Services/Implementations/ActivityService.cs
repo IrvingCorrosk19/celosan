@@ -297,6 +297,10 @@ namespace SchoolManager.Services
 
         public async Task UpdateAsync(Activity activity)
         {
+            var existing = await _context.Activities.FindAsync(activity.Id);
+            if (existing == null)
+                throw new InvalidOperationException("Actividad no encontrada.");
+
             // Validar trimestre activo antes de actualizar
             await _trimesterService.ValidateTrimesterActiveAsync(activity.Trimester);
 
@@ -307,8 +311,7 @@ namespace SchoolManager.Services
                 throw new InvalidOperationException("No se pudo determinar la escuela del usuario actual.");
             }
 
-            // Verificar que la actividad pertenece a la misma escuela
-            if (activity.SchoolId != currentUserSchool.Id)
+            if (existing.SchoolId != currentUserSchool.Id)
             {
                 throw new UnauthorizedAccessException("No tiene permisos para modificar actividades de otra escuela.");
             }
@@ -325,8 +328,7 @@ namespace SchoolManager.Services
                 }
             }
 
-            // Asegurar que el SchoolId se mantenga
-            activity.SchoolId = currentUserSchool.Id;
+            activity.SchoolId = existing.SchoolId;
 
             // Configurar campos de auditoría para actualización
             await AuditHelper.SetAuditFieldsForUpdateAsync(activity, _currentUserService);

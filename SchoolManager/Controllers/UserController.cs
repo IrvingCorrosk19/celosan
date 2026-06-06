@@ -6,10 +6,11 @@ using SchoolManager.Models;
 using SchoolManager.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using BCrypt.Net;
-using SchoolManager.Services.Interfaces;
 using SchoolManager.Dtos;
 using SchoolManager.Constants;
+using SchoolManager.Services.Interfaces;
 using Microsoft.Extensions.Logging;
+using SchoolManager.Helpers;
 
 [Authorize(Roles = "admin")]
 public class UserController : Controller
@@ -21,6 +22,7 @@ public class UserController : Controller
     private readonly IMapper _mapper;
     private readonly IEmailConfigurationService _emailConfigurationService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<UserController> _logger;
 
     public UserController(
@@ -31,6 +33,7 @@ public class UserController : Controller
         IMapper mapper,
         IEmailConfigurationService emailConfigurationService,
         ICurrentUserService currentUserService,
+        ITenantContext tenantContext,
         ILogger<UserController> logger)
     {
         _userService = userService;
@@ -40,6 +43,7 @@ public class UserController : Controller
         _mapper = mapper;
         _emailConfigurationService = emailConfigurationService;
         _currentUserService = currentUserService;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -314,6 +318,9 @@ public class UserController : Controller
         var user = await _userService.GetByIdWithRelationsAsync(id);
         if (user == null) return NotFound();
 
+        if (!SchoolTenantHelper.CanAccessResource(user.SchoolId, _tenantContext))
+            return Forbid();
+
         var result = new
         {
             user.Id,
@@ -321,7 +328,6 @@ public class UserController : Controller
             user.LastName,
             user.Email,
             user.DocumentId,
-            user.PasswordHash,
             Role = char.ToUpper(user.Role[0]) + user.Role.Substring(1).ToLower(),
             user.Status,
             user.DateOfBirth,

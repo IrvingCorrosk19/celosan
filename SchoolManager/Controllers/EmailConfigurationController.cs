@@ -4,6 +4,7 @@ using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
+using SchoolManager.Helpers;
 
 namespace SchoolManager.Controllers
 {
@@ -132,6 +133,13 @@ namespace SchoolManager.Controllers
                     _logger.LogWarning("ModelState no es válido. Errores: {Errors}", 
                         string.Join(", ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
                     return View(model);
+                }
+
+                var currentUser = await _currentUserService.GetCurrentUserAsync();
+                if (currentUser?.SchoolId == null || model.SchoolId != currentUser.SchoolId.Value)
+                {
+                    TempData["ErrorMessage"] = "No puede crear configuración para otra escuela.";
+                    return RedirectToAction(nameof(Index));
                 }
 
                 _logger.LogInformation("Creando configuración de email para SchoolId: {SchoolId}", model.SchoolId);

@@ -11,6 +11,7 @@ using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using SchoolManager.Helpers;
 
 namespace SchoolManager.Controllers
 {
@@ -28,6 +29,7 @@ namespace SchoolManager.Controllers
         private readonly ICounselorAssignmentService _counselorAssignmentService;
         private readonly ISubjectAssignmentService _subjectAssignmentService;
         private readonly IDocumentStorageService _documentStorage;
+        private readonly SchoolDbContext _context;
 
 
         public TeacherGradebookController(
@@ -41,7 +43,8 @@ namespace SchoolManager.Controllers
             IAttendanceService attendanceService,
             ICounselorAssignmentService counselorAssignmentService,
             ISubjectAssignmentService subjectAssignmentService,
-            IDocumentStorageService documentStorage)
+            IDocumentStorageService documentStorage,
+            SchoolDbContext context)
             
         {
             _documentStorage = documentStorage;
@@ -55,7 +58,29 @@ namespace SchoolManager.Controllers
             _attendanceService = attendanceService;
             _counselorAssignmentService = counselorAssignmentService;
             _subjectAssignmentService = subjectAssignmentService;
+            _context = context;
             
+        }
+
+        private async Task<(bool Ok, IActionResult? Error)> ValidateTeacherGradebookScopeAsync(
+            Guid teacherId,
+            Guid subjectId,
+            Guid gradeLevelId,
+            Guid groupId)
+        {
+            if (teacherId == Guid.Empty || subjectId == Guid.Empty || gradeLevelId == Guid.Empty || groupId == Guid.Empty)
+                return (false, BadRequest("Materia, grado y grupo son obligatorios."));
+
+            var sessionTeacherId = GetTeacherId();
+            if (teacherId != sessionTeacherId)
+                return (false, Forbid());
+
+            var hasAssignment = await SchoolTenantHelper.TeacherHasSubjectGroupGradeAssignmentAsync(
+                _context, teacherId, subjectId, gradeLevelId, groupId);
+            if (!hasAssignment)
+                return (false, Forbid());
+
+            return (true, null);
         }
 
 
@@ -67,6 +92,7 @@ namespace SchoolManager.Controllers
                 if (data == null || !data.Any())
                     return BadRequest("No se recibió información de notas.");
 
+                var teacherId = GetTeacherId();
                 var registros = new List<StudentActivityScoreCreateDto>();
 
                 foreach (var alumno in data)
@@ -74,11 +100,14 @@ namespace SchoolManager.Controllers
                     if (!Guid.TryParse(alumno.StudentId, out var studentId) ||
                         !Guid.TryParse(alumno.SubjectId, out var subjectId) ||
                         !Guid.TryParse(alumno.GradeLevelId, out var gradeLevelId) ||
-                        !Guid.TryParse(alumno.GroupId, out var groupId) ||
-                        !Guid.TryParse(alumno.TeacherId, out var teacherId))
+                        !Guid.TryParse(alumno.GroupId, out var groupId))
                     {
                         return BadRequest("Uno o más IDs tienen un formato inválido.");
                     }
+
+                    var scopeCheck = await ValidateTeacherGradebookScopeAsync(teacherId, subjectId, gradeLevelId, groupId);
+                    if (!scopeCheck.Ok)
+                        return scopeCheck.Error!;
 
                     if (subjectId == Guid.Empty || gradeLevelId == Guid.Empty)
                         return BadRequest("La materia y el grado son obligatorios para guardar notas.");
@@ -143,10 +172,18 @@ namespace SchoolManager.Controllers
                 return BadRequest("Debe indicar la materia y el grado para cargar las notas.");
             }
 
-            if (notes.GroupId == Guid.Empty || notes.TeacherId == Guid.Empty)
+            if (notes.GroupId == Guid.Empty)
             {
-                return BadRequest("Debe indicar el grupo y el docente.");
+                return BadRequest("Debe indicar el grupo.");
             }
+
+            var teacherId = GetTeacherId();
+            notes.TeacherId = teacherId;
+
+            var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                teacherId, notes.SubjectId, notes.GradeLevelId, notes.GroupId);
+            if (!scopeCheck.Ok)
+                return scopeCheck.Error!;
 
             // Actividades solo de la misma materia y el mismo grado que el combo seleccionado
             var activities = await _activitySvc.GetByTeacherGroupTrimesterAsync(
@@ -206,6 +243,15 @@ namespace SchoolManager.Controllers
         [HttpGet]
         public async Task<JsonResult> StudentsByGroupAndGrade(Guid groupId, Guid gradeId, Guid? subjectId = null)
         {
+            var teacherId = GetTeacherId();
+            if (subjectId.HasValue && subjectId.Value != Guid.Empty)
+            {
+                var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                    teacherId, subjectId.Value, gradeId, groupId);
+                if (!scopeCheck.Ok)
+                    return Json(Array.Empty<StudentBasicDto>());
+            }
+
             IEnumerable<StudentBasicDto> students;
             if (subjectId.HasValue && subjectId.Value != Guid.Empty)
             {
@@ -365,6 +411,10 @@ namespace SchoolManager.Controllers
         public async Task<JsonResult> GradeBookJson(Guid groupId, string trimester, Guid subjectId, Guid gradeLevelId)
         {
             var teacherId = GetTeacherId();
+            var scopeCheck = await ValidateTeacherGradebookScopeAsync(teacherId, subjectId, gradeLevelId, groupId);
+            if (!scopeCheck.Ok)
+                return Json(new { error = "No autorizado." });
+
             var book = await _scoreSvc.GetGradeBookAsync(teacherId, groupId, trimester, subjectId, gradeLevelId);
             return Json(book);
         }
@@ -398,6 +448,12 @@ namespace SchoolManager.Controllers
 
                 if (dto.SubjectId == Guid.Empty || dto.GradeLevelId == Guid.Empty)
                     return Json(new { success = false, error = "La materia y el grado son obligatorios." });
+
+                dto.TeacherId = GetTeacherId();
+                var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                    dto.TeacherId, dto.SubjectId, dto.GradeLevelId, dto.GroupId);
+                if (!scopeCheck.Ok)
+                    return Json(new { success = false, error = "No tiene permiso para crear actividades en esta impartición." });
 
                 if (dto.Pdf is { Length: > 0 })
                 {
@@ -439,6 +495,12 @@ namespace SchoolManager.Controllers
                 if (dto.SubjectId == Guid.Empty || dto.GradeLevelId == Guid.Empty)
                     return Json(new { success = false, error = "La materia y el grado son obligatorios." });
 
+                dto.TeacherId = GetTeacherId();
+                var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                    dto.TeacherId, dto.SubjectId, dto.GradeLevelId, dto.GroupId);
+                if (!scopeCheck.Ok)
+                    return Json(new { success = false, error = "No tiene permiso para modificar actividades en esta impartición." });
+
                 if (dto.Pdf is { Length: > 0 })
                 {
                     dto.PersistedTeacherGradebookFileName = await _documentStorage.SaveTeacherGradebookFileAsync(dto.Pdf).ConfigureAwait(false);
@@ -465,6 +527,19 @@ namespace SchoolManager.Controllers
         {
             try
             {
+                if (scores == null || scores.Length == 0)
+                    return BadRequest(new { success = false, error = "No se recibieron notas." });
+
+                var teacherId = GetTeacherId();
+                foreach (var score in scores)
+                {
+                    score.TeacherId = teacherId;
+                    var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                        teacherId, score.SubjectId, score.GradeLevelId, score.GroupId);
+                    if (!scopeCheck.Ok)
+                        return scopeCheck.Error!;
+                }
+
                 await _scoreSvc.SaveAsync(scores);
                 return Ok(new { success = true });
             }
@@ -483,6 +558,25 @@ namespace SchoolManager.Controllers
         {
             try
             {
+                var activity = await _context.Activities.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+                if (activity == null)
+                    return NotFound(new { success = false, error = "Actividad no encontrada." });
+
+                var teacherId = GetTeacherId();
+                if (activity.TeacherId != teacherId)
+                    return Forbid();
+
+                if (activity.SubjectId.HasValue && activity.GradeLevelId.HasValue && activity.GroupId.HasValue)
+                {
+                    var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                        teacherId,
+                        activity.SubjectId.Value,
+                        activity.GradeLevelId.Value,
+                        activity.GroupId.Value);
+                    if (!scopeCheck.Ok)
+                        return scopeCheck.Error!;
+                }
+
                 await _activitySvc.DeleteAsync(id);
                 return Ok(new { success = true });
             }
@@ -504,6 +598,13 @@ namespace SchoolManager.Controllers
             {
                 return BadRequest("Debe indicar la materia y el grado para los promedios.");
             }
+
+            var teacherId = GetTeacherId();
+            notes.TeacherId = teacherId;
+            var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                teacherId, notes.SubjectId, notes.GradeLevelId, notes.GroupId);
+            if (!scopeCheck.Ok)
+                return scopeCheck.Error!;
 
             try
             {
@@ -538,10 +639,18 @@ namespace SchoolManager.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAttendancesByDate(Guid groupId, Guid gradeId, DateOnly date, Guid? shiftId = null)
+        public async Task<IActionResult> GetAttendancesByDate(Guid groupId, Guid gradeId, DateOnly date, Guid? shiftId = null, Guid? subjectId = null)
         {
             try
             {
+                if (subjectId.HasValue && subjectId.Value != Guid.Empty)
+                {
+                    var scopeCheck = await ValidateTeacherGradebookScopeAsync(
+                        GetTeacherId(), subjectId.Value, gradeId, groupId);
+                    if (!scopeCheck.Ok)
+                        return scopeCheck.Error!;
+                }
+
                 var attendances = await _attendanceService.GetAttendancesByDateAsync(groupId, gradeId, date, shiftId);
                 return Ok(attendances);
             }

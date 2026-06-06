@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 
@@ -8,13 +9,16 @@ namespace SchoolManager.Services.Implementations;
 public class PrematriculationPeriodService : IPrematriculationPeriodService
 {
     private readonly SchoolDbContext _context;
+    private readonly ITenantContext _tenantContext;
     private readonly ILogger<PrematriculationPeriodService> _logger;
 
     public PrematriculationPeriodService(
         SchoolDbContext context,
+        ITenantContext tenantContext,
         ILogger<PrematriculationPeriodService> logger)
     {
         _context = context;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -32,9 +36,17 @@ public class PrematriculationPeriodService : IPrematriculationPeriodService
 
     public async Task<PrematriculationPeriod?> GetByIdAsync(Guid id)
     {
-        return await _context.PrematriculationPeriods
+        var period = await _context.PrematriculationPeriods
             .Include(p => p.School)
             .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (period == null)
+            return null;
+
+        if (!SchoolTenantHelper.CanAccessResource(period.SchoolId, _tenantContext))
+            return null;
+
+        return period;
     }
 
     public async Task<List<PrematriculationPeriodDto>> GetAllAsync(Guid schoolId)
@@ -88,6 +100,16 @@ public class PrematriculationPeriodService : IPrematriculationPeriodService
 
     public async Task<PrematriculationPeriod> UpdateAsync(PrematriculationPeriod period, Guid updatedBy)
     {
+        var existing = await _context.PrematriculationPeriods.FindAsync(period.Id);
+        if (existing == null)
+            throw new InvalidOperationException("Período de prematrícula no encontrado");
+
+        if (!SchoolTenantHelper.CanAccessResource(existing.SchoolId, _tenantContext))
+            throw new UnauthorizedAccessException("No tiene permisos para modificar períodos de otra escuela.");
+
+        if (period.SchoolId != existing.SchoolId)
+            throw new UnauthorizedAccessException("No se puede cambiar la escuela del período.");
+
         period.UpdatedAt = DateTime.UtcNow;
         period.UpdatedBy = updatedBy;
         
@@ -98,11 +120,11 @@ public class PrematriculationPeriodService : IPrematriculationPeriodService
                 .Where(p => p.SchoolId == period.SchoolId && p.IsActive && p.Id != period.Id)
                 .ToListAsync();
             
-            foreach (var existing in existingActive)
+            foreach (var otherPeriod in existingActive)
             {
-                existing.IsActive = false;
-                existing.UpdatedAt = DateTime.UtcNow;
-                existing.UpdatedBy = updatedBy;
+                otherPeriod.IsActive = false;
+                otherPeriod.UpdatedAt = DateTime.UtcNow;
+                otherPeriod.UpdatedBy = updatedBy;
             }
         }
 
@@ -119,6 +141,9 @@ public class PrematriculationPeriodService : IPrematriculationPeriodService
         var period = await _context.PrematriculationPeriods.FindAsync(id);
         if (period == null)
             return false;
+
+        if (!SchoolTenantHelper.CanAccessResource(period.SchoolId, _tenantContext))
+            throw new UnauthorizedAccessException("No tiene permisos para eliminar períodos de otra escuela.");
 
         // Verificar que no tenga prematrículas asociadas
         var hasPrematriculations = await _context.Prematriculations
