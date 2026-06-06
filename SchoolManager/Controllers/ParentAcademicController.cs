@@ -44,7 +44,7 @@ public class ParentAcademicController : Controller
         if (parent == null)
             return Unauthorized();
 
-        if (!await IsParentOfStudentAsync(parent.Id, studentId))
+        if (!await IsParentOfStudentAsync(parent.Id, studentId, parent.SchoolId))
             return Forbid();
 
         var report = !string.IsNullOrWhiteSpace(trimester)
@@ -77,9 +77,9 @@ public class ParentAcademicController : Controller
             .ToList();
     }
 
-    private async Task<bool> IsParentOfStudentAsync(Guid parentId, Guid studentId)
+    private async Task<bool> IsParentOfStudentAsync(Guid parentId, Guid studentId, Guid? schoolId)
     {
-        var children = await GetLinkedStudentUsersAsync(parentId, null);
+        var children = await GetLinkedStudentUsersAsync(parentId, schoolId);
         return children.Any(c => c.Id == studentId);
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.Interfaces;
@@ -16,6 +17,7 @@ public class PaymentController : Controller
     private readonly IPrematriculationService _prematriculationService;
     private readonly IPaymentConceptService _paymentConceptService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantContext _tenantContext;
     private readonly ICloudinaryService _cloudinaryService;
     private readonly IMessagingService? _messagingService;
     private readonly SchoolDbContext _context;
@@ -26,6 +28,7 @@ public class PaymentController : Controller
         IPrematriculationService prematriculationService,
         IPaymentConceptService paymentConceptService,
         ICurrentUserService currentUserService,
+        ITenantContext tenantContext,
         ICloudinaryService cloudinaryService,
         IMessagingService? messagingService,
         SchoolDbContext context,
@@ -35,6 +38,7 @@ public class PaymentController : Controller
         _prematriculationService = prematriculationService;
         _paymentConceptService = paymentConceptService;
         _currentUserService = currentUserService;
+        _tenantContext = tenantContext;
         _cloudinaryService = cloudinaryService;
         _messagingService = messagingService;
         _context = context;
@@ -671,6 +675,9 @@ public class PaymentController : Controller
         var payment = await _paymentService.GetByIdAsync(id);
         if (payment == null)
             return NotFound();
+
+        if (!SchoolTenantHelper.CanAccessSchool(payment.SchoolId, _tenantContext))
+            return Forbid();
 
         var payments = await _paymentService.GetByPrematriculationAsync(payment.PrematriculationId);
         var dto = payments.FirstOrDefault(p => p.Id == id);

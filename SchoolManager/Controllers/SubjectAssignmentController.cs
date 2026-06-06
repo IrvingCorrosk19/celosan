@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
@@ -13,6 +14,7 @@ using System.Threading.Tasks;
 
 namespace SchoolManager.Controllers
 {
+    [Authorize(Roles = "admin,secretaria,director")]
     public class SubjectAssignmentController : Controller
     {
         private readonly SchoolDbContext _context;

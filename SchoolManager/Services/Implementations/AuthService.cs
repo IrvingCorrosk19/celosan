@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using System.Security.Claims;
@@ -84,6 +85,9 @@ namespace SchoolManager.Services.Implementations
                 new Claim(ClaimTypes.Name, user.Name),
                 new Claim(ClaimTypes.Role, user.Role)
             };
+
+            if (user.SchoolId.HasValue)
+                claims.Add(new Claim(TenantClaimTypes.SchoolId, user.SchoolId.Value.ToString()));
 
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var authProperties = new AuthenticationProperties

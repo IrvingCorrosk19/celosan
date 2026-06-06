@@ -14,16 +14,25 @@ namespace SchoolManager.Services.Implementations
     public class UserPasswordManagementService : IUserPasswordManagementService
     {
         private readonly SchoolDbContext _context;
+        private readonly ITenantContext _tenantContext;
 
-        public UserPasswordManagementService(SchoolDbContext context)
+        public UserPasswordManagementService(SchoolDbContext context, ITenantContext tenantContext)
         {
             _context = context;
+            _tenantContext = tenantContext;
+        }
+
+        private IQueryable<User> ScopedUsersQuery()
+        {
+            var query = _context.Users.IgnoreQueryFilters().AsQueryable();
+            if (!_tenantContext.BypassTenantFilter && _tenantContext.SchoolId.HasValue)
+                query = query.Where(u => u.SchoolId == _tenantContext.SchoolId);
+            return query;
         }
 
         public async Task<List<UserListDto>> GetAllUsersAsync()
         {
-            var users = await _context.Users
-                .IgnoreQueryFilters()
+            var users = await ScopedUsersQuery()
                 .OrderBy(u => u.Name)
                 .ThenBy(u => u.LastName)
                 .Select(u => new UserListDto
@@ -67,8 +76,7 @@ namespace SchoolManager.Services.Implementations
                 _ => new[] { roleLower }
             };
 
-            var users = await _context.Users
-                .IgnoreQueryFilters()
+            var users = await ScopedUsersQuery()
                 .Where(u => roleFilter.Contains((u.Role ?? string.Empty).ToLowerInvariant()))
                 .OrderBy(u => u.Name)
                 .ThenBy(u => u.LastName)

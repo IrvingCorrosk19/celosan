@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 
 namespace SchoolManager.Middleware;
@@ -41,7 +42,7 @@ public class ApiBearerTokenMiddleware
                         {
                             var user = await db.Users.AsNoTracking()
                                 .Where(u => u.Id == userId)
-                                .Select(u => new { u.Id, u.Email, u.Name, u.LastName, u.Role })
+                                .Select(u => new { u.Id, u.Email, u.Name, u.LastName, u.Role, u.SchoolId })
                                 .FirstOrDefaultAsync(context.RequestAborted);
 
                             if (user != null)
@@ -53,6 +54,8 @@ public class ApiBearerTokenMiddleware
                                     new(ClaimTypes.Name, $"{user.Name} {user.LastName}".Trim()),
                                     new(ClaimTypes.Role, user.Role ?? "")
                                 };
+                                if (user.SchoolId.HasValue)
+                                    claims.Add(new Claim(TenantClaimTypes.SchoolId, user.SchoolId.Value.ToString()));
                                 var identity = new ClaimsIdentity(claims, "ApiBearer");
                                 context.User = new ClaimsPrincipal(identity);
                             }

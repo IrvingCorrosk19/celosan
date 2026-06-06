@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Models;
 using SchoolManager.Dtos;
@@ -8,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 
+[Authorize(Roles = "admin,teacher,docente,director,secretaria")]
 public class DisciplineReportController : Controller
 {
     private readonly IDisciplineReportService _disciplineReportService;

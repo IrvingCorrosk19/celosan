@@ -1,6 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Models;
 
+[Authorize(Roles = "admin")]
 public class AuditLogController : Controller
 {
     private readonly IAuditLogService _auditLogService;

@@ -1,9 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 
 namespace SchoolManager.Controllers;
 
+[Authorize(Roles = "admin,secretaria,director")]
 [Route("GradeLevel")]
 public class GradeLevelController : Controller
 {

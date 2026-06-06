@@ -1,10 +1,12 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Models;
 using SchoolManager.Dtos;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+[Authorize(Roles = "admin,secretaria,teacher,docente,director")]
 public class AttendanceController : Controller
 {
     private readonly IAttendanceService _attendanceService;

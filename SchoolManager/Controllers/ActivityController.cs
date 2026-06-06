@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Dtos;
 using SchoolManager.Interfaces;
 using SchoolManager.Models;
 
+[Authorize(Roles = "admin,teacher,docente,director")]
 public class ActivityController : Controller
 {
     private readonly IActivityService _activityService;

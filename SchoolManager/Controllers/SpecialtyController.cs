@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 
+[Authorize(Roles = "admin,secretaria,director")]
 public class SpecialtyController : Controller
 {
     private readonly ISpecialtyService _specialtyService;

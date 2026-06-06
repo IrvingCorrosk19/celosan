@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolManager.Helpers;
+using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.Dtos;
 using System;
 using System.Threading.Tasks;
-using SchoolManager.Models;
 using SchoolManager.Services.Implementations;
 using System.Linq;
 using System.Collections.Generic;
@@ -17,12 +19,21 @@ public class StudentReportController : Controller
 {
     private readonly IStudentReportService _reportService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantContext _tenantContext;
+    private readonly SchoolDbContext _context;
     private readonly ILogger<StudentReportController> _logger;
 
-    public StudentReportController(IStudentReportService reportService, ICurrentUserService currentUserService, ILogger<StudentReportController> logger)
+    public StudentReportController(
+        IStudentReportService reportService,
+        ICurrentUserService currentUserService,
+        ITenantContext tenantContext,
+        SchoolDbContext context,
+        ILogger<StudentReportController> logger)
     {
         _reportService = reportService;
         _currentUserService = currentUserService;
+        _tenantContext = tenantContext;
+        _context = context;
         _logger = logger;
     }
 
@@ -124,6 +135,21 @@ public class StudentReportController : Controller
     {
         try
         {
+            var currentUser = await _currentUserService.GetCurrentUserAsync();
+            if (currentUser == null)
+                return Unauthorized();
+
+            var role = currentUser.Role?.ToLowerInvariant() ?? "";
+            if (role is "student" or "estudiante")
+            {
+                if (currentUser.Id != studentId)
+                    return Forbid();
+            }
+            else if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
+            {
+                return Forbid();
+            }
+
             _logger.LogInformation("=== INICIO GetTrimesterData - StudentId: {StudentId}, Trimester: {Trimester} ===", studentId, trimester);
             Console.WriteLine($"=== INICIO GetTrimesterData - StudentId: {studentId}, Trimester: {trimester} ===");
 
@@ -248,6 +274,21 @@ public class StudentReportController : Controller
     {
         try
         {
+            var currentUser = await _currentUserService.GetCurrentUserAsync();
+            if (currentUser == null)
+                return Unauthorized();
+
+            var role = currentUser.Role?.ToLowerInvariant() ?? "";
+            if (role is "student" or "estudiante")
+            {
+                if (currentUser.Id != studentId)
+                    return Forbid();
+            }
+            else if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
+            {
+                return Forbid();
+            }
+
             _logger.LogInformation("=== INICIO ExportDisciplinePdf - StudentId: {StudentId} ===", studentId);
             Console.WriteLine($"=== INICIO ExportDisciplinePdf - StudentId: {studentId} ===");
 

@@ -198,6 +198,7 @@ builder.Services.AddDbContext<SchoolDbContext>(options =>
 builder.Services.Configure<NocturnalAdvancedEnrollmentOptions>(
     builder.Configuration.GetSection(NocturnalAdvancedEnrollmentOptions.SectionName));
 builder.Services.AddScoped<INocturnalEnrollmentSettingsService, NocturnalEnrollmentSettingsService>();
+builder.Services.AddScoped<ITenantContext, TenantContext>();
 
 // Registrando todos los servicios con inyección de dependencias
 builder.Services.AddScoped<ISchoolService, SchoolService>();
@@ -333,6 +334,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 // Agregar configuración de autorización
 builder.Services.AddAuthorization(options =>
 {
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+
     options.AddPolicy("SuperAdmin", policy => policy.RequireRole("SuperAdmin"));
     options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
     options.AddPolicy("Teacher", policy => policy.RequireRole("Teacher"));
@@ -508,6 +513,7 @@ app.UseMiddleware<DateTimeMiddleware>();
 
 app.UseAuthentication();
 app.UseMiddleware<SchoolManager.Middleware.ApiBearerTokenMiddleware>();
+app.UseMiddleware<SchoolManager.Middleware.TenantContextMiddleware>();
 app.UseAuthorization();
 
 // Usar el método de extensión para el middleware

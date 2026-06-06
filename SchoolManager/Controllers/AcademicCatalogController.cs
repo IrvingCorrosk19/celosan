@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Application.Interfaces;
 using SchoolManager.Models;
@@ -11,6 +12,7 @@ using System.Threading.Tasks;
 
 namespace SchoolManager.Controllers
 {
+    [Authorize(Roles = "admin,secretaria,director")]
     public class AcademicCatalogController : Controller
     {
         private readonly ISpecialtyService _specialtyService;

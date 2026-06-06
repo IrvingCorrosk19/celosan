@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 
@@ -12,15 +13,18 @@ public class SubjectPromotionController : Controller
 {
     private readonly ISubjectPromotionService _promotionService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantContext _tenantContext;
     private readonly SchoolDbContext _context;
 
     public SubjectPromotionController(
         ISubjectPromotionService promotionService,
         ICurrentUserService currentUserService,
+        ITenantContext tenantContext,
         SchoolDbContext context)
     {
         _promotionService = promotionService;
         _currentUserService = currentUserService;
+        _tenantContext = tenantContext;
         _context = context;
     }
 
@@ -30,6 +34,9 @@ public class SubjectPromotionController : Controller
     [HttpGet("Records/{studentId:guid}")]
     public async Task<IActionResult> Records(Guid studentId)
     {
+        if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
+            return Forbid();
+
         var records = await _promotionService.GetRecordsByStudentAsync(studentId);
         return Json(new { success = true, data = records });
     }
@@ -42,6 +49,9 @@ public class SubjectPromotionController : Controller
         decimal? finalScore,
         string? outcome)
     {
+        if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
+            return Forbid();
+
         var result = await _promotionService.PromoteSubjectAsync(
             studentId, studentSubjectAssignmentId, trimester, finalScore, outcome ?? "");
         return Json(new { success = result.Success, message = result.Message });
@@ -50,6 +60,9 @@ public class SubjectPromotionController : Controller
     [HttpPost("CloseYear")]
     public async Task<IActionResult> CloseYear(Guid studentId, string trimester)
     {
+        if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
+            return Forbid();
+
         var result = await _promotionService.CloseYearForStudentAsync(studentId, trimester);
         return Json(new { success = result.Success, message = result.Message, processed = result.Processed });
     }
@@ -57,6 +70,9 @@ public class SubjectPromotionController : Controller
     [HttpGet("ActiveEnrollments/{studentId:guid}")]
     public async Task<IActionResult> ActiveEnrollments(Guid studentId)
     {
+        if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
+            return Forbid();
+
         var rows = await _context.StudentSubjectAssignments.AsNoTracking()
             .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
             .Join(_context.SubjectAssignments.AsNoTracking(),
