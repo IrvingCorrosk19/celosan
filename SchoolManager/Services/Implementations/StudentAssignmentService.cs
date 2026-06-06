@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using System;
@@ -14,16 +15,39 @@ namespace SchoolManager.Services.Implementations
         private readonly SchoolDbContext _context;
         private readonly ICurrentUserService _currentUserService;
         private readonly IAcademicYearService _academicYearService;
+        private readonly INocturnalEnrollmentSettingsService _nocturnalSettings;
 
-        public StudentAssignmentService(SchoolDbContext context, ICurrentUserService currentUserService, IAcademicYearService academicYearService)
+        public StudentAssignmentService(
+            SchoolDbContext context,
+            ICurrentUserService currentUserService,
+            IAcademicYearService academicYearService,
+            INocturnalEnrollmentSettingsService nocturnalSettings)
         {
             _context = context;
             _currentUserService = currentUserService;
             _academicYearService = academicYearService;
+            _nocturnalSettings = nocturnalSettings;
+        }
+
+        private async Task<bool> IsAdvancedForStudentAsync(Guid studentId)
+        {
+            var schoolId = await _context.Users
+                .Where(u => u.Id == studentId)
+                .Select(u => u.SchoolId)
+                .FirstOrDefaultAsync();
+            return _nocturnalSettings.IsAdvancedEnabled(schoolId);
         }
 
         private async Task SyncStudentSubjectAssignmentsAsync(StudentAssignment assignment, Guid? explicitSubjectId = null)
         {
+            var student = await _context.Users.AsNoTracking()
+                .Where(u => u.Id == assignment.StudentId)
+                .Select(u => new { u.SchoolId })
+                .FirstOrDefaultAsync();
+
+            var advanced = _nocturnalSettings.IsAdvancedEnabled(student?.SchoolId);
+            if (advanced && !explicitSubjectId.HasValue)
+                return;
             var subjectAssignmentsQuery = _context.SubjectAssignments
                 .Where(sa => sa.GradeLevelId == assignment.GradeId && sa.GroupId == assignment.GroupId);
 
@@ -53,7 +77,7 @@ namespace SchoolManager.Services.Implementations
                     StudentAssignmentId = assignment.Id,
                     AcademicYearId = assignment.AcademicYearId,
                     ShiftId = assignment.ShiftId,
-                    EnrollmentType = string.IsNullOrWhiteSpace(assignment.EnrollmentType) ? "Regular" : assignment.EnrollmentType,
+                    EnrollmentType = string.IsNullOrWhiteSpace(assignment.EnrollmentType) ? EnrollmentTypeConstants.Regular : assignment.EnrollmentType,
                     Status = "Active",
                     IsActive = true,
                     StartDate = assignment.StartDate ?? assignment.CreatedAt ?? DateTime.UtcNow,
@@ -96,7 +120,7 @@ namespace SchoolManager.Services.Implementations
                 }
 
                 if (string.IsNullOrWhiteSpace(assignment.EnrollmentType))
-                    assignment.EnrollmentType = "Regular";
+                    assignment.EnrollmentType = EnrollmentTypeConstants.Regular;
                 assignment.StartDate ??= assignment.CreatedAt ?? DateTime.UtcNow;
                 
                 _context.StudentAssignments.Add(assignment);
@@ -484,9 +508,202 @@ namespace SchoolManager.Services.Implementations
                     $"No se encontró la matrícula recién creada (estudiante {studentId}, grado {gradeId}, grupo {groupId}). " +
                     "Revise duplicados activos o restricciones en student_assignments.");
             }
-            await SyncStudentSubjectAssignmentsAsync(assignment);
-            await _context.SaveChangesAsync();
+
+            var advanced = await IsAdvancedForStudentAsync(studentId);
+            if (!advanced)
+            {
+                await SyncStudentSubjectAssignmentsAsync(assignment);
+                await _context.SaveChangesAsync();
+            }
+
             return true;
+        }
+
+        public async Task<StudentAssignment?> EnsureEnrollmentBaseAsync(Guid studentId, Guid gradeId, Guid groupId, string enrollmentType)
+        {
+            if (studentId == Guid.Empty || gradeId == Guid.Empty || groupId == Guid.Empty)
+                return null;
+
+            var group = await _context.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == groupId);
+            var shiftId = group?.ShiftId;
+
+            var existing = await _context.StudentAssignments
+                .Where(sa => sa.StudentId == studentId && sa.IsActive &&
+                             sa.GradeId == gradeId && sa.GroupId == groupId && sa.ShiftId == shiftId)
+                .OrderByDescending(sa => sa.CreatedAt ?? DateTime.MinValue)
+                .FirstOrDefaultAsync();
+
+            if (existing != null)
+                return existing;
+
+            var student = await _context.Users.FindAsync(studentId);
+            var activeAcademicYear = student?.SchoolId.HasValue == true
+                ? await _academicYearService.GetActiveAcademicYearAsync(student.SchoolId.Value)
+                : null;
+
+            var type = string.IsNullOrWhiteSpace(enrollmentType) ? EnrollmentTypeConstants.Refuerzo : enrollmentType.Trim();
+            var assignment = new StudentAssignment
+            {
+                Id = Guid.NewGuid(),
+                StudentId = studentId,
+                GradeId = gradeId,
+                GroupId = groupId,
+                ShiftId = shiftId,
+                IsActive = true,
+                AcademicYearId = activeAcademicYear?.Id,
+                CreatedAt = DateTime.UtcNow,
+                EnrollmentType = type,
+                StartDate = DateTime.UtcNow
+            };
+
+            _context.StudentAssignments.Add(assignment);
+            await _context.SaveChangesAsync();
+            return assignment;
+        }
+
+        public async Task<(bool Success, string Message, Guid? StudentSubjectAssignmentId)> AddSubjectEnrollmentAsync(
+            Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false)
+        {
+            if (studentId == Guid.Empty || subjectAssignmentId == Guid.Empty)
+                return (false, "Datos inválidos.", null);
+
+            var subjectAssignment = await _context.SubjectAssignments.AsNoTracking()
+                .FirstOrDefaultAsync(sa => sa.Id == subjectAssignmentId);
+            if (subjectAssignment == null)
+                return (false, "La asignatura seleccionada no existe.", null);
+
+            var advanced = await IsAdvancedForStudentAsync(studentId);
+
+            var baseAssignment = await _context.StudentAssignments
+                .Where(sa => sa.StudentId == studentId && sa.IsActive &&
+                             sa.GradeId == subjectAssignment.GradeLevelId &&
+                             sa.GroupId == subjectAssignment.GroupId)
+                .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (baseAssignment == null)
+            {
+                if (advanced)
+                {
+                    var enrollmentType = asCarryOver ? EnrollmentTypeConstants.Refuerzo : EnrollmentTypeConstants.Regular;
+                    baseAssignment = await EnsureEnrollmentBaseAsync(
+                        studentId, subjectAssignment.GradeLevelId, subjectAssignment.GroupId, enrollmentType);
+                }
+                else
+                {
+                    return (false,
+                        "No hay matrícula activa para el grado y grupo de esta materia. Asigne primero la matrícula correspondiente.",
+                        null);
+                }
+            }
+
+            if (baseAssignment == null)
+                return (false, "No se pudo resolver la matrícula base para esta materia.", null);
+
+            var exists = await _context.StudentSubjectAssignments.AnyAsync(ssa =>
+                ssa.StudentId == studentId &&
+                ssa.SubjectAssignmentId == subjectAssignmentId &&
+                ssa.IsActive &&
+                ssa.AcademicYearId == baseAssignment.AcademicYearId);
+
+            if (exists)
+                return (false, "La materia ya está asignada al estudiante.", null);
+
+            var ssaType = asCarryOver
+                ? EnrollmentTypeConstants.Refuerzo
+                : (string.IsNullOrWhiteSpace(baseAssignment.EnrollmentType)
+                    ? EnrollmentTypeConstants.Regular
+                    : baseAssignment.EnrollmentType);
+
+            var enrollment = new StudentSubjectAssignment
+            {
+                Id = Guid.NewGuid(),
+                StudentId = studentId,
+                SubjectAssignmentId = subjectAssignmentId,
+                StudentAssignmentId = baseAssignment.Id,
+                AcademicYearId = baseAssignment.AcademicYearId,
+                ShiftId = baseAssignment.ShiftId,
+                EnrollmentType = ssaType,
+                Status = "Active",
+                IsActive = true,
+                StartDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await AuditHelper.SetAuditFieldsForCreateAsync(enrollment, _currentUserService);
+            await AuditHelper.SetSchoolIdAsync(enrollment, _currentUserService);
+            _context.StudentSubjectAssignments.Add(enrollment);
+            await _context.SaveChangesAsync();
+
+            return (true, asCarryOver ? "Materia pendiente (arrastre) asignada correctamente." : "Materia asignada correctamente.", enrollment.Id);
+        }
+
+        public async Task<IReadOnlyList<SubjectCatalogItemDto>> GetAvailableSubjectCatalogAsync(
+            Guid studentId, Guid? schoolId, bool advancedMode)
+        {
+            var activeAssignments = await GetAssignmentsByStudentIdAsync(studentId);
+            if (activeAssignments == null || activeAssignments.Count == 0)
+                return Array.Empty<SubjectCatalogItemDto>();
+
+            var primaryGradeIds = activeAssignments
+                .Where(a => EnrollmentTypeConstants.IsPrimaryLevel(a.EnrollmentType))
+                .Select(a => a.GradeId)
+                .Distinct()
+                .ToHashSet();
+
+            var enrolledIds = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
+                .Select(ssa => ssa.SubjectAssignmentId)
+                .ToListAsync();
+
+            IQueryable<SubjectAssignment> query = _context.SubjectAssignments.AsNoTracking();
+            if (schoolId.HasValue)
+            {
+                query = query.Where(sa =>
+                    _context.Groups.Any(g => g.Id == sa.GroupId && g.SchoolId == schoolId.Value));
+            }
+
+            if (!advancedMode)
+            {
+                var gradeIds = activeAssignments.Select(x => x.GradeId).Distinct().ToList();
+                var groupIds = activeAssignments.Select(x => x.GroupId).Distinct().ToList();
+                query = query.Where(sa => gradeIds.Contains(sa.GradeLevelId) || groupIds.Contains(sa.GroupId));
+            }
+
+            var rows = await query
+                .Where(sa => !enrolledIds.Contains(sa.Id))
+                .Join(_context.Subjects.AsNoTracking(), sa => sa.SubjectId, s => s.Id, (sa, s) => new { sa, subject = s })
+                .Join(_context.GradeLevels.AsNoTracking(), x => x.sa.GradeLevelId, g => g.Id, (x, g) => new { x.sa, x.subject, grade = g })
+                .Join(_context.Groups.AsNoTracking(), x => x.sa.GroupId, g => g.Id, (x, g) => new
+                {
+                    x.sa,
+                    x.subject,
+                    x.grade,
+                    group = g
+                })
+                .OrderBy(x => x.subject.Name)
+                .ThenBy(x => x.grade.Name)
+                .ThenBy(x => x.group.Name)
+                .ToListAsync();
+
+            return rows.Select(x =>
+            {
+                var isCarryOverGrade = primaryGradeIds.Count > 0 && !primaryGradeIds.Contains(x.sa.GradeLevelId);
+                var requiresNew = !activeAssignments.Any(a =>
+                    a.GradeId == x.sa.GradeLevelId && a.GroupId == x.sa.GroupId);
+
+                return new SubjectCatalogItemDto
+                {
+                    SubjectAssignmentId = x.sa.Id,
+                    SubjectName = x.subject.Name,
+                    GradeName = x.grade.Name,
+                    GroupName = x.group.Name,
+                    Display = $"{x.subject.Name} | {x.grade.Name} - {x.group.Name}" +
+                              (isCarryOverGrade ? " (arrastre)" : ""),
+                    IsCarryOverGrade = isCarryOverGrade,
+                    RequiresNewEnrollment = requiresNew
+                };
+            }).ToList();
         }
 
     }

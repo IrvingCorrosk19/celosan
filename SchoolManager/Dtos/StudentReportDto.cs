@@ -7,6 +7,8 @@
         public string Grade { get; set; }
         public string Trimester { get; set; }
         public List<GradeDto> Grades { get; set; } = new();
+        public List<GradeDto> CarryOverGrades { get; set; } = new();
+        public List<StudentEnrollmentSummaryDto> ActiveEnrollments { get; set; } = new();
         public List<AttendanceDto> AttendanceByTrimester { get; set; } = new();
         public List<AttendanceDto> AttendanceByMonth { get; set; } = new();
         public List<AvailableTrimesters> AvailableTrimesters { get; set; } = new();

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Application.Interfaces;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Implementations;
 using SchoolManager.Services.Interfaces;
@@ -26,6 +27,7 @@ namespace SchoolManager.Controllers
         private readonly IDateTimeHomologationService _dateTimeHomologationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly IShiftService _shiftService;
+        private readonly INocturnalEnrollmentSettingsService _nocturnalSettings;
         private readonly SchoolDbContext _context;
 
         public StudentAssignmentController(
@@ -38,6 +40,7 @@ namespace SchoolManager.Controllers
             IDateTimeHomologationService dateTimeHomologationService,
             ICurrentUserService currentUserService,
             IShiftService shiftService,
+            INocturnalEnrollmentSettingsService nocturnalSettings,
             SchoolDbContext context)
         {
             _userService = userService;
@@ -49,6 +52,7 @@ namespace SchoolManager.Controllers
             _dateTimeHomologationService = dateTimeHomologationService;
             _currentUserService = currentUserService;
             _shiftService = shiftService;
+            _nocturnalSettings = nocturnalSettings;
             _context = context;
         }
 
@@ -75,6 +79,10 @@ namespace SchoolManager.Controllers
             if (currentUser.SchoolId.HasValue && student.SchoolId.HasValue &&
                 currentUser.SchoolId != student.SchoolId)
                 return Json(new { success = false, message = "No puede modificar estudiantes de otra institución." });
+
+            var advancedMode = _nocturnalSettings.IsAdvancedEnabled(currentUser.SchoolId);
+            if (advancedMode && !forceReplaceAll)
+                additive = true;
 
             var group = await _groupService.GetByIdAsync(groupId);
             if (group == null)
@@ -267,96 +275,43 @@ namespace SchoolManager.Controllers
         [HttpGet("/StudentAssignment/GetAvailableSubjectCatalog")]
         public async Task<IActionResult> GetAvailableSubjectCatalog(Guid studentId)
         {
-            var activeAssignments = await _studentAssignmentService.GetAssignmentsByStudentIdAsync(studentId);
-            if (activeAssignments == null || !activeAssignments.Any())
-                return Json(new { success = true, data = Array.Empty<object>() });
+            var currentUser = await _currentUserService.GetCurrentUserAsync();
+            var advancedMode = _nocturnalSettings.IsAdvancedEnabled(currentUser?.SchoolId);
 
-            var gradeIds = activeAssignments.Select(x => x.GradeId).Distinct().ToList();
-            var groupIds = activeAssignments.Select(x => x.GroupId).Distinct().ToList();
+            var catalog = await _studentAssignmentService.GetAvailableSubjectCatalogAsync(
+                studentId, currentUser?.SchoolId, advancedMode);
 
-            var currentEnrollmentIds = await _context.StudentSubjectAssignments
-                .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
-                .Select(ssa => ssa.SubjectAssignmentId)
-                .ToListAsync();
-
-            var catalog = await _context.SubjectAssignments
-                .Where(sa => gradeIds.Contains(sa.GradeLevelId) || groupIds.Contains(sa.GroupId))
-                .Where(sa => !currentEnrollmentIds.Contains(sa.Id))
-                .Join(_context.Subjects, sa => sa.SubjectId, s => s.Id, (sa, s) => new { sa, subject = s })
-                .Join(_context.GradeLevels, x => x.sa.GradeLevelId, g => g.Id, (x, g) => new { x.sa, x.subject, grade = g })
-                .Join(_context.Groups, x => x.sa.GroupId, g => g.Id, (x, g) => new
+            return Json(new
+            {
+                success = true,
+                advancedMode,
+                data = catalog.Select(c => new
                 {
-                    subjectAssignmentId = x.sa.Id,
-                    subjectName = x.subject.Name,
-                    gradeName = x.grade.Name,
-                    groupName = g.Name,
-                    display = $"{x.subject.Name} | {x.grade.Name} - {g.Name}"
+                    subjectAssignmentId = c.SubjectAssignmentId,
+                    subjectName = c.SubjectName,
+                    gradeName = c.GradeName,
+                    groupName = c.GroupName,
+                    display = c.Display,
+                    isCarryOverGrade = c.IsCarryOverGrade,
+                    requiresNewEnrollment = c.RequiresNewEnrollment
                 })
-                .OrderBy(x => x.subjectName)
-                .ThenBy(x => x.gradeName)
-                .ThenBy(x => x.groupName)
-                .ToListAsync();
-
-            return Json(new { success = true, data = catalog });
+            });
         }
 
         [HttpPost("/StudentAssignment/AddSubjectEnrollment")]
-        public async Task<IActionResult> AddSubjectEnrollment(Guid studentId, Guid subjectAssignmentId)
+        public async Task<IActionResult> AddSubjectEnrollment(Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false)
         {
             if (studentId == Guid.Empty || subjectAssignmentId == Guid.Empty)
                 return Json(new { success = false, message = "Datos inválidos." });
 
-            var subjectAssignment = await _context.SubjectAssignments.FirstOrDefaultAsync(sa => sa.Id == subjectAssignmentId);
-            if (subjectAssignment == null)
-                return Json(new { success = false, message = "La asignatura seleccionada no existe." });
+            var result = await _studentAssignmentService.AddSubjectEnrollmentAsync(studentId, subjectAssignmentId, asCarryOver);
+            return Json(new { success = result.Success, message = result.Message, enrollmentId = result.StudentSubjectAssignmentId });
+        }
 
-            var baseAssignment = await _context.StudentAssignments
-                .Where(sa => sa.StudentId == studentId && sa.IsActive &&
-                             sa.GradeId == subjectAssignment.GradeLevelId &&
-                             sa.GroupId == subjectAssignment.GroupId)
-                .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            if (baseAssignment == null)
-            {
-                baseAssignment = await _context.StudentAssignments
-                    .Where(sa => sa.StudentId == studentId && sa.IsActive)
-                    .OrderByDescending(sa => sa.StartDate ?? sa.CreatedAt)
-                    .FirstOrDefaultAsync();
-            }
-
-            if (baseAssignment == null)
-                return Json(new { success = false, message = "El estudiante necesita al menos una matrícula activa antes de asignar materias." });
-
-            var exists = await _context.StudentSubjectAssignments.AnyAsync(ssa =>
-                ssa.StudentId == studentId &&
-                ssa.SubjectAssignmentId == subjectAssignmentId &&
-                ssa.IsActive &&
-                ssa.AcademicYearId == baseAssignment.AcademicYearId);
-
-            if (exists)
-                return Json(new { success = false, message = "La materia ya está asignada al estudiante." });
-
-            var enrollment = new StudentSubjectAssignment
-            {
-                Id = Guid.NewGuid(),
-                StudentId = studentId,
-                SubjectAssignmentId = subjectAssignmentId,
-                StudentAssignmentId = baseAssignment.Id,
-                AcademicYearId = baseAssignment.AcademicYearId,
-                ShiftId = baseAssignment.ShiftId,
-                EnrollmentType = string.IsNullOrWhiteSpace(baseAssignment.EnrollmentType) ? "Regular" : baseAssignment.EnrollmentType,
-                Status = "Active",
-                IsActive = true,
-                StartDate = DateTime.UtcNow
-            };
-
-            await AuditHelper.SetAuditFieldsForCreateAsync(enrollment, _currentUserService);
-            await AuditHelper.SetSchoolIdAsync(enrollment, _currentUserService);
-            _context.StudentSubjectAssignments.Add(enrollment);
-            await _context.SaveChangesAsync();
-
-            return Json(new { success = true, message = "Materia asignada correctamente." });
+        [HttpPost("/StudentAssignment/AddCarryOverSubjectEnrollment")]
+        public async Task<IActionResult> AddCarryOverSubjectEnrollment(Guid studentId, Guid subjectAssignmentId)
+        {
+            return await AddSubjectEnrollment(studentId, subjectAssignmentId, asCarryOver: true);
         }
 
         [HttpPost("/StudentAssignment/RemoveSubjectEnrollment")]

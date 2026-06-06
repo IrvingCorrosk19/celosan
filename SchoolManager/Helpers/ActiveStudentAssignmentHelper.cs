@@ -12,6 +12,23 @@ public static class ActiveStudentAssignmentHelper
     /// <summary>
     /// Prioridad: matrícula tipo Nocturno, jornada cuyo nombre contiene "Noche", luego la asignación más reciente.
     /// </summary>
+    public static StudentAssignment? GetPrimaryEnrollment(IEnumerable<StudentAssignment> assignments) =>
+        PickForDisplay(assignments);
+
+    /// <summary>Todas las matrículas activas ordenadas (principal primero).</summary>
+    public static IReadOnlyList<StudentAssignment> GetAllActiveOrdered(IEnumerable<StudentAssignment> assignments)
+    {
+        return assignments
+            .Where(a => a.IsActive)
+            .OrderByDescending(MatchesNocturnoEnrollment)
+            .ThenByDescending(MatchesNightShiftName)
+            .ThenByDescending(a => a.CreatedAt ?? DateTime.MinValue)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Prioridad: matrícula tipo Nocturno, jornada cuyo nombre contiene "Noche", luego la asignación más reciente.
+    /// </summary>
     public static StudentAssignment? PickForDisplay(IEnumerable<StudentAssignment> assignments)
     {
         var list = assignments.Where(a => a.IsActive).ToList();

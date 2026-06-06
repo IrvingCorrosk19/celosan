@@ -1,0 +1,28 @@
+@{
+    ViewData["Title"] = "Académico — mis hijos";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+    var children = ViewBag.Children as List<(Guid Id, string Name)> ?? new();
+}
+
+<div class="container-fluid py-4">
+    <h4 class="mb-3">Calificaciones de mis hijos</h4>
+    <p class="text-muted">Vista de solo lectura. Para pagos y carnet use Club de Padres.</p>
+
+    @if (!children.Any())
+    {
+        <div class="alert alert-warning">No se encontraron estudiantes vinculados a su cuenta.</div>
+    }
+    else
+    {
+        <div class="list-group">
+            @foreach (var child in children)
+            {
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                   href="@Url.Action("Report", "ParentAcademic", new { studentId = child.Id })">
+                    @child.Name
+                    <span class="badge bg-primary">Ver boletín</span>
+                </a>
+            }
+        </div>
+    }
+</div>

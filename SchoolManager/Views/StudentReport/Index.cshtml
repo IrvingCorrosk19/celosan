@@ -186,6 +186,21 @@
         </div>
     </div>
 
+    @if (Model.ActiveEnrollments?.Any() == true)
+    {
+        <div class="info-block mb-4">
+            <label class="form-label fw-bold mb-2" style="color: #1e293b;">Contexto académico</label>
+            <div>
+                @foreach (var e in Model.ActiveEnrollments)
+                {
+                    <span class="badge @(e.IsCarryOver ? "bg-warning text-dark" : (e.IsPrimary ? "bg-primary" : "bg-secondary")) me-2 mb-2">
+                        @e.GradeName — @e.GroupName (@e.EnrollmentType)
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
     <input type="hidden" id="student-id" value="@Model.StudentId" />
 
     <!-- PESTAÑAS DE NAVEGACIÓN -->
@@ -194,6 +209,15 @@
             <button class="nav-link active" id="grades-tab" data-bs-toggle="tab" data-bs-target="#grades-panel" type="button" role="tab">
                 <i class="bi bi-journal-check me-2"></i>Calificaciones
                 <span class="badge bg-primary ms-2">@Model.Grades.Count()</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="carryover-tab" data-bs-toggle="tab" data-bs-target="#carryover-panel" type="button" role="tab">
+                <i class="bi bi-arrow-repeat me-2"></i>Materias de arrastre
+                @if (Model.CarryOverGrades?.Any() == true)
+                {
+                    <span class="badge bg-warning text-dark ms-2">@Model.CarryOverGrades.Count</span>
+                }
             </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -392,6 +416,47 @@
             </div>
         </div>
 
+        <!-- PESTAÑA: MATERIAS DE ARRASTRE -->
+        <div class="tab-pane fade" id="carryover-panel" role="tabpanel">
+            <div class="card card-outline card-warning">
+                <div class="card-header bg-warning text-dark">
+                    <i class="bi bi-arrow-repeat me-2"></i> Materias de arrastre (otros niveles)
+                </div>
+                <div class="card-body">
+                    <table class="table table-hover table-bordered align-middle">
+                        <thead style="background: #fef3c7; color: #92400e;">
+                            <tr>
+                                <th>Materia</th>
+                                <th>Nivel</th>
+                                <th>Grupo</th>
+                                <th>Actividad</th>
+                                <th class="text-center">Nota</th>
+                            </tr>
+                        </thead>
+                        <tbody id="carryover-table-body">
+                            @if (Model.CarryOverGrades?.Any() == true)
+                            {
+                                foreach (var g in Model.CarryOverGrades)
+                                {
+                                    <tr>
+                                        <td>@g.Subject</td>
+                                        <td>@(g.LevelContext ?? "—")</td>
+                                        <td>@(g.GroupContext ?? "—")</td>
+                                        <td>@g.ActivityName</td>
+                                        <td class="text-center">@(g.Value?.ToString("0.##") ?? "—")</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="5" class="text-center text-muted">Sin materias de arrastre en este trimestre.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- PESTAÑA 2: ACTIVIDADES PENDIENTES -->
         <div class="tab-pane fade" id="pending-panel" role="tabpanel">
             <div class="card card-outline card-warning">
@@ -577,6 +642,29 @@
         }
         // Variable global para almacenar todas las calificaciones
         let allGrades = @Html.Raw(Json.Serialize(Model.Grades));
+        let allCarryOverGrades = @Html.Raw(Json.Serialize(Model.CarryOverGrades ?? new List<SchoolManager.Dtos.GradeDto>()));
+
+        function renderCarryOverTable(grades) {
+            const tbody = $('#carryover-table-body');
+            tbody.empty();
+            if (!grades || grades.length === 0) {
+                tbody.append('<tr><td colspan="5" class="text-center text-muted">Sin materias de arrastre en este trimestre.</td></tr>');
+                $('#carryover-tab .badge').remove();
+                return;
+            }
+            $('#carryover-tab .badge').remove();
+            $('#carryover-tab').append(`<span class="badge bg-warning text-dark ms-2">${grades.length}</span>`);
+            grades.forEach(g => {
+                tbody.append(`
+                    <tr>
+                        <td>${g.subject || g.Subject || ''}</td>
+                        <td>${g.levelContext || g.LevelContext || '—'}</td>
+                        <td>${g.groupContext || g.GroupContext || '—'}</td>
+                        <td>${g.activityName || g.ActivityName || ''}</td>
+                        <td class="text-center">${g.value != null ? Number(g.value).toFixed(2) : (g.Value != null ? Number(g.Value).toFixed(2) : '—')}</td>
+                    </tr>`);
+            });
+        }
         
         // Función para filtrar y mostrar calificaciones agrupadas por materia
         function filterAndDisplayGrades(grades) {
@@ -773,7 +861,9 @@
                         console.log('grades:', data.grades);
                         
                         // Actualizar variable global con las nuevas calificaciones
-                        allGrades = data.grades;
+                        allGrades = data.grades || [];
+                        allCarryOverGrades = data.carryOverGrades || [];
+                        renderCarryOverTable(allCarryOverGrades);
                         
                         // Actualizar opciones del filtro de materias
                         const subjectFilter = $('#subject-filter');

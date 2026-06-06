@@ -1,0 +1,32 @@
+@model SchoolManager.Dtos.StudentReportDto
+@{
+    ViewData["Title"] = "Calificaciones del estudiante";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="container-fluid py-4">
+    <h4 class="mb-1">@Model.StudentName</h4>
+    <p class="text-muted mb-4">@Model.Grade · Trimestre @Model.Trimester</p>
+
+    @if (Model.ActiveEnrollments?.Any() == true)
+    {
+        <div class="mb-4">
+            <h6>Matrículas activas</h6>
+            @foreach (var e in Model.ActiveEnrollments)
+            {
+                <span class="badge @(e.IsCarryOver ? "bg-warning text-dark" : "bg-primary") me-2 mb-2">
+                    @e.GradeName — @e.GroupName (@e.EnrollmentType)
+                </span>
+            }
+        </div>
+    }
+
+    <h6>Calificaciones del nivel principal</h6>
+    @await Html.PartialAsync("_ParentGradeTable", Model.Grades)
+
+    @if (Model.CarryOverGrades?.Any() == true)
+    {
+        <h6 class="mt-4">Materias de arrastre</h6>
+        @await Html.PartialAsync("_ParentGradeTable", Model.CarryOverGrades)
+    }
+</div>

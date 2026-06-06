@@ -48,7 +48,8 @@ namespace SchoolManager.Services.Implementations
             string? grupoEspecifico = null,
             Guid? especialidadId = null,
             Guid? areaId = null,
-            Guid? materiaId = null)
+            Guid? materiaId = null,
+            bool consolidatedByStudent = false)
         {
             try
             {
@@ -84,7 +85,11 @@ namespace SchoolManager.Services.Implementations
                 }
 
                 // Calcular totales generales
-                var totales = CalcularTotalesGenerales(estadisticas);
+                var totales = consolidatedByStudent
+                    ? await CalcularTotalesConsolidadosAsync(
+                        schoolId, trimestre, trimesterId, nivelEducativo,
+                        gradoEspecifico, grupoEspecifico, especialidadId, areaId, materiaId)
+                    : CalcularTotalesGenerales(estadisticas);
 
                 // Obtener año lectivo actual (usar UTC para consistencia)
                 var fechaActual = DateTime.UtcNow;
@@ -238,6 +243,172 @@ namespace SchoolManager.Services.Implementations
                     reprobadosHastaLaFecha, porcentajeReprobadosHastaLaFecha,
                     sinCalificaciones, porcentajeSinCalificaciones,
                     retirados, porcentajeRetirados);
+        }
+
+        private async Task<List<Guid>> ObtenerEstudiantesDelGrupoAsync(Guid grupoId)
+        {
+            var subjectAssignmentIdsDelGrupo = await _context.SubjectAssignments
+                .Where(sa => sa.GroupId == grupoId)
+                .Select(sa => sa.Id)
+                .ToListAsync();
+
+            var estudiantesDelGrupo = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.IsActive && subjectAssignmentIdsDelGrupo.Contains(ssa.SubjectAssignmentId))
+                .Select(ssa => ssa.StudentId)
+                .Distinct()
+                .ToListAsync();
+
+            if (!estudiantesDelGrupo.Any())
+            {
+                estudiantesDelGrupo = await _context.StudentAssignments
+                    .Where(sa => sa.GroupId == grupoId && sa.IsActive)
+                    .Select(sa => sa.StudentId)
+                    .Distinct()
+                    .ToListAsync();
+            }
+
+            return estudiantesDelGrupo;
+        }
+
+        private async Task<TotalesGeneralesDto> CalcularTotalesConsolidadosAsync(
+            Guid schoolId,
+            string trimestre,
+            Guid? trimesterId,
+            string nivelEducativo,
+            string? gradoEspecifico,
+            string? grupoEspecifico,
+            Guid? especialidadId,
+            Guid? areaId,
+            Guid? materiaId)
+        {
+            var filas = await ListarGruposPorFiltroAsync(schoolId, nivelEducativo, gradoEspecifico, grupoEspecifico);
+            var groupIds = filas.Select(f => f.GroupId).Distinct().ToList();
+            var uniqueStudents = new HashSet<Guid>();
+
+            foreach (var gid in groupIds)
+            {
+                foreach (var sid in await ObtenerEstudiantesDelGrupoAsync(gid))
+                    uniqueStudents.Add(sid);
+            }
+
+            if (uniqueStudents.Count == 0)
+                return new TotalesGeneralesDto();
+
+            var stats = await CalcularEstadisticasEstudiantesAsync(
+                uniqueStudents.ToList(), groupIds, trimestre, trimesterId, materiaId, areaId, especialidadId);
+
+            return new TotalesGeneralesDto
+            {
+                TotalEstudiantes = stats.Total,
+                TotalAprobados = stats.Aprobados,
+                PorcentajeAprobados = stats.PorcentajeAprobados,
+                TotalReprobados = stats.Reprobados,
+                PorcentajeReprobados = stats.PorcentajeReprobados,
+                TotalReprobadosHastaLaFecha = stats.ReprobadosHastaLaFecha,
+                PorcentajeReprobadosHastaLaFecha = stats.PorcentajeReprobadosHastaLaFecha,
+                TotalSinCalificaciones = stats.SinCalificaciones,
+                PorcentajeSinCalificaciones = stats.PorcentajeSinCalificaciones,
+                TotalRetirados = stats.Retirados,
+                PorcentajeRetirados = stats.PorcentajeRetirados
+            };
+        }
+
+        private async Task<(int Total, int Aprobados, decimal PorcentajeAprobados,
+            int Reprobados, decimal PorcentajeReprobados,
+            int ReprobadosHastaLaFecha, decimal PorcentajeReprobadosHastaLaFecha,
+            int SinCalificaciones, decimal PorcentajeSinCalificaciones,
+            int Retirados, decimal PorcentajeRetirados)>
+            CalcularEstadisticasEstudiantesAsync(
+                List<Guid> estudiantesDelGrupo,
+                List<Guid> groupIdsScope,
+                string trimestre,
+                Guid? trimesterId,
+                Guid? materiaId = null,
+                Guid? areaId = null,
+                Guid? especialidadId = null)
+        {
+            int total = estudiantesDelGrupo.Count;
+            if (total == 0)
+                return (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+            var usuariosConStatus = await _context.Users
+                .Where(u => estudiantesDelGrupo.Contains(u.Id))
+                .Select(u => new { u.Id, u.Status })
+                .ToListAsync();
+            var setRetirados = usuariosConStatus
+                .Where(u => string.Equals(u.Status, "inactive", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(u.Status, "retirado", StringComparison.OrdinalIgnoreCase))
+                .Select(u => u.Id)
+                .ToHashSet();
+
+            var queryScores = _context.StudentActivityScores
+                .Include(sas => sas.Activity)
+                    .ThenInclude(a => a!.Subject)
+                        .ThenInclude(s => s!.Area)
+                .Where(sas => estudiantesDelGrupo.Contains(sas.StudentId) &&
+                    sas.Activity != null &&
+                    sas.Activity.GroupId.HasValue &&
+                    groupIdsScope.Contains(sas.Activity.GroupId.Value) &&
+                    (trimesterId.HasValue
+                        ? (sas.Activity.TrimesterId == trimesterId || sas.Activity.Trimester == trimestre)
+                        : sas.Activity.Trimester == trimestre));
+
+            if (materiaId.HasValue)
+                queryScores = queryScores.Where(sas => sas.Activity!.SubjectId == materiaId.Value);
+            if (areaId.HasValue)
+                queryScores = queryScores.Where(sas => sas.Activity!.Subject!.AreaId == areaId.Value);
+            if (especialidadId.HasValue)
+            {
+                var subjectIdsEspecialidad = await _context.SubjectAssignments
+                    .Where(sa => sa.SpecialtyId == especialidadId.Value)
+                    .Select(sa => sa.SubjectId)
+                    .ToListAsync();
+                queryScores = queryScores.Where(sas => sas.Activity!.SubjectId.HasValue && subjectIdsEspecialidad.Contains(sas.Activity.SubjectId.Value));
+            }
+
+            var todasCalificaciones = await queryScores.ToListAsync();
+            int aprobados = 0, reprobados = 0, reprobadosHastaLaFecha = 0, sinCalificaciones = 0, retirados = 0;
+            var calificacionesPorEstudiante = todasCalificaciones.GroupBy(c => c.StudentId).ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var estudianteId in estudiantesDelGrupo)
+            {
+                if (setRetirados.Contains(estudianteId))
+                {
+                    retirados++;
+                    continue;
+                }
+                if (!calificacionesPorEstudiante.TryGetValue(estudianteId, out var calificaciones) || !calificaciones.Any())
+                {
+                    sinCalificaciones++;
+                    continue;
+                }
+                var materias = calificaciones
+                    .GroupBy(c => c.Activity!.SubjectId)
+                    .Select(g => new { SubjectId = g.Key, PromedioMateria = g.Average(c => c.Score ?? 0) })
+                    .ToList();
+                if (!materias.Any())
+                {
+                    sinCalificaciones++;
+                    continue;
+                }
+                var promedioGeneral = materias.Average(m => m.PromedioMateria);
+                var materiasReprobadas = materias.Count(m => m.PromedioMateria < NOTA_MINIMA_APROBACION);
+                if (materiasReprobadas > 0)
+                {
+                    reprobadosHastaLaFecha++;
+                    if (materiasReprobadas >= 3) reprobados++;
+                }
+                else if (promedioGeneral >= NOTA_MINIMA_APROBACION)
+                {
+                    aprobados++;
+                }
+            }
+
+            return (total, aprobados, total > 0 ? aprobados * 100m / total : 0,
+                reprobados, total > 0 ? reprobados * 100m / total : 0,
+                reprobadosHastaLaFecha, total > 0 ? reprobadosHastaLaFecha * 100m / total : 0,
+                sinCalificaciones, total > 0 ? sinCalificaciones * 100m / total : 0,
+                retirados, total > 0 ? retirados * 100m / total : 0);
         }
 
         private TotalesGeneralesDto CalcularTotalesGenerales(List<GradoEstadisticaDto> estadisticas)

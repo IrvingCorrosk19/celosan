@@ -137,6 +137,18 @@
                 </div>
 
                 <div class="row">
+                    <div class="col-md-12">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="consolidadoPorEstudiante" name="ConsolidadoPorEstudiante" value="true">
+                            <label class="form-check-label" for="consolidadoPorEstudiante">
+                                <strong>Consolidar totales por estudiante</strong>
+                                <span class="text-muted">(evita doble conteo en multi-grupo / educación nocturna)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
                     <div class="col-md-12 text-center">
                         <button type="submit" class="btn btn-primary btn-lg">
                             <i class="bi bi-file-earmark-bar-graph"></i> Generar Reporte
@@ -267,6 +279,7 @@
                         EspecialidadId: especialidadId || null,
                         AreaId: areaId || null,
                         MateriaId: materiaId || null,
+                        ConsolidadoPorEstudiante: $('#consolidadoPorEstudiante').is(':checked'),
                         __RequestVerificationToken: $('input[name="__RequestVerificationToken"]').val()
                     },
                     success: function (response) {
@@ -314,6 +327,7 @@
                 if (especialidadId) url += '&especialidadId=' + encodeURIComponent(especialidadId);
                 if (areaId) url += '&areaId=' + encodeURIComponent(areaId);
                 if (materiaId) url += '&materiaId=' + encodeURIComponent(materiaId);
+                if ($('#consolidadoPorEstudiante').is(':checked')) url += '&consolidatedByStudent=true';
                 
                 window.open(url, '_blank');
             });
@@ -338,6 +352,7 @@
                 if (especialidadId) url += '&especialidadId=' + encodeURIComponent(especialidadId);
                 if (areaId) url += '&areaId=' + encodeURIComponent(areaId);
                 if (materiaId) url += '&materiaId=' + encodeURIComponent(materiaId);
+                if ($('#consolidadoPorEstudiante').is(':checked')) url += '&consolidatedByStudent=true';
                 window.location.href = url;
             });
 

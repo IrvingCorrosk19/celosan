@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
@@ -59,18 +61,27 @@ namespace SchoolManager.Services.Implementations
                     return null;
                 }
 
-                // Obtener información de asignación (grado y grupo)
-                var assignment = await _context.StudentAssignments
-                    .Where(sa => sa.StudentId == studentId)
-                    .Join(_context.GradeLevels,
-                          sa => sa.GradeId,
-                          gl => gl.Id,
-                          (sa, gl) => new { sa.GroupId, GradeName = gl.Name })
-                    .Join(_context.Groups,
-                          sa => sa.GroupId,
-                          g => g.Id,
-                          (sa, g) => new { GradeName = sa.GradeName, GroupName = g.Name })
-                    .FirstOrDefaultAsync();
+                // Matrículas activas (multi-contexto nocturno)
+                var activeAssignments = await _context.StudentAssignments
+                    .AsNoTracking()
+                    .Where(sa => sa.StudentId == studentId && sa.IsActive)
+                    .Include(sa => sa.Grade)
+                    .Include(sa => sa.Group)
+                    .Include(sa => sa.Shift)
+                    .ToListAsync();
+
+                var primary = ActiveStudentAssignmentHelper.GetPrimaryEnrollment(activeAssignments);
+                var ordered = ActiveStudentAssignmentHelper.GetAllActiveOrdered(activeAssignments);
+
+                var enrollmentSummaries = ordered.Select(a => new StudentEnrollmentSummaryDto
+                {
+                    GradeName = a.Grade?.Name ?? "—",
+                    GroupName = a.Group?.Name ?? "—",
+                    ShiftName = a.Shift?.Name,
+                    EnrollmentType = a.EnrollmentType ?? EnrollmentTypeConstants.Regular,
+                    IsPrimary = primary != null && a.Id == primary.Id,
+                    IsCarryOver = EnrollmentTypeConstants.IsCarryOver(a.EnrollmentType)
+                }).ToList();
 
                 // Obtener nombre de la escuela
                 var school = user.SchoolId.HasValue
@@ -91,8 +102,10 @@ namespace SchoolManager.Services.Implementations
                     CellphonePrimary = user.CellphonePrimary,
                     CellphoneSecondary = user.CellphoneSecondary,
                     Role = user.Role,
-                    Grade = assignment?.GradeName,
-                    GroupName = assignment?.GroupName,
+                    Grade = primary?.Grade?.Name,
+                    GroupName = primary?.Group?.Name,
+                    AdditionalEnrollmentsSummary = ActiveStudentAssignmentHelper.BuildMultiEnrollmentSummary(activeAssignments, primary),
+                    ActiveEnrollments = enrollmentSummaries,
                     SchoolName = school,
                     PhotoUrl = user.PhotoUrl,
                     EmergencyContactName = user.EmergencyContactName,

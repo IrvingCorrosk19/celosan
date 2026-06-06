@@ -59,6 +59,8 @@ public partial class SchoolDbContext : DbContext
 
     public virtual DbSet<StudentSubjectAssignment> StudentSubjectAssignments { get; set; }
 
+    public virtual DbSet<SubjectPromotionRecord> SubjectPromotionRecords { get; set; }
+
     public virtual DbSet<Subject> Subjects { get; set; }
 
     public virtual DbSet<SubjectAssignment> SubjectAssignments { get; set; }
@@ -1093,6 +1095,52 @@ public partial class SchoolDbContext : DbContext
             entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId);
             entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy);
             entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy);
+        });
+
+        modelBuilder.Entity<SubjectPromotionRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("subject_promotion_records_pkey");
+            entity.ToTable("subject_promotion_records");
+
+            entity.HasIndex(e => e.StudentId, "IX_subject_promotion_records_student_id");
+            entity.HasIndex(e => e.AcademicYearId, "IX_subject_promotion_records_academic_year_id");
+            entity.HasIndex(e => new { e.StudentId, e.SubjectId, e.AcademicYearId, e.Trimester }, "IX_subject_promotion_records_student_subject_year_trimester");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.SubjectId).HasColumnName("subject_id");
+            entity.Property(e => e.GradeLevelId).HasColumnName("grade_level_id");
+            entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.Trimester).HasMaxLength(10).HasColumnName("trimester");
+            entity.Property(e => e.Outcome).HasMaxLength(20).HasColumnName("outcome");
+            entity.Property(e => e.FinalScore).HasColumnType("numeric(5,2)").HasColumnName("final_score");
+            entity.Property(e => e.StudentSubjectAssignmentId).HasColumnName("student_subject_assignment_id");
+            entity.Property(e => e.PromotedAt).HasColumnType("timestamp with time zone").HasColumnName("promoted_at");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+
+            entity.HasOne(d => d.Student).WithMany()
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("subject_promotion_records_student_id_fkey");
+            entity.HasOne(d => d.Subject).WithMany()
+                .HasForeignKey(d => d.SubjectId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("subject_promotion_records_subject_id_fkey");
+            entity.HasOne(d => d.GradeLevel).WithMany()
+                .HasForeignKey(d => d.GradeLevelId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("subject_promotion_records_grade_level_id_fkey");
+            entity.HasOne(d => d.AcademicYear).WithMany()
+                .HasForeignKey(d => d.AcademicYearId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("subject_promotion_records_academic_year_id_fkey");
+            entity.HasOne(d => d.StudentSubjectAssignment).WithMany()
+                .HasForeignKey(d => d.StudentSubjectAssignmentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("subject_promotion_records_ssa_id_fkey");
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId);
         });
 
         modelBuilder.Entity<Subject>(entity =>

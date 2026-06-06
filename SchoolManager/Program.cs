@@ -195,6 +195,10 @@ builder.Services.AddDbContext<SchoolDbContext>(options =>
     options.ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.RowLimitingOperationWithoutOrderByWarning));
 });
 
+builder.Services.Configure<NocturnalAdvancedEnrollmentOptions>(
+    builder.Configuration.GetSection(NocturnalAdvancedEnrollmentOptions.SectionName));
+builder.Services.AddScoped<INocturnalEnrollmentSettingsService, NocturnalEnrollmentSettingsService>();
+
 // Registrando todos los servicios con inyección de dependencias
 builder.Services.AddScoped<ISchoolService, SchoolService>();
 builder.Services.AddScoped<IUserService, UserService>();
@@ -224,6 +228,7 @@ builder.Services.AddScoped<IStudentReportService, StudentReportService>();
 builder.Services.AddScoped<IGradeLevelService, GradeLevelService>();
 builder.Services.AddScoped<IAcademicAssignmentService, AcademicAssignmentService>();
 builder.Services.AddScoped<IStudentAssignmentService, StudentAssignmentService>();
+builder.Services.AddScoped<ISubjectPromotionService, SubjectPromotionService>();
 builder.Services.AddScoped<IAreaService, AreaService>();
 builder.Services.AddScoped<ISpecialtyService, SpecialtyService>();
 builder.Services.AddScoped<IShiftService, ShiftService>();

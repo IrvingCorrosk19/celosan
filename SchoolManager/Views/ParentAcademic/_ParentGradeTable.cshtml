@@ -1,0 +1,34 @@
+@model List<SchoolManager.Dtos.GradeDto>
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped">
+        <thead>
+            <tr>
+                <th>Materia</th>
+                <th>Nivel</th>
+                <th>Grupo</th>
+                <th>Actividad</th>
+                <th>Nota</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model == null || !Model.Any())
+        {
+            <tr><td colspan="5" class="text-muted">Sin calificaciones.</td></tr>
+        }
+        else
+        {
+            @foreach (var g in Model)
+            {
+                <tr>
+                    <td>@g.Subject</td>
+                    <td>@(g.LevelContext ?? "—")</td>
+                    <td>@(g.GroupContext ?? "—")</td>
+                    <td>@g.ActivityName</td>
+                    <td>@(g.Value?.ToString("0.##") ?? "—")</td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>

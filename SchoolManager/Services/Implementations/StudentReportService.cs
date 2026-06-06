@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.Dtos;
@@ -50,6 +51,27 @@ namespace SchoolManager.Services.Implementations
             var ids = rows.Select(r => r.GroupId).ToHashSet();
             var label = string.Join(" · ", rows.Select(r => $"{r.GradeName} - {r.GroupName}").Distinct());
             return (ids, label);
+        }
+
+        private async Task<List<StudentEnrollmentSummaryDto>> GetActiveEnrollmentSummariesAsync(Guid studentId)
+        {
+            var rows = await _context.StudentAssignments.AsNoTracking()
+                .Where(sa => sa.StudentId == studentId && sa.IsActive)
+                .Include(sa => sa.Grade)
+                .Include(sa => sa.Group)
+                .Include(sa => sa.Shift)
+                .ToListAsync();
+
+            var primary = ActiveStudentAssignmentHelper.GetPrimaryEnrollment(rows);
+            return ActiveStudentAssignmentHelper.GetAllActiveOrdered(rows).Select(a => new StudentEnrollmentSummaryDto
+            {
+                GradeName = a.Grade?.Name ?? "—",
+                GroupName = a.Group?.Name ?? "—",
+                ShiftName = a.Shift?.Name,
+                EnrollmentType = a.EnrollmentType ?? EnrollmentTypeConstants.Regular,
+                IsPrimary = primary != null && a.Id == primary.Id,
+                IsCarryOver = EnrollmentTypeConstants.IsCarryOver(a.EnrollmentType)
+            }).ToList();
         }
 
         public async Task<StudentReportDto> GetReportByStudentIdAsync(Guid studentId)
@@ -206,18 +228,61 @@ namespace SchoolManager.Services.Implementations
                     .Where(g => scoreGroupIds.Contains(g.Id))
                     .ToDictionaryAsync(g => g.Id, g => g.Name);
 
-            var grades = studentScores.Select(a => new GradeDto
+            var gradeLevelIds = studentScores.Where(s => s.GradeLevelId.HasValue).Select(s => s.GradeLevelId!.Value).Distinct().ToList();
+            var gradeLevelLabels = gradeLevelIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _context.GradeLevels.AsNoTracking()
+                    .Where(g => gradeLevelIds.Contains(g.Id))
+                    .ToDictionaryAsync(g => g.Id, g => g.Name);
+
+            var primaryGradeIds = await _context.StudentAssignments.AsNoTracking()
+                .Where(sa => sa.StudentId == studentId && sa.IsActive &&
+                             (sa.EnrollmentType == EnrollmentTypeConstants.Regular ||
+                              sa.EnrollmentType == EnrollmentTypeConstants.Nocturno ||
+                              string.IsNullOrWhiteSpace(sa.EnrollmentType)))
+                .Select(sa => sa.GradeId)
+                .Distinct()
+                .ToListAsync();
+
+            var carryOverSubjectIds = await _context.StudentSubjectAssignments.AsNoTracking()
+                .Where(ssa => ssa.StudentId == studentId && ssa.IsActive &&
+                              (ssa.EnrollmentType == EnrollmentTypeConstants.Refuerzo ||
+                               ssa.EnrollmentType == EnrollmentTypeConstants.Libre))
+                .Join(_context.SubjectAssignments.AsNoTracking(),
+                    ssa => ssa.SubjectAssignmentId,
+                    sa => sa.Id,
+                    (ssa, sa) => sa.SubjectId)
+                .Distinct()
+                .ToListAsync();
+
+            var allGrades = studentScores.Select(a =>
             {
-                Subject = a.SubjectId.HasValue ? subjects.GetValueOrDefault(a.SubjectId.Value, "Desconocida") : "Desconocida",
-                Teacher = a.TeacherId.HasValue ? teachers.GetValueOrDefault(a.TeacherId.Value, "Desconocido") : "Desconocido",
-                ActivityName = a.Name,
-                Type = activities.GetValueOrDefault(a.ActivityId)?.Type ?? "SinTipo",
-                Value = a.Score,
-                CreatedAt = a.CreatedAt.ToUniversalTime(),
-                FileUrl = activities.GetValueOrDefault(a.ActivityId)?.PdfUrl,
-                Trimester = a.Trimester,
-                GroupContext = a.GroupId.HasValue && groupLabels.TryGetValue(a.GroupId.Value, out var gn) ? gn : null
+                var levelName = a.GradeLevelId.HasValue
+                    ? gradeLevelLabels.GetValueOrDefault(a.GradeLevelId.Value)
+                    : null;
+                var isCarryOver = (a.SubjectId.HasValue && carryOverSubjectIds.Contains(a.SubjectId.Value)) ||
+                                  (a.GradeLevelId.HasValue && primaryGradeIds.Count > 0 &&
+                                   !primaryGradeIds.Contains(a.GradeLevelId.Value));
+
+                return new GradeDto
+                {
+                    Subject = a.SubjectId.HasValue ? subjects.GetValueOrDefault(a.SubjectId.Value, "Desconocida") : "Desconocida",
+                    Teacher = a.TeacherId.HasValue ? teachers.GetValueOrDefault(a.TeacherId.Value, "Desconocido") : "Desconocido",
+                    ActivityName = a.Name,
+                    Type = activities.GetValueOrDefault(a.ActivityId)?.Type ?? "SinTipo",
+                    Value = a.Score,
+                    CreatedAt = a.CreatedAt.ToUniversalTime(),
+                    FileUrl = activities.GetValueOrDefault(a.ActivityId)?.PdfUrl,
+                    Trimester = a.Trimester,
+                    GroupContext = a.GroupId.HasValue && groupLabels.TryGetValue(a.GroupId.Value, out var gn) ? gn : null,
+                    LevelContext = levelName,
+                    IsCarryOver = isCarryOver
+                };
             }).ToList();
+
+            var grades = allGrades.Where(g => !g.IsCarryOver).ToList();
+            var carryOverGrades = allGrades.Where(g => g.IsCarryOver).ToList();
+            var activeEnrollments = await GetActiveEnrollmentSummariesAsync(studentId);
 
             // --- ASISTENCIA POR TRIMESTRE ---
             var trimesterConfig = await _context.Trimesters.FirstOrDefaultAsync(t => t.Name == selectedTrimester);
@@ -340,6 +405,8 @@ namespace SchoolManager.Services.Implementations
                     StudentName = name,
                     Grade = gradeName,
                     Grades = grades,
+                    CarryOverGrades = carryOverGrades,
+                    ActiveEnrollments = activeEnrollments,
                     AttendanceByTrimester = attendanceByTrimester,
                     AttendanceByMonth = attendanceByMonth,
                     Trimester = selectedTrimester,
@@ -446,18 +513,61 @@ namespace SchoolManager.Services.Implementations
                     .Where(g => scoreGroupIds2.Contains(g.Id))
                     .ToDictionaryAsync(g => g.Id, g => g.Name);
 
-            var grades = studentScores.Select(a => new GradeDto
+            var gradeLevelIds2 = studentScores.Where(s => s.GradeLevelId.HasValue).Select(s => s.GradeLevelId!.Value).Distinct().ToList();
+            var gradeLevelLabels2 = gradeLevelIds2.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _context.GradeLevels.AsNoTracking()
+                    .Where(g => gradeLevelIds2.Contains(g.Id))
+                    .ToDictionaryAsync(g => g.Id, g => g.Name);
+
+            var primaryGradeIds2 = await _context.StudentAssignments.AsNoTracking()
+                .Where(sa => sa.StudentId == studentId && sa.IsActive &&
+                             (sa.EnrollmentType == EnrollmentTypeConstants.Regular ||
+                              sa.EnrollmentType == EnrollmentTypeConstants.Nocturno ||
+                              string.IsNullOrWhiteSpace(sa.EnrollmentType)))
+                .Select(sa => sa.GradeId)
+                .Distinct()
+                .ToListAsync();
+
+            var carryOverSubjectIds2 = await _context.StudentSubjectAssignments.AsNoTracking()
+                .Where(ssa => ssa.StudentId == studentId && ssa.IsActive &&
+                              (ssa.EnrollmentType == EnrollmentTypeConstants.Refuerzo ||
+                               ssa.EnrollmentType == EnrollmentTypeConstants.Libre))
+                .Join(_context.SubjectAssignments.AsNoTracking(),
+                    ssa => ssa.SubjectAssignmentId,
+                    sa => sa.Id,
+                    (ssa, sa) => sa.SubjectId)
+                .Distinct()
+                .ToListAsync();
+
+            var allGrades2 = studentScores.Select(a =>
             {
-                Subject = a.Subject?.Name ?? "Desconocida",
-                Teacher = a.Teacher != null ? $"{a.Teacher.Name} {a.Teacher.LastName}" : "Desconocido",
-                ActivityName = a.Name,
-                Type = a.Type ?? "SinTipo",
-                Value = a.Score,
-                CreatedAt = a.CreatedAt ?? DateTime.UtcNow,
-                FileUrl = a.PdfUrl,
-                Trimester = a.Trimester,
-                GroupContext = a.GroupId.HasValue && groupLabels2.TryGetValue(a.GroupId.Value, out var gn2) ? gn2 : null
+                var levelName = a.GradeLevelId.HasValue
+                    ? gradeLevelLabels2.GetValueOrDefault(a.GradeLevelId.Value)
+                    : null;
+                var isCarryOver = (a.SubjectId.HasValue && carryOverSubjectIds2.Contains(a.SubjectId.Value)) ||
+                                  (a.GradeLevelId.HasValue && primaryGradeIds2.Count > 0 &&
+                                   !primaryGradeIds2.Contains(a.GradeLevelId.Value));
+
+                return new GradeDto
+                {
+                    Subject = a.Subject?.Name ?? "Desconocida",
+                    Teacher = a.Teacher != null ? $"{a.Teacher.Name} {a.Teacher.LastName}" : "Desconocido",
+                    ActivityName = a.Name,
+                    Type = a.Type ?? "SinTipo",
+                    Value = a.Score,
+                    CreatedAt = a.CreatedAt ?? DateTime.UtcNow,
+                    FileUrl = a.PdfUrl,
+                    Trimester = a.Trimester,
+                    GroupContext = a.GroupId.HasValue && groupLabels2.TryGetValue(a.GroupId.Value, out var gn2) ? gn2 : null,
+                    LevelContext = levelName,
+                    IsCarryOver = isCarryOver
+                };
             }).ToList();
+
+            var grades = allGrades2.Where(g => !g.IsCarryOver).ToList();
+            var carryOverGrades = allGrades2.Where(g => g.IsCarryOver).ToList();
+            var activeEnrollments = await GetActiveEnrollmentSummariesAsync(studentId);
 
             // --- ASISTENCIA POR TRIMESTRE ---
             var trimesterConfig = await _context.Trimesters.FirstOrDefaultAsync(t => t.Name == trimester);
@@ -577,6 +687,8 @@ namespace SchoolManager.Services.Implementations
                 StudentName = name,
                 Grade = gradeHeaderLabel,
                 Grades = grades,
+                CarryOverGrades = carryOverGrades,
+                ActiveEnrollments = activeEnrollments,
                 AttendanceByTrimester = attendanceByTrimester,
                 AttendanceByMonth = attendanceByMonth,
                 Trimester = trimester,

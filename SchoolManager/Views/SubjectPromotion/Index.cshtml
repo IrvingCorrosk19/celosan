@@ -1,0 +1,175 @@
+@{
+    ViewData["Title"] = "Promoción por materia";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="container-fluid py-4">
+    <h4 class="mb-3"><i class="bi bi-award me-2"></i>Promoción parcial por materia</h4>
+    <p class="text-muted">Cierre y promoción individual por materia. Los registros quedan en <code>subject_promotion_records</code>.</p>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label">ID del estudiante (UUID)</label>
+                    <input type="text" class="form-control" id="studentIdInput" placeholder="Guid del estudiante" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Trimestre</label>
+                    <select class="form-select" id="trimesterSelect">
+                        <option value="1T">1T</option>
+                        <option value="2T">2T</option>
+                        <option value="3T" selected>3T</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <button type="button" class="btn btn-primary" id="btnLoadEnrollments">
+                        <i class="bi bi-search me-1"></i> Cargar materias activas
+                    </button>
+                    <button type="button" class="btn btn-warning" id="btnCloseYear">
+                        <i class="bi bi-calendar-check me-1"></i> Cierre anual (todas)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Materias activas del estudiante</div>
+        <div class="card-body">
+            <div id="enrollmentsPlaceholder" class="text-muted">Ingrese un estudiante y cargue sus materias.</div>
+            <div class="table-responsive d-none" id="enrollmentsTableWrap">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>Materia</th>
+                            <th>Grado</th>
+                            <th>Tipo</th>
+                            <th>Estado</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="enrollmentsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Historial de promoción</div>
+        <div class="card-body">
+            <div id="recordsPlaceholder" class="text-muted">Sin registros cargados.</div>
+            <div class="table-responsive d-none" id="recordsTableWrap">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Materia</th>
+                            <th>Grado</th>
+                            <th>Trimestre</th>
+                            <th>Resultado</th>
+                            <th>Nota</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const studentInput = $('#studentIdInput');
+    const trimesterSelect = $('#trimesterSelect');
+
+    function getStudentId() {
+        return (studentInput.val() || '').trim();
+    }
+
+    function loadRecords() {
+        const sid = getStudentId();
+        if (!sid) return;
+        $.get(`/SubjectPromotion/Records/${sid}`)
+            .done(res => {
+                if (!res.success || !res.data || !res.data.length) {
+                    $('#recordsPlaceholder').removeClass('d-none').text('Sin registros de promoción.');
+                    $('#recordsTableWrap').addClass('d-none');
+                    return;
+                }
+                $('#recordsPlaceholder').addClass('d-none');
+                $('#recordsTableWrap').removeClass('d-none');
+                const rows = res.data.map(r => `
+                    <tr>
+                        <td>${r.subjectName}</td>
+                        <td>${r.gradeName}</td>
+                        <td>${r.trimester}</td>
+                        <td>${r.outcome}</td>
+                        <td>${r.finalScore != null ? Number(r.finalScore).toFixed(2) : '—'}</td>
+                        <td>${new Date(r.promotedAt).toLocaleDateString()}</td>
+                    </tr>`).join('');
+                $('#recordsBody').html(rows);
+            });
+    }
+
+    $('#btnLoadEnrollments').on('click', function () {
+        const sid = getStudentId();
+        if (!sid) { alert('Ingrese el ID del estudiante.'); return; }
+
+        $.get(`/SubjectPromotion/ActiveEnrollments/${sid}`)
+            .done(res => {
+                if (!res.success || !res.data || !res.data.length) {
+                    $('#enrollmentsPlaceholder').removeClass('d-none').text('El estudiante no tiene materias activas.');
+                    $('#enrollmentsTableWrap').addClass('d-none');
+                    return;
+                }
+                $('#enrollmentsPlaceholder').addClass('d-none');
+                $('#enrollmentsTableWrap').removeClass('d-none');
+                const rows = res.data.map(e => `
+                    <tr>
+                        <td>${e.subjectName}</td>
+                        <td>${e.gradeName}</td>
+                        <td>${e.enrollmentType}</td>
+                        <td>${e.status}</td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-success btn-promote" data-id="${e.enrollmentId}" data-outcome="Approved">Aprobar</button>
+                            <button type="button" class="btn btn-sm btn-danger btn-promote" data-id="${e.enrollmentId}" data-outcome="Failed">Reprobar</button>
+                        </td>
+                    </tr>`).join('');
+                $('#enrollmentsBody').html(rows);
+                loadRecords();
+            })
+            .fail(() => alert('Error al cargar materias.'));
+    });
+
+    $(document).on('click', '.btn-promote', function () {
+        const sid = getStudentId();
+        const enrollmentId = $(this).data('id');
+        const outcome = $(this).data('outcome');
+        const trimester = trimesterSelect.val();
+        $.post('/SubjectPromotion/Promote', {
+            studentId: sid,
+            studentSubjectAssignmentId: enrollmentId,
+            trimester: trimester,
+            outcome: outcome
+        }).done(res => {
+            alert(res.message || (res.success ? 'OK' : 'Error'));
+            if (res.success) {
+                $('#btnLoadEnrollments').click();
+            }
+        }).fail(() => alert('Error al registrar promoción.'));
+    });
+
+    $('#btnCloseYear').on('click', function () {
+        const sid = getStudentId();
+        if (!sid) { alert('Ingrese el ID del estudiante.'); return; }
+        if (!confirm('¿Cerrar todas las materias activas según notas del trimestre seleccionado?')) return;
+        $.post('/SubjectPromotion/CloseYear', { studentId: sid, trimester: trimesterSelect.val() })
+            .done(res => {
+                alert(res.message || '');
+                if (res.success) $('#btnLoadEnrollments').click();
+            })
+            .fail(() => alert('Error en cierre anual.'));
+    });
+</script>
+}

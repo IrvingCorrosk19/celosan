@@ -18,7 +18,8 @@ namespace SchoolManager.Services.Interfaces
             string? grupoEspecifico = null,
             Guid? especialidadId = null,
             Guid? areaId = null,
-            Guid? materiaId = null);
+            Guid? materiaId = null,
+            bool consolidatedByStudent = false);
 
         /// <summary>
         /// Obtiene los trimestres disponibles para una escuela

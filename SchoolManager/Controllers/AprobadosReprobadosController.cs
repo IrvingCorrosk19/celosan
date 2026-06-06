@@ -100,7 +100,8 @@ namespace SchoolManager.Controllers
                     filtro.GrupoEspecifico,
                     filtro.EspecialidadId,
                     filtro.AreaId,
-                    filtro.MateriaId
+                    filtro.MateriaId,
+                    filtro.ConsolidadoPorEstudiante
                 );
 
                 // Agregar nombre del profesor coordinador
@@ -142,7 +143,7 @@ namespace SchoolManager.Controllers
         // GET: AprobadosReprobados/VistaPrevia
         [HttpGet]
         public async Task<IActionResult> VistaPrevia(string trimestre, string nivelEducativo, string? grado = null, string? grupo = null, 
-            Guid? especialidadId = null, Guid? areaId = null, Guid? materiaId = null)
+            Guid? especialidadId = null, Guid? areaId = null, Guid? materiaId = null, bool consolidatedByStudent = false)
         {
             try
             {
@@ -161,7 +162,8 @@ namespace SchoolManager.Controllers
                     grupo,
                     especialidadId,
                     areaId,
-                    materiaId
+                    materiaId,
+                    consolidatedByStudent
                 );
 
                 reporte.ProfesorCoordinador = $"{currentUser.Name} {currentUser.LastName}";
@@ -179,7 +181,7 @@ namespace SchoolManager.Controllers
         // GET: AprobadosReprobados/ExportarPdf
         [HttpGet]
         public async Task<IActionResult> ExportarPdf(string trimestre, string nivelEducativo, string? grado = null, string? grupo = null,
-            Guid? especialidadId = null, Guid? areaId = null, Guid? materiaId = null)
+            Guid? especialidadId = null, Guid? areaId = null, Guid? materiaId = null, bool consolidatedByStudent = false)
         {
             try
             {
@@ -197,7 +199,8 @@ namespace SchoolManager.Controllers
                     grupo,
                     especialidadId,
                     areaId,
-                    materiaId
+                    materiaId,
+                    consolidatedByStudent
                 );
 
                 reporte.ProfesorCoordinador = $"{currentUser.Name} {currentUser.LastName}";
@@ -223,7 +226,7 @@ namespace SchoolManager.Controllers
         // GET: AprobadosReprobados/ExportarExcel
         [HttpGet]
         public async Task<IActionResult> ExportarExcel(string trimestre, string nivelEducativo, string? grado = null, string? grupo = null,
-            Guid? especialidadId = null, Guid? areaId = null, Guid? materiaId = null)
+            Guid? especialidadId = null, Guid? areaId = null, Guid? materiaId = null, bool consolidatedByStudent = false)
         {
             try
             {
@@ -241,7 +244,8 @@ namespace SchoolManager.Controllers
                     grupo,
                     especialidadId,
                     areaId,
-                    materiaId
+                    materiaId,
+                    consolidatedByStudent
                 );
 
                 reporte.ProfesorCoordinador = $"{currentUser.Name} {currentUser.LastName}";

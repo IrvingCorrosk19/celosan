@@ -236,6 +236,14 @@
                             </a>
                         </li>
                         }
+                        @if (userRole == "acudiente" || userRole == "parent") {
+                        <li class="nav-item">
+                            <a href="@Url.Action("Index", "ParentAcademic")" class="nav-link">
+                                <i class="nav-icon fas fa-graduation-cap"></i>
+                                <p>Calificaciones hijos</p>
+                            </a>
+                        </li>
+                        }
                         @if (showStaffInstitutionalProfileMenu) {
                         <li class="nav-item">
                             <a href="@Url.Action("Index", "StaffInstitutionalProfile")" class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "StaffInstitutionalProfile" ? "active" : "")">
@@ -350,6 +358,12 @@
                                     <a href="@Url.Action("Index", "AprobadosReprobados")" class="nav-link">
                                         <i class="fas fa-chart-bar nav-icon"></i>
                                         <p>Aprobados y Reprobados</p>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="@Url.Action("Index", "SubjectPromotion")" class="nav-link">
+                                        <i class="fas fa-award nav-icon"></i>
+                                        <p>Promoción por materia</p>
                                     </a>
                                 </li>
                             </ul>
@@ -522,6 +536,12 @@
                                     <a href="@Url.Action("Upload", "StudentAssignment")" class="nav-link">
                                         <i class="fas fa-file-upload nav-icon"></i>
                                         <p>Carga Asignaciones Estudiantes</p>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a href="@Url.Action("Index", "SubjectPromotion")" class="nav-link">
+                                        <i class="fas fa-award nav-icon"></i>
+                                        <p>Promoción por materia</p>
                                     </a>
                                 </li>
                             </ul>

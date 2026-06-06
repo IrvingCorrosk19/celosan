@@ -149,6 +149,31 @@
                     </div>
                 </div>
 
+                @if (Model.ActiveEnrollments?.Count > 1 || !string.IsNullOrWhiteSpace(Model.AdditionalEnrollmentsSummary))
+                {
+                    <div class="info-item">
+                        <i class="bi bi-layers"></i>
+                        <div>
+                            <small class="text-muted d-block">Otras matrículas / arrastre</small>
+                            @if (Model.ActiveEnrollments?.Any() == true)
+                            {
+                                @foreach (var e in Model.ActiveEnrollments.Where(x => !x.IsPrimary))
+                                {
+                                    <div>
+                                        <span class="badge @(e.IsCarryOver ? "bg-warning text-dark" : "bg-secondary") me-1">
+                                            @e.GradeName — @e.GroupName (@e.EnrollmentType)
+                                        </span>
+                                    </div>
+                                }
+                            }
+                            else if (!string.IsNullOrWhiteSpace(Model.AdditionalEnrollmentsSummary))
+                            {
+                                <strong>@Model.AdditionalEnrollmentsSummary</strong>
+                            }
+                        </div>
+                    </div>
+                }
+
                 <div class="info-item">
                     <i class="bi bi-person-badge"></i>
                     <div>

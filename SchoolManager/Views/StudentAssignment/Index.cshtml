@@ -347,6 +347,9 @@
                         <button type="button" class="btn btn-success btn-sm" id="btnAddSubjectEnrollment">
                             <i class="bi bi-plus-circle me-1"></i> Agregar materia
                         </button>
+                        <button type="button" class="btn btn-warning btn-sm ms-1" id="btnAddCarryOverSubject">
+                            <i class="bi bi-arrow-repeat me-1"></i> Arrastre
+                        </button>
                     </div>
                     <div class="subject-enrollment-list"></div>
                 </div>
@@ -361,9 +364,12 @@
                     <select id="subjectCatalogSelect" class="form-select form-select-lg">
                         <option value="">-- Seleccione asignatura --</option>
                     </select>
-                    <div class="mt-3 d-flex justify-content-end">
+                    <div class="mt-3 d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-success" id="btnGuardarMateriaIndividual">
                             <i class="bi bi-check-circle me-1"></i> Guardar Materia
+                        </button>
+                        <button type="button" class="btn btn-warning" id="btnGuardarMateriaArrastre">
+                            <i class="bi bi-arrow-repeat me-1"></i> Guardar como arrastre
                         </button>
                     </div>
                 </div>
@@ -539,12 +545,15 @@
                             return;
                         }
 
-                        const html = res.data.map(item => `
-                            <div class="mb-2 p-2 bg-light rounded">
-                                <div class="fw-bold text-primary">${item.subjectName}</div>
-                                <small class="text-muted">${item.gradeName} - ${item.groupName}</small>
-                            </div>
-                        `).join('');
+                        const html = res.data.map(item => {
+                            const badge = (item.enrollmentType && (item.enrollmentType.toLowerCase() === 'refuerzo' || item.enrollmentType.toLowerCase() === 'libre'))
+                                ? '<span class="badge bg-warning text-dark ms-2">Arrastre</span>' : '';
+                            return `
+                        <div class="mb-2 p-2 bg-light rounded">
+                            <div class="fw-bold text-primary">${item.subjectName}${badge}</div>
+                            <small class="text-muted">${item.gradeName} - ${item.groupName}</small>
+                        </div>`;
+                        }).join('');
                         cell.html(html);
                     })
                     .fail(function () {
@@ -567,17 +576,20 @@
                         return;
                     }
 
-                    const html = res.data.map(item => `
+                    const html = res.data.map(item => {
+                        const badge = (item.enrollmentType && (item.enrollmentType.toLowerCase() === 'refuerzo' || item.enrollmentType.toLowerCase() === 'libre'))
+                            ? '<span class="badge bg-warning text-dark ms-2">Arrastre</span>' : '';
+                        return `
                         <div class="mb-2 p-2 bg-light rounded d-flex justify-content-between align-items-center gap-2">
                             <div>
-                                <div class="fw-bold text-primary">${item.subjectName}</div>
+                                <div class="fw-bold text-primary">${item.subjectName}${badge}</div>
                                 <small class="text-muted">${item.gradeName} - ${item.groupName}</small>
                             </div>
                             <button type="button" class="btn btn-outline-danger btn-sm btn-remove-subject-enrollment" data-enrollment-id="${item.enrollmentId}">
                                 <i class="bi bi-trash"></i>
                             </button>
-                        </div>
-                    `).join('');
+                        </div>`;
+                    }).join('');
 
                     target.html(html);
                 })
@@ -596,18 +608,23 @@
                         return;
                     }
 
-                    const html = res.data.map(item => `
+                    const html = res.data.map(item => {
+                        const badge = (item.enrollmentType && (item.enrollmentType.toLowerCase() === 'refuerzo' || item.enrollmentType.toLowerCase() === 'libre'))
+                            ? '<span class="badge bg-warning text-dark ms-2">Arrastre</span>' : '';
+                        return `
                         <div class="mb-2 p-2 bg-light rounded">
-                            <div class="fw-bold text-primary">${item.subjectName}</div>
+                            <div class="fw-bold text-primary">${item.subjectName}${badge}</div>
                             <small class="text-muted">${item.gradeName} - ${item.groupName}</small>
-                        </div>
-                    `).join('');
+                        </div>`;
+                    }).join('');
                     cell.html(html);
                 })
                 .fail(function () {
                     cell.html('<div class="text-danger small">Error al cargar.</div>');
                 });
         }
+
+        let currentSubjectMode = 'regular';
 
         function loadSubjectCatalog() {
             const dropdown = $('#subjectCatalogSelect');
@@ -715,20 +732,27 @@
 
         $('#btnAddSubjectEnrollment').on('click', function () {
             if (!currentStudentId) return;
-            $('#subjectCatalogWrapper').toggleClass('d-none');
-            if (!$('#subjectCatalogWrapper').hasClass('d-none')) {
-                loadSubjectCatalog();
-            }
+            currentSubjectMode = 'regular';
+            $('#subjectCatalogWrapper').removeClass('d-none');
+            loadSubjectCatalog();
         });
 
-        $('#btnGuardarMateriaIndividual').on('click', function () {
+        $('#btnAddCarryOverSubject').on('click', function () {
+            if (!currentStudentId) return;
+            currentSubjectMode = 'carryover';
+            $('#subjectCatalogWrapper').removeClass('d-none');
+            loadSubjectCatalog();
+        });
+
+        function postSubjectEnrollment(asCarryOver) {
             const subjectAssignmentId = $('#subjectCatalogSelect').val();
             if (!currentStudentId || !subjectAssignmentId) {
                 Swal.fire({ icon: 'warning', title: 'Atención', text: 'Seleccione una asignatura.' });
                 return;
             }
 
-            $.post('/StudentAssignment/AddSubjectEnrollment', { studentId: currentStudentId, subjectAssignmentId: subjectAssignmentId })
+            const url = asCarryOver ? '/StudentAssignment/AddCarryOverSubjectEnrollment' : '/StudentAssignment/AddSubjectEnrollment';
+            $.post(url, { studentId: currentStudentId, subjectAssignmentId: subjectAssignmentId })
                 .done(function (resp) {
                     if (!resp.success) {
                         Swal.fire({ icon: 'error', title: 'Error', text: resp.message || 'No se pudo agregar la asignatura.' });
@@ -743,7 +767,10 @@
                 .fail(function () {
                     Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo agregar la asignatura.' });
                 });
-        });
+        }
+
+        $('#btnGuardarMateriaIndividual').on('click', function () { postSubjectEnrollment(false); });
+        $('#btnGuardarMateriaArrastre').on('click', function () { postSubjectEnrollment(true); });
 
         $(document).on('click', '.btn-remove-subject-enrollment', function () {
             const enrollmentId = $(this).data('enrollment-id');

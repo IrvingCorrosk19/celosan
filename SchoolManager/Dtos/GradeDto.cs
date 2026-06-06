@@ -12,6 +12,9 @@
         public string Trimester { get; set; } = string.Empty;
         /// <summary>Grupo u oferta académica (evita ambigüedad con varias matrículas).</summary>
         public string? GroupContext { get; set; }
+        /// <summary>Etiqueta de nivel (grado de la oferta académica).</summary>
+        public string? LevelContext { get; set; }
+        public bool IsCarryOver { get; set; }
         public decimal? Grade { get { return Value; } }
     }
 

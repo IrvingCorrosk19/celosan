@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using SchoolManager.Dtos;
 
 namespace SchoolManager.ViewModels
 {
@@ -49,6 +50,11 @@ namespace SchoolManager.ViewModels
 
         [Display(Name = "Grupo")]
         public string? GroupName { get; set; }
+
+        [Display(Name = "Otras matrículas")]
+        public string? AdditionalEnrollmentsSummary { get; set; }
+
+        public List<StudentEnrollmentSummaryDto> ActiveEnrollments { get; set; } = new();
 
         [Display(Name = "Escuela")]
         public string? SchoolName { get; set; }

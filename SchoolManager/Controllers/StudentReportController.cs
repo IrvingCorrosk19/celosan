@@ -143,19 +143,30 @@ public class StudentReportController : Controller
             Console.WriteLine($"Datos encontrados - Grades: {report.Grades?.Count ?? 0}, Attendance: {report.AttendanceByTrimester?.Count ?? 0}, Discipline: {report.DisciplineReports?.Count ?? 0}");
 
             // Preparar los datos de manera segura
-            var grades = new List<object>();
-            if (report.Grades != null)
+            object MapGrade(GradeDto g) => new
             {
-                grades = report.Grades.Select(g => new
-                {
-                    subject = g.Subject,
-                    activityName = g.ActivityName,
-                    teacher = g.Teacher,
-                    value = g.Value,
-                    fileUrl = g.FileUrl,
-                    type = g.Type
-                }).Cast<object>().ToList();
-            }
+                subject = g.Subject,
+                activityName = g.ActivityName,
+                teacher = g.Teacher,
+                value = g.Value,
+                fileUrl = g.FileUrl,
+                type = g.Type,
+                groupContext = g.GroupContext,
+                levelContext = g.LevelContext,
+                isCarryOver = g.IsCarryOver
+            };
+
+            var grades = report.Grades?.Select(MapGrade).Cast<object>().ToList() ?? new List<object>();
+            var carryOverGrades = report.CarryOverGrades?.Select(MapGrade).Cast<object>().ToList() ?? new List<object>();
+            var activeEnrollments = report.ActiveEnrollments?.Select(e => new
+            {
+                gradeName = e.GradeName,
+                groupName = e.GroupName,
+                shiftName = e.ShiftName,
+                enrollmentType = e.EnrollmentType,
+                isPrimary = e.IsPrimary,
+                isCarryOver = e.IsCarryOver
+            }).Cast<object>().ToList() ?? new List<object>();
 
             var attendanceByTrimester = new List<object>();
             if (report.AttendanceByTrimester != null)
@@ -209,6 +220,8 @@ public class StudentReportController : Controller
             var result = new
             {
                 grades = grades,
+                carryOverGrades = carryOverGrades,
+                activeEnrollments = activeEnrollments,
                 trimester = report.Trimester,
                 attendanceByTrimester = attendanceByTrimester,
                 attendanceByMonth = attendanceByMonth,

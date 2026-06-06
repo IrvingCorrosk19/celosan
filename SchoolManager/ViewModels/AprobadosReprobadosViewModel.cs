@@ -84,6 +84,9 @@ namespace SchoolManager.ViewModels
 
         public string? GradoEspecifico { get; set; }
         public string? GrupoEspecifico { get; set; }
+
+        /// <summary>Evita doble conteo cuando un estudiante aparece en varios grupos (modo nocturno).</summary>
+        public bool ConsolidadoPorEstudiante { get; set; }
         
         // Nuevos filtros
         public Guid? EspecialidadId { get; set; }

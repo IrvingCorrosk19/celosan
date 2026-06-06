@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using SchoolManager.Models;
+using SchoolManager.Services.Interfaces;
 
 public interface IStudentAssignmentService
 {
@@ -30,5 +31,14 @@ public interface IStudentAssignmentService
 
     Task InsertAsync(StudentAssignment assignment);
 
+    /// <summary>Resuelve o crea matrícula activa para grado+grupo+jornada (modo arrastre/multi-grupo).</summary>
+    Task<StudentAssignment?> EnsureEnrollmentBaseAsync(Guid studentId, Guid gradeId, Guid groupId, string enrollmentType);
+
+    /// <summary>Inscribe una materia (oferta académica) al estudiante.</summary>
+    Task<(bool Success, string Message, Guid? StudentSubjectAssignmentId)> AddSubjectEnrollmentAsync(
+        Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false);
+
+    /// <summary>Catálogo de materias disponibles para inscripción (incluye otros grados si modo avanzado).</summary>
+    Task<IReadOnlyList<SubjectCatalogItemDto>> GetAvailableSubjectCatalogAsync(Guid studentId, Guid? schoolId, bool advancedMode);
 
 }
