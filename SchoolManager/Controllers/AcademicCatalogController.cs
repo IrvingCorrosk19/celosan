@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Application.Interfaces;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
@@ -24,6 +25,7 @@ namespace SchoolManager.Controllers
         private readonly ICurrentUserService _currentUserService;
         private readonly ITrimesterService _trimesterService;
         private readonly IAcademicAssignmentService _academicAssignmentService;
+        private readonly SchoolDbContext _context;
 
         public AcademicCatalogController(
             ISpecialtyService specialtyService,
@@ -34,7 +36,8 @@ namespace SchoolManager.Controllers
             IShiftService shiftService,
             ICurrentUserService currentUserService,
             ITrimesterService trimesterService,
-            IAcademicAssignmentService academicAssignmentService)
+            IAcademicAssignmentService academicAssignmentService,
+            SchoolDbContext context)
         {
             _specialtyService = specialtyService;
             _areaService = areaService;
@@ -45,6 +48,7 @@ namespace SchoolManager.Controllers
             _currentUserService = currentUserService;
             _trimesterService = trimesterService;
             _academicAssignmentService = academicAssignmentService;
+            _context = context;
         }
 
         private static string BuildCatalogCombinationKey(
@@ -77,8 +81,12 @@ namespace SchoolManager.Controllers
             return View(viewModel);
         }
 
-        public IActionResult Upload()
+        public async Task<IActionResult> Upload()
         {
+            var ctx = await SchoolTenantHelper.TryGetBulkUploadSchoolContextAsync(_context, _currentUserService);
+            ViewBag.BulkUploadSchoolName = ctx?.SchoolName;
+            ViewBag.BulkUploadSchoolId = ctx?.SchoolId;
+            ViewBag.BulkUploadBlocked = ctx == null;
             return View();
         }
 

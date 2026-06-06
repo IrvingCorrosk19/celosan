@@ -55,7 +55,12 @@ public class SubjectService : ISubjectService
     public async Task<Subject> GetOrCreateAsync(string name)
     {
         name = name.Trim().ToUpper();
-        var subject = await _context.Subjects.FirstOrDefaultAsync(s => s.Name.ToUpper() == name);
+        var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
+        var query = _context.Subjects.Where(s => s.Name.ToUpper() == name);
+        if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+            query = query.Where(s => s.SchoolId == schoolId.Value);
+
+        var subject = await query.FirstOrDefaultAsync();
         if (subject == null)
         {
             subject = new Subject

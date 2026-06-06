@@ -487,6 +487,17 @@ public async Task<User?> AuthenticateAsync(string email, string password)
             .FirstOrDefaultAsync(u => u.Email.ToLower().Trim() == email.ToLower().Trim());
     }
 
+    public async Task<User?> GetByEmailIgnoringTenantAsync(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+
+        var normalized = email.ToLower().Trim();
+        return await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Email.ToLower().Trim() == normalized);
+    }
+
     public async Task<(bool success, string message)> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword)
     {
         Console.WriteLine($"[UserService.ChangePasswordAsync] Iniciando para userId: {userId}");

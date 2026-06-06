@@ -27,8 +27,12 @@ namespace SchoolManager.Services.Implementations
                     throw new ArgumentException("El nombre de la especialidad no puede estar vacío.", nameof(name));
 
                 name = name.Trim().ToUpper();
-                var specialty = await _context.Specialties
-                    .FirstOrDefaultAsync(e => e.Name.ToUpper() == name);
+                var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
+                var query = _context.Specialties.Where(e => e.Name.ToUpper() == name);
+                if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+                    query = query.Where(e => e.SchoolId == schoolId.Value);
+
+                var specialty = await query.FirstOrDefaultAsync();
 
                 if (specialty == null)
                 {

@@ -47,6 +47,10 @@ namespace SchoolManager.Services.Implementations
         public async Task<Shift> GetOrCreateAsync(string name)
         {
             name = name.Trim();
+            var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
+            if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+                return await GetOrCreateBySchoolAndNameAsync(schoolId.Value, name);
+
             var shift = await _context.Shifts
                 .FirstOrDefaultAsync(s => s.Name.ToLower() == name.ToLower());
             

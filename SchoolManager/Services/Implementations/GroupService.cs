@@ -35,7 +35,12 @@ public class GroupService : IGroupService
         public async Task<Group> GetOrCreateAsync(string name)
         {
             name = name.Trim().ToUpper();
-            var group = await _context.Groups.FirstOrDefaultAsync(g => g.Name.ToUpper() == name);
+            var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
+            var query = _context.Groups.Where(g => g.Name.ToUpper() == name);
+            if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+                query = query.Where(g => g.SchoolId == schoolId.Value);
+
+            var group = await query.FirstOrDefaultAsync();
             if (group == null)
             {
                 group = new Group

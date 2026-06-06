@@ -20,13 +20,22 @@ public class GradeLevelService : IGradeLevelService
     }
     public async Task<GradeLevel?> GetByNameAsync(string name)
     {
-        return await _context.GradeLevels
-            .FirstOrDefaultAsync(g => g.Name.ToLower() == name.ToLower());
+        var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
+        var query = _context.GradeLevels.Where(g => g.Name.ToLower() == name.ToLower());
+        if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+            query = query.Where(g => g.SchoolId == schoolId.Value);
+
+        return await query.FirstOrDefaultAsync();
     }
     public async Task<GradeLevel> GetOrCreateAsync(string name)
     {
         name = name.Trim().ToUpper();
-        var grade = await _context.GradeLevels.FirstOrDefaultAsync(g => g.Name.ToUpper() == name);
+        var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
+        var query = _context.GradeLevels.Where(g => g.Name.ToUpper() == name);
+        if (schoolId.HasValue && schoolId.Value != Guid.Empty)
+            query = query.Where(g => g.SchoolId == schoolId.Value);
+
+        var grade = await query.FirstOrDefaultAsync();
         if (grade == null)
         {
             grade = new GradeLevel

@@ -4,6 +4,9 @@ public interface IUserService
 {
     Task<User?> GetByEmailAsync(string email);
 
+    /// <summary>Búsqueda global por email (sin filtro tenant). Usar en carga masiva y validar SchoolId.</summary>
+    Task<User?> GetByEmailIgnoringTenantAsync(string email);
+
     Task<List<User>> GetAllAsync();
     Task<User?> GetByIdAsync(Guid id);
     Task<User?> GetByIdWithRelationsAsync(Guid id);

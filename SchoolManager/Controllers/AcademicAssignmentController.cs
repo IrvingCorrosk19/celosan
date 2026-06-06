@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolManager.Application.Interfaces;
+using SchoolManager.Helpers;
 using SchoolManager.Infrastructure.Services;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BCrypt.Net;
@@ -23,6 +25,7 @@ public class AcademicAssignmentController : Controller
     private readonly ISpecialtyService _specialtyService;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeHomologationService _dateTimeHomologationService;
+    private readonly SchoolDbContext _context;
 
     public AcademicAssignmentController(
         ITeacherAssignmentService teacherAssignmentService,
@@ -34,7 +37,8 @@ public class AcademicAssignmentController : Controller
         IAreaService areaService,
         ISpecialtyService specialtyService,
         ICurrentUserService currentUserService,
-        IDateTimeHomologationService dateTimeHomologationService)
+        IDateTimeHomologationService dateTimeHomologationService,
+        SchoolDbContext context)
     {
         _teacherAssignmentService = teacherAssignmentService;
         _userService = userService;
@@ -46,11 +50,16 @@ public class AcademicAssignmentController : Controller
         _specialtyService = specialtyService;
         _currentUserService = currentUserService;
         _dateTimeHomologationService = dateTimeHomologationService;
+        _context = context;
     }
 
 
-    public IActionResult Upload()
+    public async Task<IActionResult> Upload()
     {
+        var ctx = await SchoolTenantHelper.TryGetBulkUploadSchoolContextAsync(_context, _currentUserService);
+        ViewBag.BulkUploadSchoolName = ctx?.SchoolName;
+        ViewBag.BulkUploadSchoolId = ctx?.SchoolId;
+        ViewBag.BulkUploadBlocked = ctx == null;
         return View();
     }
 
@@ -61,16 +70,23 @@ public class AcademicAssignmentController : Controller
         if (asignaciones == null || !asignaciones.Any())
             return BadRequest(new { message = "No se recibió información válida." });
 
+        var currentUser = await _currentUserService.GetCurrentUserAsync();
+        var schoolId = currentUser?.SchoolId;
+        if (schoolId == null || schoolId == Guid.Empty)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "No se pudo determinar la escuela del usuario. Use una cuenta de administrador del colegio."
+            });
+        }
+
         var asignacionesInsertadas = 0;
         var duplicadasEnArchivo = 0;
         var duplicadasEnBd = 0;
         var errores = new List<string>();
         var combinacionesEnArchivo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var profesoresCreados = new List<string>();
-        var currentUser = await _currentUserService.GetCurrentUserAsync();
-        var schoolId = currentUser?.SchoolId;
-
-        var user = await _currentUserService.GetCurrentUserAsync();
 
         for (var index = 0; index < asignaciones.Count; index++)
         {
@@ -104,7 +120,7 @@ public class AcademicAssignmentController : Controller
             var groupEntity = await _groupService.GetOrCreateAsync(grupo);
 
             var yaExiste = await _academicAssignmentService.ExisteAsignacionAsync(
-                specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, user.SchoolId
+                specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, schoolId
             );
 
             if (yaExiste)
@@ -115,28 +131,34 @@ public class AcademicAssignmentController : Controller
             else
             {
                 await _academicAssignmentService.CreateAsignacionAsync(
-                    specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, user.SchoolId
+                    specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, schoolId
                 );
                 asignacionesInsertadas++;
             }
 
             // Obtener el subject_assignment_id
             var subjectAssignmentId = await _academicAssignmentService.GetSubjectAssignmentIdAsync(
-                specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, user.SchoolId
+                specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, schoolId
             );
 
             if (subjectAssignmentId != null && !string.IsNullOrEmpty(correoDocente))
             {
-                // Buscar docente
-                var docente = await _userService.GetByEmailAsync(correoDocente);
+                // Buscar docente (global: validar escuela)
+                var docente = await _userService.GetByEmailIgnoringTenantAsync(correoDocente);
                 if (docente != null)
                 {
+                    if (!SchoolTenantHelper.UserBelongsToSchool(docente, schoolId.Value))
+                    {
+                        errores.Add($"Fila {fila}: El docente {correoDocente} pertenece a otra institución.");
+                        continue;
+                    }
+
                     await _academicAssignmentService.AssignTeacherAsync(docente.Id, subjectAssignmentId.Value);
                 }
                 else
                 {
                     // Verificar nuevamente que no existe antes de crear (doble validación)
-                    var docenteVerificado = await _userService.GetByEmailAsync(correoDocente);
+                    var docenteVerificado = await _userService.GetByEmailIgnoringTenantAsync(correoDocente);
                     if (docenteVerificado == null)
                     {
                         // Usar datos del Excel o valores por defecto
@@ -167,7 +189,7 @@ public class AcademicAssignmentController : Controller
                             DateOfBirth = fechaNacimiento,
                             PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"),
                             Role = "teacher", // Usar minúscula para coincidir con la restricción CHECK
-                            SchoolId = user.SchoolId,
+                            SchoolId = schoolId,
                             Status = "active",
                             CreatedAt = DateTime.UtcNow,
                             TwoFactorEnabled = false
@@ -181,7 +203,12 @@ public class AcademicAssignmentController : Controller
                     }
                     else
                     {
-                        // Si ya existe, asignarlo
+                        if (!SchoolTenantHelper.UserBelongsToSchool(docenteVerificado, schoolId.Value))
+                        {
+                            errores.Add($"Fila {fila}: El docente {correoDocente} pertenece a otra institución.");
+                            continue;
+                        }
+
                         await _academicAssignmentService.AssignTeacherAsync(docenteVerificado.Id, subjectAssignmentId.Value);
                     }
                 }

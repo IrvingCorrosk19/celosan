@@ -4,6 +4,8 @@ using SchoolManager.Services.Interfaces;
 
 namespace SchoolManager.Helpers;
 
+public sealed record BulkUploadSchoolContext(Guid SchoolId, string SchoolName);
+
 public static class SchoolTenantHelper
 {
     public static bool IsSuperAdminRole(string? role) =>
@@ -55,5 +57,25 @@ public static class SchoolTenantHelper
                 u.SchoolId == tenant.SchoolId &&
                 (u.Role.ToLower() == "student" || u.Role.ToLower() == "estudiante"),
                 cancellationToken);
+    }
+
+    public static bool UserBelongsToSchool(User? user, Guid schoolId) =>
+        user?.SchoolId != null && user.SchoolId.Value == schoolId;
+
+    public static async Task<BulkUploadSchoolContext?> TryGetBulkUploadSchoolContextAsync(
+        SchoolDbContext context,
+        ICurrentUserService currentUserService,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await currentUserService.GetCurrentUserAsync();
+        if (user?.SchoolId == null || user.SchoolId == Guid.Empty)
+            return null;
+
+        var school = await context.Schools.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == user.SchoolId, cancellationToken);
+
+        return new BulkUploadSchoolContext(
+            user.SchoolId.Value,
+            string.IsNullOrWhiteSpace(school?.Name) ? "Colegio" : school!.Name);
     }
 }

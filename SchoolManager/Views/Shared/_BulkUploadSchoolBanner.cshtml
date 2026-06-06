@@ -1,0 +1,14 @@
+@if (ViewBag.BulkUploadBlocked == true)
+{
+    <div class="alert alert-warning mb-3">
+        <strong><i class="bi bi-exclamation-triangle me-1"></i>Carga masiva no disponible</strong>
+        <p class="mb-0 small">Su usuario no tiene un colegio asignado. Inicie sesión con un administrador o secretaria del colegio para cargar datos.</p>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(ViewBag.BulkUploadSchoolName as string))
+{
+    <div class="alert alert-primary mb-3 py-2">
+        <i class="bi bi-building me-2"></i>
+        <strong>Cargando para:</strong> @ViewBag.BulkUploadSchoolName
+    </div>
+}

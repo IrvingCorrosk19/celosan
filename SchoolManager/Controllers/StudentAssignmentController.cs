@@ -429,8 +429,12 @@ namespace SchoolManager.Controllers
             return View(indexModel);
         }
 
-        public IActionResult Upload()
+        public async Task<IActionResult> Upload()
         {
+            var ctx = await SchoolTenantHelper.TryGetBulkUploadSchoolContextAsync(_context, _currentUserService);
+            ViewBag.BulkUploadSchoolName = ctx?.SchoolName;
+            ViewBag.BulkUploadSchoolId = ctx?.SchoolId;
+            ViewBag.BulkUploadBlocked = ctx == null;
             return View();
         }
 
@@ -531,7 +535,13 @@ namespace SchoolManager.Controllers
                     }
 
                     // Crear/obtener usuario.
-                    var student = await _userService.GetByEmailAsync(row.EstudianteEmail.Trim());
+                    var student = await _userService.GetByEmailIgnoringTenantAsync(row.EstudianteEmail.Trim());
+                    if (student != null && !SchoolTenantHelper.UserBelongsToSchool(student, schoolId))
+                    {
+                        errors.Add($"El correo {row.EstudianteEmail} pertenece a otra institución.");
+                        continue;
+                    }
+
                     if (student == null)
                     {
                         student = new User
@@ -565,7 +575,7 @@ namespace SchoolManager.Controllers
 
                     // Plataforma solo nocturna: la jornada del Excel no cambia el turno efectivo.
                     const string jornadaEfectiva = "Noche";
-                    var shift = await _shiftService.GetOrCreateAsync(jornadaEfectiva);
+                    var shift = await _shiftService.GetOrCreateBySchoolAndNameAsync(schoolId, jornadaEfectiva);
 
                     var group = await _groupService.GetByNameAndGradeAsync(row.GrupoAcademico.Trim(), currentSchoolId, shift.Id);
                     if (group == null)
@@ -584,6 +594,7 @@ namespace SchoolManager.Controllers
 
                     var normalizedSubject = NormalizeToken(row.Asignatura).ToUpperInvariant();
                     var subject = await _context.Subjects
+                        .Where(s => s.SchoolId == schoolId)
                         .FirstOrDefaultAsync(s =>
                             (s.Name != null && NormalizeToken(s.Name).ToUpperInvariant() == normalizedSubject) ||
                             (s.Code != null && NormalizeToken(s.Code).ToUpperInvariant() == normalizedSubject));
@@ -998,6 +1009,10 @@ namespace SchoolManager.Controllers
         private async Task<IActionResult> ProcessBulkGradeGroupMatriculasAsync(List<StudentAssignmentInputModel> asignaciones)
         {
             var currentSchoolId = await GetCurrentUserSchoolId();
+            if (currentSchoolId == null)
+                return BadRequest(new { success = false, message = "No se pudo determinar la escuela actual." });
+
+            var schoolId = currentSchoolId.Value;
             int insertadas = 0;
             int duplicadas = 0;
             int estudiantesCreados = 0;
@@ -1011,10 +1026,16 @@ namespace SchoolManager.Controllers
 
                     // Plataforma solo nocturna: siempre turno Noche para matrícula y grupo.
                     const string jornadaParaShift = "Noche";
-                    var shift = await _shiftService.GetOrCreateAsync(jornadaParaShift);
+                    var shift = await _shiftService.GetOrCreateBySchoolAndNameAsync(schoolId, jornadaParaShift);
 
                     // Buscar o crear el estudiante
-                    var student = await _userService.GetByEmailAsync(item.Estudiante);
+                    var student = await _userService.GetByEmailIgnoringTenantAsync(item.Estudiante);
+                    if (student != null && !SchoolTenantHelper.UserBelongsToSchool(student, schoolId))
+                    {
+                        errores.Add($"El correo {item.Estudiante} pertenece a otra institución.");
+                        continue;
+                    }
+
                     if (student == null)
                     {
                         Console.WriteLine($"[SaveAssignments] Estudiante no encontrado, creando: {item.Estudiante}");
@@ -1035,7 +1056,7 @@ namespace SchoolManager.Controllers
                             Status = "active",
                             CreatedAt = DateTime.UtcNow,
                             UpdatedAt = DateTime.UtcNow,
-                            SchoolId = currentSchoolId,
+                            SchoolId = schoolId,
                             PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"), // Contraseña temporal por defecto hasheada
                             TwoFactorEnabled = false,
                             LastLogin = null,
