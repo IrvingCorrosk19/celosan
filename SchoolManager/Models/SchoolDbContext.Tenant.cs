@@ -25,9 +25,11 @@ public partial class SchoolDbContext
             _tenantContext.BypassTenantFilter ||
             (g.SchoolId != null && g.SchoolId == _tenantContext.SchoolId));
 
+        // Grados globales (school_id NULL) son catálogo compartido entre escuelas.
         modelBuilder.Entity<GradeLevel>().HasQueryFilter(g =>
             _tenantContext.BypassTenantFilter ||
-            (g.SchoolId != null && g.SchoolId == _tenantContext.SchoolId));
+            g.SchoolId == null ||
+            g.SchoolId == _tenantContext.SchoolId);
 
         modelBuilder.Entity<Subject>().HasQueryFilter(s =>
             _tenantContext.BypassTenantFilter ||

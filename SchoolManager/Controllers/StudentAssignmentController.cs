@@ -438,13 +438,119 @@ namespace SchoolManager.Controllers
             return View();
         }
 
-        private static string NormalizeToken(string? input)
+        private static string NormalizeToken(string? input) =>
+            BulkNightEnrollmentHelper.NormalizeCatalogToken(input);
+
+        private async Task<Subject?> ResolveSubjectForBulkAsync(
+            Guid schoolId,
+            string rawName,
+            IReadOnlyList<Subject> schoolSubjects)
         {
-            input ??= string.Empty;
-            input = input.Trim();
-            input = input.Normalize(System.Text.NormalizationForm.FormD);
-            input = new string(input.Where(ch => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
-            return input;
+            var lookupName = BulkNightEnrollmentHelper.ResolveSubjectLookupName(rawName);
+            var normalized = BulkNightEnrollmentHelper.NormalizeSubjectKey(lookupName);
+
+            var subject = schoolSubjects.FirstOrDefault(s =>
+                BulkNightEnrollmentHelper.NormalizeSubjectKey(s.Name) == normalized ||
+                (s.Code != null && BulkNightEnrollmentHelper.NormalizeSubjectKey(s.Code) == normalized));
+            if (subject != null)
+                return subject;
+
+            subject = schoolSubjects.FirstOrDefault(s =>
+            {
+                var dbName = BulkNightEnrollmentHelper.NormalizeSubjectKey(s.Name);
+                return dbName.StartsWith(normalized, StringComparison.Ordinal) ||
+                       normalized.StartsWith(dbName, StringComparison.Ordinal);
+            });
+            if (subject != null)
+                return subject;
+
+            return await _subjectService.GetOrCreateAsync(lookupName);
+        }
+
+        private async Task<User?> ResolveStudentForBulkAsync(
+            StudentSubjectEnrollmentInputModel row,
+            Guid schoolId,
+            DateTime now,
+            Dictionary<string, User> studentsByEmail)
+        {
+            var emailKey = row.EstudianteEmail.Trim().ToLowerInvariant();
+            if (studentsByEmail.TryGetValue(emailKey, out var cached))
+                return cached;
+
+            var student = await _userService.GetByEmailIgnoringTenantAsync(row.EstudianteEmail.Trim());
+            if (student != null && !SchoolTenantHelper.UserBelongsToSchool(student, schoolId))
+                return null;
+
+            if (student == null && !string.IsNullOrWhiteSpace(row.DocumentoId))
+            {
+                var doc = row.DocumentoId.Trim();
+                student = await _context.Users
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(u =>
+                        u.DocumentId == doc &&
+                        u.SchoolId == schoolId &&
+                        (u.Role ?? string.Empty).ToLower() == "estudiante");
+            }
+
+            if (student == null)
+            {
+                var docId = !string.IsNullOrWhiteSpace(row.DocumentoId)
+                    ? row.DocumentoId.Trim()
+                    : $"EST-{Guid.NewGuid().ToString("N")[..8]}";
+
+                if (!string.IsNullOrWhiteSpace(row.DocumentoId))
+                {
+                    var docTaken = await _context.Users
+                        .IgnoreQueryFilters()
+                        .AnyAsync(u => u.DocumentId == docId);
+                    if (docTaken)
+                        throw new InvalidOperationException(
+                            $"Documento ID '{docId}' ya está registrado para otro usuario.");
+                }
+
+                student = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = row.EstudianteEmail.Trim(),
+                    Name = !string.IsNullOrWhiteSpace(row.Nombre) ? row.Nombre.Trim() : row.EstudianteEmail.Split('@')[0],
+                    LastName = !string.IsNullOrWhiteSpace(row.Apellido) ? row.Apellido.Trim() : "Estudiante",
+                    DocumentId = docId,
+                    DateOfBirth = null,
+                    Role = "estudiante",
+                    Status = "active",
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    SchoolId = schoolId,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"),
+                    TwoFactorEnabled = false,
+                    LastLogin = null,
+                    Inclusivo = null,
+                    Shift = "Noche"
+                };
+
+                await _userService.CreateAsync(student, new List<Guid>(), new List<Guid>());
+            }
+
+            studentsByEmail[emailKey] = student;
+            return student;
+        }
+
+        private static string FormatSaveError(Exception ex)
+        {
+            var current = ex;
+            while (current.InnerException != null)
+                current = current.InnerException;
+            return current.Message;
+        }
+
+        private static void DetachPendingAddedEntities(SchoolDbContext context)
+        {
+            foreach (var entry in context.ChangeTracker.Entries()
+                         .Where(e => e.State == EntityState.Added)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
         }
 
         /// <summary>
@@ -457,10 +563,12 @@ namespace SchoolManager.Controllers
             Guid groupId)
         {
             var existing = await _context.SubjectAssignments
+                .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(sa =>
                     sa.SubjectId == subjectId &&
                     sa.GradeLevelId == gradeLevelId &&
-                    sa.GroupId == groupId);
+                    sa.GroupId == groupId &&
+                    (sa.SchoolId == null || sa.SchoolId == schoolId));
             if (existing != null)
                 return (existing, null);
 
@@ -501,6 +609,8 @@ namespace SchoolManager.Controllers
             if (rows == null || rows.Count == 0)
                 return BadRequest(new { success = false, message = "No se recibieron filas." });
 
+            rows = BulkNightEnrollmentHelper.DedupeRows(rows);
+
             var currentSchoolId = await GetCurrentUserSchoolId();
             if (currentSchoolId == null)
                 return BadRequest(new { success = false, message = "No se pudo determinar la escuela actual." });
@@ -508,6 +618,10 @@ namespace SchoolManager.Controllers
             var schoolId = currentSchoolId.Value;
             var now = DateTime.UtcNow;
             var errors = new List<string>();
+            var studentsByEmail = new Dictionary<string, User>(StringComparer.OrdinalIgnoreCase);
+            var schoolSubjects = await _context.Subjects
+                .Where(s => s.SchoolId == schoolId)
+                .ToListAsync();
 
             var pendingRows = new List<(
                 Guid StudentId,
@@ -518,6 +632,8 @@ namespace SchoolManager.Controllers
                 Guid SubjectAssignmentId,
                 bool Inscrito,
                 string? TipoInscripcion)>();
+
+            var pendingKeys = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var row in rows)
             {
@@ -534,50 +650,25 @@ namespace SchoolManager.Controllers
                         continue;
                     }
 
-                    // Crear/obtener usuario.
-                    var student = await _userService.GetByEmailIgnoringTenantAsync(row.EstudianteEmail.Trim());
-                    if (student != null && !SchoolTenantHelper.UserBelongsToSchool(student, schoolId))
+                    var student = await ResolveStudentForBulkAsync(row, schoolId, now, studentsByEmail);
+                    if (student == null)
                     {
                         errors.Add($"El correo {row.EstudianteEmail} pertenece a otra institución.");
                         continue;
                     }
 
-                    if (student == null)
-                    {
-                        student = new User
-                        {
-                            Id = Guid.NewGuid(),
-                            Email = row.EstudianteEmail.Trim(),
-                            Name = !string.IsNullOrWhiteSpace(row.Nombre) ? row.Nombre.Trim() : row.EstudianteEmail.Split('@')[0],
-                            LastName = !string.IsNullOrWhiteSpace(row.Apellido) ? row.Apellido.Trim() : "Estudiante",
-                            DocumentId = !string.IsNullOrWhiteSpace(row.DocumentoId)
-                                ? row.DocumentoId.Trim()
-                                : $"EST-{Guid.NewGuid().ToString("N")[..8]}",
-                            DateOfBirth = null,
-                            Role = "estudiante",
-                            Status = "active",
-                            CreatedAt = now,
-                            UpdatedAt = now,
-                            SchoolId = schoolId,
-                            PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456"),
-                            TwoFactorEnabled = false,
-                            LastLogin = null,
-                            Inclusivo = null,
-                            Shift = "Noche"
-                        };
-
-                        await _userService.CreateAsync(student, new List<Guid>(), new List<Guid>());
-                    }
-
-                    var grade = await _gradeLevelService.GetByNameAsync(row.Nivel.Trim());
+                    var nivelLabel = BulkNightEnrollmentHelper.NormalizeGradeLabel(row.Nivel);
+                    var grade = await _gradeLevelService.ResolveByNameAsync(nivelLabel);
                     if (grade == null)
-                        grade = await _gradeLevelService.GetOrCreateAsync(row.Nivel.Trim());
+                        grade = await _gradeLevelService.GetOrCreateAsync(nivelLabel);
 
                     // Plataforma solo nocturna: la jornada del Excel no cambia el turno efectivo.
                     const string jornadaEfectiva = "Noche";
                     var shift = await _shiftService.GetOrCreateBySchoolAndNameAsync(schoolId, jornadaEfectiva);
 
                     var group = await _groupService.GetByNameAndGradeAsync(row.GrupoAcademico.Trim(), currentSchoolId, shift.Id);
+                    if (group == null)
+                        group = await _groupService.GetByNameAndGradeAsync(row.GrupoAcademico.Trim(), currentSchoolId);
                     if (group == null)
                     {
                         errors.Add($"Grupo no encontrado: {row.GrupoAcademico} (estudiante {row.EstudianteEmail}). Cree el grupo en su escuela o verifique el nombre.");
@@ -592,21 +683,23 @@ namespace SchoolManager.Controllers
                         await _groupService.UpdateAsync(group);
                     }
 
-                    var normalizedSubject = NormalizeToken(row.Asignatura).ToUpperInvariant();
-                    var subject = await _context.Subjects
-                        .Where(s => s.SchoolId == schoolId)
-                        .FirstOrDefaultAsync(s =>
-                            (s.Name != null && NormalizeToken(s.Name).ToUpperInvariant() == normalizedSubject) ||
-                            (s.Code != null && NormalizeToken(s.Code).ToUpperInvariant() == normalizedSubject));
-
+                    var subject = await ResolveSubjectForBulkAsync(schoolId, row.Asignatura.Trim(), schoolSubjects);
                     if (subject == null)
-                        subject = await _subjectService.GetOrCreateAsync(row.Asignatura.Trim());
+                    {
+                        errors.Add($"No se pudo resolver la asignatura '{row.Asignatura}' ({row.EstudianteEmail}).");
+                        continue;
+                    }
+
+                    if (!schoolSubjects.Any(s => s.Id == subject.Id))
+                        schoolSubjects = schoolSubjects.Append(subject).ToList();
 
                     var subjectAssignment = await _context.SubjectAssignments
+                        .IgnoreQueryFilters()
                         .FirstOrDefaultAsync(sa =>
                             sa.SubjectId == subject.Id &&
                             sa.GradeLevelId == grade.Id &&
-                            sa.GroupId == group.Id);
+                            sa.GroupId == group.Id &&
+                            (sa.SchoolId == null || sa.SchoolId == schoolId));
 
                     if (subjectAssignment == null)
                     {
@@ -620,6 +713,10 @@ namespace SchoolManager.Controllers
                         subjectAssignment = createdSa;
                     }
 
+                    var pendingKey = $"{student.Id}::{subjectAssignment.Id}::{grade.Id}::{group.Id}";
+                    if (!pendingKeys.Add(pendingKey))
+                        continue;
+
                     pendingRows.Add((
                         student.Id,
                         grade.Id,
@@ -632,7 +729,8 @@ namespace SchoolManager.Controllers
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"Error procesando fila ({row.EstudianteEmail}): {ex.Message}");
+                    DetachPendingAddedEntities(_context);
+                    errors.Add($"Error procesando fila ({row.EstudianteEmail}): {FormatSaveError(ex)}");
                 }
             }
 
@@ -817,14 +915,28 @@ namespace SchoolManager.Controllers
                         : EnrollmentTypeConstants.NormalizePrimary(baseAssignment.EnrollmentType);
 
                     var existing = await _context.StudentSubjectAssignments
-                        .FirstOrDefaultAsync(ssa =>
+                        .Where(ssa =>
                             ssa.StudentId == studentId &&
                             ssa.SubjectAssignmentId == subjectAssignmentId &&
-                            ssa.AcademicYearId == academicYearId.Value &&
-                            ssa.IsActive);
+                            ssa.AcademicYearId == academicYearId.Value)
+                        .OrderByDescending(ssa => ssa.IsActive)
+                        .ThenByDescending(ssa => ssa.CreatedAt)
+                        .FirstOrDefaultAsync();
 
                     if (existing != null)
                     {
+                        if (!existing.IsActive)
+                        {
+                            existing.IsActive = true;
+                            existing.Status = "Active";
+                            existing.EndDate = null;
+                            existing.StudentAssignmentId = baseAssignment.Id;
+                            existing.ShiftId = baseAssignment.ShiftId;
+                            existing.StartDate = now;
+                            await AuditHelper.SetAuditFieldsForUpdateAsync(existing, _currentUserService);
+                            activadas++;
+                        }
+
                         if (!string.Equals(existing.EnrollmentType, ssaType, StringComparison.OrdinalIgnoreCase))
                         {
                             existing.EnrollmentType = ssaType;
@@ -1084,7 +1196,9 @@ namespace SchoolManager.Controllers
                         Console.WriteLine($"[SaveAssignments] Campos Inclusivo y Jornada actualizados para estudiante: {student.Id}, Jornada: {student.Shift}");
                     }
 
-                    var grade = await _gradeLevelService.GetByNameAsync(item.Grado);
+                    var grade = await _gradeLevelService.ResolveByNameAsync(item.Grado);
+                    if (grade == null)
+                        grade = await _gradeLevelService.GetByNameAsync(item.Grado);
 
                     var group = await _groupService.GetByNameAndGradeAsync(item.Grupo, currentSchoolId, shift.Id);
                     // Si el grupo existe y no tiene jornada, asignarla al grupo

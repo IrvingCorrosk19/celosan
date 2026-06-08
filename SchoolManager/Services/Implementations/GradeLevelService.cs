@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using System;
@@ -20,38 +21,78 @@ public class GradeLevelService : IGradeLevelService
     }
     public async Task<GradeLevel?> GetByNameAsync(string name)
     {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
         var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
-        var query = _context.GradeLevels.Where(g => g.Name.ToLower() == name.ToLower());
+        var normalized = name.Trim();
+        var query = _context.GradeLevels.Where(g => g.Name.ToLower() == normalized.ToLower());
         if (schoolId.HasValue && schoolId.Value != Guid.Empty)
-            query = query.Where(g => g.SchoolId == schoolId.Value);
+            query = query.Where(g => g.SchoolId == null || g.SchoolId == schoolId.Value);
 
         return await query.FirstOrDefaultAsync();
     }
+
+    public async Task<GradeLevel?> ResolveByNameAsync(string name)
+    {
+        foreach (var candidate in BuildGradeNameCandidates(name))
+        {
+            var grade = await GetByNameAsync(candidate);
+            if (grade != null)
+                return grade;
+        }
+
+        return null;
+    }
+
     public async Task<GradeLevel> GetOrCreateAsync(string name)
     {
-        name = name.Trim().ToUpper();
-        var schoolId = (await _currentUserService.GetCurrentUserAsync())?.SchoolId;
-        var query = _context.GradeLevels.Where(g => g.Name.ToUpper() == name);
-        if (schoolId.HasValue && schoolId.Value != Guid.Empty)
-            query = query.Where(g => g.SchoolId == schoolId.Value);
+        var resolved = await ResolveByNameAsync(name);
+        if (resolved != null)
+            return resolved;
 
-        var grade = await query.FirstOrDefaultAsync();
-        if (grade == null)
+        var normalizedName = name.Trim().ToUpper();
+        foreach (var candidate in BuildGradeNameCandidates(name))
         {
-            grade = new GradeLevel
-            {
-                Id = Guid.NewGuid(),
-                Name = name
-            };
-            
-            // Configurar campos de auditoría y SchoolId
-            await AuditHelper.SetAuditFieldsForCreateAsync(grade, _currentUserService);
-            await AuditHelper.SetSchoolIdAsync(grade, _currentUserService);
-            
-            _context.GradeLevels.Add(grade);
-            await _context.SaveChangesAsync();
+            var existing = await _context.GradeLevels
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(g => g.Name.ToLower() == candidate.ToLower());
+            if (existing != null)
+                return existing;
         }
+
+        var grade = new GradeLevel
+        {
+            Id = Guid.NewGuid(),
+            Name = normalizedName
+        };
+
+        await AuditHelper.SetAuditFieldsForCreateAsync(grade, _currentUserService);
+        await AuditHelper.SetSchoolIdAsync(grade, _currentUserService);
+
+        _context.GradeLevels.Add(grade);
+        await _context.SaveChangesAsync();
         return grade;
+    }
+
+    private static IEnumerable<string> BuildGradeNameCandidates(string name)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var trimmed = name.Trim();
+        if (seen.Add(trimmed))
+            yield return trimmed;
+
+        var noDegree = trimmed.TrimEnd('°', 'º', '.', ' ').Trim();
+        if (!string.IsNullOrEmpty(noDegree) && seen.Add(noDegree))
+            yield return noDegree;
+
+        var num = EnrollmentTypeConstants.ParseGradeNumber(trimmed);
+        if (num.HasValue)
+        {
+            var numeric = num.Value.ToString();
+            if (seen.Add(numeric))
+                yield return numeric;
+        }
     }
 
     public async Task<IEnumerable<GradeLevel>> GetAllAsync()

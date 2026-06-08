@@ -85,6 +85,25 @@
                 row.addClass('error-row');
             }
 
+            function normalizeHeader(h) {
+                return (h ?? "")
+                    .toString()
+                    .trim()
+                    .toUpperCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .replace(/\s+/g, " ");
+            }
+
+            function normalizeGrado(value) {
+                if (value === null || value === undefined) return "";
+                if (typeof value === "number" && Number.isFinite(value))
+                    return String(Math.trunc(value));
+                const text = value.toString().trim().replace(/[°º.]/g, "").trim();
+                const digits = text.match(/\d+/);
+                return digits ? digits[0] : text;
+            }
+
             $('#excelFile').on('change', function (e) {
                 const file = e.target.files[0];
                 if (!file) {
@@ -107,7 +126,7 @@
 
                     // Validación de encabezados exactos
                     const headersEsperados = ["ESPECIALIDAD", "AREA", "MATERIA", "GRADO", "GRUPO"];
-                    const headersObtenidos = json[0]?.map(h => h?.toString().trim().toUpperCase());
+                    const headersObtenidos = (json[0] || []).map(normalizeHeader);
                     const headersValidados = headersEsperados.every((expected, i) =>
                         headersObtenidos[i] === expected
                     );
@@ -146,12 +165,14 @@
                             erroresDetallados.push(`Fila ${rowNumber}: Faltan los campos: ${camposFaltantes.join(", ")}`);
                         }
 
+                        const gradoDisplay = normalizeGrado(row[3]);
+
                         const rowHtml = `
                             <tr data-row="${rowNumber}">
                                 <td>${row[0] ?? ""}</td>
                                 <td>${row[1] ?? ""}</td>
                                 <td>${row[2] ?? ""}</td>
-                                <td>${row[3] ?? ""}</td>
+                                <td>${gradoDisplay}</td>
                                 <td>${row[4] ?? ""}</td>
                             </tr>
                         `;
@@ -216,7 +237,7 @@
                     const especialidad = $row.find('td').eq(0).text().trim();
                     const area = $row.find('td').eq(1).text().trim();
                     const materia = $row.find('td').eq(2).text().trim();
-                    const grado = $row.find('td').eq(3).text().trim();
+                    const grado = normalizeGrado($row.find('td').eq(3).text().trim());
                     const grupo = $row.find('td').eq(4).text().trim();
 
                     const camposFaltantes = [];
@@ -293,10 +314,13 @@
                                 $('#btnGuardarCatalogo').prop('disabled', false);
                                 
                                 let resumen = `
-                                    <b>Asignaciones creadas:</b> ${response.asignacionesCreadas ?? 0}<br>
+                                    <b>Imparticiones creadas:</b> ${response.asignacionesCreadas ?? 0}<br>
+                                    <b>Ya existían (omitidas):</b> ${response.omitidas ?? response.duplicadasEnBd ?? 0}<br>
                                     <b>Duplicadas en archivo:</b> ${response.duplicadasEnArchivo ?? 0}<br>
-                                    <b>Ya existían en sistema:</b> ${response.duplicadasEnBd ?? 0}<br>
                                 `;
+                                if (response.message) {
+                                    resumen += `<div class="small text-muted mt-2">${response.message}</div>`;
+                                }
 
                                 if (response.errores && response.errores.length > 0) {
                                     resumen += `<b>Errores:</b><ul>`;
@@ -310,7 +334,8 @@
                                 }
 
                                 Swal.fire({
-                                    icon: (response.asignacionesCreadas ?? 0) > 0 ? 'success' : 'warning',
+                                    icon: (response.asignacionesCreadas ?? 0) > 0 ? 'success'
+                                        : (response.omitidas ?? 0) > 0 && (!response.errores || response.errores.length === 0) ? 'info' : 'warning',
                                     title: 'Resultado de la carga',
                                     html: resumen,
                                     width: '50%',

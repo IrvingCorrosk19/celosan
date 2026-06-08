@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SchoolManager.Application.Interfaces;
 using SchoolManager.Helpers;
 using SchoolManager.Models;
@@ -53,7 +54,45 @@ namespace SchoolManager.Controllers
 
         private static string BuildCatalogCombinationKey(
             string especialidad, string area, string materia, string grado, string grupo)
-            => $"{especialidad}|{area}|{materia}|{grado}|{grupo}";
+            => BulkNightEnrollmentHelper.BuildCatalogCombinationKey(especialidad, area, materia, grado, grupo);
+
+        private static string FormatSaveError(Exception ex)
+        {
+            var current = ex;
+            while (current.InnerException != null)
+                current = current.InnerException;
+            return current.Message;
+        }
+
+        private static void DetachPendingAddedEntities(SchoolDbContext context)
+        {
+            foreach (var entry in context.ChangeTracker.Entries()
+                         .Where(e => e.State == EntityState.Added)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+
+        private static T? FindByNormalizedName<T>(IEnumerable<T> items, string rawName, Func<T, string> nameSelector)
+        {
+            var key = BulkNightEnrollmentHelper.NormalizeCatalogField(rawName);
+            return items.FirstOrDefault(i => BulkNightEnrollmentHelper.NormalizeCatalogField(nameSelector(i)) == key);
+        }
+
+        private static Subject? FindSubjectByNormalizedName(IEnumerable<Subject> items, string rawName)
+        {
+            var lookup = BulkNightEnrollmentHelper.ResolveSubjectLookupName(rawName);
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                BulkNightEnrollmentHelper.NormalizeSubjectKey(rawName),
+                BulkNightEnrollmentHelper.NormalizeSubjectKey(lookup)
+            };
+
+            return items.FirstOrDefault(s =>
+                keys.Contains(BulkNightEnrollmentHelper.NormalizeSubjectKey(s.Name)) ||
+                (s.Code != null && keys.Contains(BulkNightEnrollmentHelper.NormalizeSubjectKey(s.Code))));
+        }
 
         public async Task<IActionResult> Index()
         {
@@ -96,9 +135,12 @@ namespace SchoolManager.Controllers
             if (catalogData == null || catalogData.Count == 0)
                 return BadRequest(new { success = false, message = "No se recibieron datos del catálogo." });
 
+            catalogData = BulkNightEnrollmentHelper.DedupeCatalogRows(catalogData);
+
             int asignacionesCreadas = 0;
             int duplicadasEnArchivo = 0;
             int duplicadasEnBd = 0;
+            int omitidas = 0;
             var errores = new List<string>();
             var combinacionesEnArchivo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -106,9 +148,35 @@ namespace SchoolManager.Controllers
             var schoolId = currentUser?.SchoolId;
 
             if (schoolId == null)
-            {
                 return BadRequest(new { success = false, message = "No se pudo obtener el ID de la escuela." });
-            }
+
+            var specialtiesCache = await _context.Specialties
+                .Where(s => s.SchoolId == schoolId)
+                .ToListAsync();
+            var areasCache = await _context.Areas.ToListAsync();
+            var subjectsCache = await _context.Subjects
+                .Where(s => s.SchoolId == schoolId)
+                .ToListAsync();
+            var groupsCache = await _context.Groups
+                .Where(g => g.SchoolId == schoolId)
+                .ToListAsync();
+
+            var existingAssignmentKeys = (await _context.SubjectAssignments
+                .Where(sa => sa.SchoolId == schoolId)
+                .Select(sa => new
+                {
+                    sa.SpecialtyId,
+                    sa.AreaId,
+                    sa.SubjectId,
+                    sa.GradeLevelId,
+                    sa.GroupId
+                })
+                .ToListAsync())
+                .Select(x => $"{x.SpecialtyId}|{x.AreaId}|{x.SubjectId}|{x.GradeLevelId}|{x.GroupId}")
+                .ToHashSet(StringComparer.Ordinal);
+
+            const string jornadaNoche = "Noche";
+            var shift = await _shiftService.GetOrCreateBySchoolAndNameAsync(schoolId.Value, jornadaNoche);
 
             for (var index = 0; index < catalogData.Count; index++)
             {
@@ -117,72 +185,88 @@ namespace SchoolManager.Controllers
 
                 try
                 {
-                    var especialidad = string.IsNullOrWhiteSpace(item.Especialidad) ? "N/A" : item.Especialidad.Trim().ToUpper();
-                    var area = string.IsNullOrWhiteSpace(item.Area) ? "N/A" : item.Area.Trim().ToUpper();
-                    var materia = string.IsNullOrWhiteSpace(item.Materia) ? "N/A" : item.Materia.Trim().ToUpper();
-                    var grado = string.IsNullOrWhiteSpace(item.Grado) ? "N/A" : item.Grado.Trim().ToUpper();
-                    var grupo = string.IsNullOrWhiteSpace(item.Grupo) ? "N/A" : item.Grupo.Trim().ToUpper();
-                    var combinacionKey = BuildCatalogCombinationKey(especialidad, area, materia, grado, grupo);
+                    if (string.IsNullOrWhiteSpace(item.Especialidad) ||
+                        string.IsNullOrWhiteSpace(item.Area) ||
+                        string.IsNullOrWhiteSpace(item.Materia) ||
+                        string.IsNullOrWhiteSpace(item.Grado) ||
+                        string.IsNullOrWhiteSpace(item.Grupo))
+                    {
+                        errores.Add($"Fila {fila}: Especialidad, Área, Materia, Grado y Grupo son obligatorios.");
+                        continue;
+                    }
+
+                    var combinacionKey = BuildCatalogCombinationKey(
+                        item.Especialidad, item.Area, item.Materia, item.Grado, item.Grupo);
 
                     if (!combinacionesEnArchivo.Add(combinacionKey))
                     {
                         duplicadasEnArchivo++;
-                        errores.Add($"Fila {fila}: Combinación duplicada en el archivo ({especialidad} / {area} / {materia} / {grado} / {grupo}).");
                         continue;
                     }
 
-                    var specialty = await _specialtyService.GetOrCreateAsync(especialidad);
+                    var especialidadNombre = item.Especialidad.Trim();
+                    var areaNombre = item.Area.Trim();
+                    var materiaNombre = BulkNightEnrollmentHelper.ResolveSubjectLookupName(item.Materia.Trim());
+                    var gradoNombre = BulkNightEnrollmentHelper.NormalizeGradeLabel(item.Grado);
+                    var grupoNombre = item.Grupo.Trim();
+
+                    var specialty = FindByNormalizedName(specialtiesCache, especialidadNombre, s => s.Name);
                     if (specialty == null)
                     {
-                        errores.Add($"Fila {fila}: Error al crear/obtener especialidad: {especialidad}");
-                        continue;
+                        specialty = await _specialtyService.GetOrCreateAsync(especialidadNombre);
+                        specialtiesCache.Add(specialty);
                     }
 
-                    var areaEntity = await _areaService.GetOrCreateAsync(area);
+                    var areaEntity = FindByNormalizedName(areasCache, areaNombre, a => a.Name);
                     if (areaEntity == null)
                     {
-                        errores.Add($"Fila {fila}: Error al crear/obtener área: {area}");
-                        continue;
+                        areaEntity = await _areaService.GetOrCreateAsync(areaNombre);
+                        areasCache.Add(areaEntity);
                     }
 
-                    var subject = await _subjectService.GetOrCreateAsync(materia);
+                    var subject = FindSubjectByNormalizedName(subjectsCache, item.Materia.Trim());
                     if (subject == null)
                     {
-                        errores.Add($"Fila {fila}: Error al crear/obtener materia: {materia}");
-                        continue;
+                        subject = await _subjectService.GetOrCreateAsync(materiaNombre);
+                        subjectsCache.Add(subject);
                     }
 
-                    var grade = await _gradeLevelService.GetOrCreateAsync(grado);
+                    var grade = await _gradeLevelService.ResolveByNameAsync(gradoNombre);
                     if (grade == null)
-                    {
-                        errores.Add($"Fila {fila}: Error al crear/obtener grado: {grado}");
-                        continue;
-                    }
+                        grade = await _gradeLevelService.GetOrCreateAsync(gradoNombre);
 
-                    var groupEntity = await _groupService.GetOrCreateAsync(grupo);
+                    var groupEntity = FindByNormalizedName(groupsCache, grupoNombre, g => g.Name);
                     if (groupEntity == null)
                     {
-                        errores.Add($"Fila {fila}: Error al crear/obtener grupo: {grupo}");
-                        continue;
+                        groupEntity = await _groupService.GetOrCreateAsync(grupoNombre);
+                        groupsCache.Add(groupEntity);
                     }
 
-                    var yaExiste = await _academicAssignmentService.ExisteAsignacionAsync(
-                        specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, schoolId);
+                    if (groupEntity.ShiftId == null || groupEntity.ShiftId != shift.Id)
+                    {
+                        groupEntity.ShiftId = shift.Id;
+                        groupEntity.Shift = shift.Name;
+                        groupEntity.UpdatedAt = DateTime.UtcNow;
+                        await _groupService.UpdateAsync(groupEntity);
+                    }
 
-                    if (yaExiste)
+                    var assignmentKey = $"{specialty.Id}|{areaEntity.Id}|{subject.Id}|{grade.Id}|{groupEntity.Id}";
+                    if (existingAssignmentKeys.Contains(assignmentKey))
                     {
                         duplicadasEnBd++;
-                        errores.Add($"Fila {fila}: La combinación ya existe en el sistema ({especialidad} / {area} / {materia} / {grado} / {grupo}).");
+                        omitidas++;
                         continue;
                     }
 
                     await _academicAssignmentService.CreateAsignacionAsync(
                         specialty.Id, areaEntity.Id, subject.Id, grade.Id, groupEntity.Id, schoolId);
+                    existingAssignmentKeys.Add(assignmentKey);
                     asignacionesCreadas++;
                 }
                 catch (Exception ex)
                 {
-                    errores.Add($"Fila {fila}: {ex.Message}");
+                    DetachPendingAddedEntities(_context);
+                    errores.Add($"Fila {fila}: {FormatSaveError(ex)}");
                 }
             }
 
@@ -192,10 +276,13 @@ namespace SchoolManager.Controllers
                 asignacionesCreadas,
                 duplicadasEnArchivo,
                 duplicadasEnBd,
+                omitidas,
                 errores,
                 message = asignacionesCreadas > 0
-                    ? $"Se crearon {asignacionesCreadas} asignaciones académicas nuevas."
-                    : "No se crearon asignaciones nuevas."
+                    ? $"Se crearon {asignacionesCreadas} imparticiones nuevas (SubjectAssignment)."
+                    : omitidas > 0 && errores.Count == 0
+                        ? $"No hay imparticiones nuevas: {omitidas} combinación(es) ya existían en el catálogo del colegio."
+                        : "No se crearon imparticiones nuevas."
             });
         }
 

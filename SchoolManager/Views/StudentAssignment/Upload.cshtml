@@ -120,6 +120,31 @@
                 return null;
             }
 
+            function normalizeNivel(value) {
+                if (value === null || value === undefined) return "";
+                if (typeof value === "number" && Number.isFinite(value))
+                    return String(Math.trunc(value));
+                const text = value.toString().trim().replace(/[°º.]/g, "").trim();
+                const digits = text.match(/\d+/);
+                return digits ? digits[0] : text;
+            }
+
+            function dedupePayloadRows(rows) {
+                const map = new Map();
+                rows.forEach(row => {
+                    const key = [
+                        (row.estudianteEmail || "").trim().toLowerCase(),
+                        (row.asignatura || "").trim().toUpperCase(),
+                        (row.nivel || "").trim().toUpperCase(),
+                        (row.grupoAcademico || "").trim().toUpperCase()
+                    ].join("|");
+                    const prev = map.get(key);
+                    if (!prev || (row.inscrito && !prev.inscrito))
+                        map.set(key, row);
+                });
+                return Array.from(map.values());
+            }
+
             $('#excelFile').on('change', function (e) {
                 const file = e.target.files[0];
                 if (!file) {
@@ -192,7 +217,7 @@
                         const apellido = idxApellido >= 0 ? (row[idxApellido] ?? "").toString().trim() : "";
                         const documentoId = idxDocumento >= 0 ? (row[idxDocumento] ?? "").toString().trim() : "";
                         const asignatura = (row[idxAsignatura] ?? "").toString().trim();
-                        const nivel = (row[idxNivel] ?? "").toString().trim();
+                        const nivel = normalizeNivel(row[idxNivel]);
                         const grupo = (row[idxGrupo] ?? "").toString().trim();
                         const jornada = idxJornada >= 0 ? (row[idxJornada] ?? "").toString().trim() : "";
                         const tipoInscripcion = idxTipoInscripcion >= 0 ? (row[idxTipoInscripcion] ?? "").toString().trim() : "";
@@ -253,6 +278,12 @@
                             tipoInscripcion || "-",
                             inscrito ? "SI" : "NO"
                         ])}</tr>`);
+                    }
+
+                    const rawCount = payload.length;
+                    payload = dedupePayloadRows(payload);
+                    if (rawCount !== payload.length) {
+                        console.info(`Carga masiva: ${rawCount - payload.length} fila(s) duplicada(s) omitida(s) en previsualización.`);
                     }
 
                     if (filasInvalidas > 0) {
