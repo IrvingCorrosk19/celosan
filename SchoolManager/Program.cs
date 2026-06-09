@@ -198,7 +198,9 @@ builder.Services.AddDbContext<SchoolDbContext>(options =>
 builder.Services.Configure<NocturnalAdvancedEnrollmentOptions>(
     builder.Configuration.GetSection(NocturnalAdvancedEnrollmentOptions.SectionName));
 builder.Services.AddScoped<INocturnalEnrollmentSettingsService, NocturnalEnrollmentSettingsService>();
-builder.Services.AddScoped<ITenantContext, TenantContext>();
+// Una sola instancia scoped por request: middleware y controladores pueden inyectar ITenantContext o TenantContext.
+builder.Services.AddScoped<TenantContext>();
+builder.Services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
 
 // Registrando todos los servicios con inyección de dependencias
 builder.Services.AddScoped<ISchoolService, SchoolService>();
