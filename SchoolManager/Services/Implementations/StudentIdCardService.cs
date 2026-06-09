@@ -15,6 +15,7 @@ public class StudentIdCardService : IStudentIdCardService
     private readonly SchoolDbContext _context;
     private readonly ILogger<StudentIdCardService> _logger;
     private readonly IQrSignatureService _qrSignatureService;
+    private readonly TenantContext _tenantContext;
     private readonly IOptions<StudentIdCardOptions> _cardOptions;
 
     /// <summary>
@@ -31,11 +32,13 @@ public class StudentIdCardService : IStudentIdCardService
         SchoolDbContext context,
         ILogger<StudentIdCardService> logger,
         IQrSignatureService qrSignatureService,
+        TenantContext tenantContext,
         IOptions<StudentIdCardOptions> cardOptions)
     {
         _context = context;
         _logger = logger;
         _qrSignatureService = qrSignatureService;
+        _tenantContext = tenantContext;
         _cardOptions = cardOptions;
     }
 
@@ -300,6 +303,8 @@ public class StudentIdCardService : IStudentIdCardService
             }
             tokenToLookup = _qrSignatureService.ExtractTokenFromSigned(request.Token) ?? request.Token;
         }
+
+        using var _tenantBypass = new PublicQrTenantScope(_tenantContext);
 
         // SCALE-1: Cargar solo datos esenciales; asignaciones en query separada
         var tokenRecord = await _context.StudentQrTokens

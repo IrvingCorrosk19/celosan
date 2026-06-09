@@ -7,6 +7,7 @@ using PdfSharpCore.Pdf.IO;
 using SchoolManager.Dtos;
 using SchoolManager.Helpers;
 using SchoolManager.Models;
+using SchoolManager.Services.Implementations;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.Services.Security;
 using SchoolManager.ViewModels;
@@ -26,6 +27,7 @@ public class StudentIdCardController : Controller
     private readonly SchoolDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IQrSignatureService _qrSignatureService;
+    private readonly TenantContext _tenantContext;
     private readonly ILogger<StudentIdCardController> _logger;
 
     public StudentIdCardController(
@@ -35,6 +37,7 @@ public class StudentIdCardController : Controller
         SchoolDbContext context,
         ICurrentUserService currentUserService,
         IQrSignatureService qrSignatureService,
+        TenantContext tenantContext,
         ILogger<StudentIdCardController> logger)
     {
         _service = service;
@@ -43,6 +46,7 @@ public class StudentIdCardController : Controller
         _context = context;
         _currentUserService = currentUserService;
         _qrSignatureService = qrSignatureService;
+        _tenantContext = tenantContext;
         _logger = logger;
     }
 
@@ -153,6 +157,8 @@ public class StudentIdCardController : Controller
     {
         if (!CarnetEmergencyInfoLink.TryResolveStudentId(t, _qrSignatureService, out var studentId))
             return View("PublicEmergencyInfoInvalid");
+
+        using var _tenantBypass = new PublicQrTenantScope(_tenantContext);
 
         var row = await StudentRoleFilter.WhereIsStudent(_context.Users.AsNoTracking())
             .Where(u => u.Id == studentId)

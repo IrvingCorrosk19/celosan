@@ -5,6 +5,7 @@ using SchoolManager.Dtos;
 using SchoolManager.Helpers;
 using SchoolManager.Models;
 using SchoolManager.Options;
+using SchoolManager.Services.Implementations;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.Services.Security;
 using SchoolManager.ViewModels;
@@ -18,17 +19,20 @@ public class InstitutionalCredentialService : IInstitutionalCredentialService
     private readonly SchoolDbContext _context;
     private readonly ILogger<InstitutionalCredentialService> _logger;
     private readonly IQrSignatureService _qrSignatureService;
+    private readonly TenantContext _tenantContext;
     private readonly IOptions<InstitutionalCredentialOptions> _credentialOptions;
 
     public InstitutionalCredentialService(
         SchoolDbContext context,
         ILogger<InstitutionalCredentialService> logger,
         IQrSignatureService qrSignatureService,
+        TenantContext tenantContext,
         IOptions<InstitutionalCredentialOptions> credentialOptions)
     {
         _context = context;
         _logger = logger;
         _qrSignatureService = qrSignatureService;
+        _tenantContext = tenantContext;
         _credentialOptions = credentialOptions;
     }
 
@@ -225,6 +229,8 @@ public class InstitutionalCredentialService : IInstitutionalCredentialService
 
         if (tokenRow.ExpiresAt.HasValue && tokenRow.ExpiresAt.Value <= DateTime.UtcNow)
             return null;
+
+        using var _tenantBypass = new PublicQrTenantScope(_tenantContext);
 
         var user = await StaffInstitutionalRoleFilter.WhereIsInstitutionalStaff(_context.Users.AsNoTracking())
             .Where(u => u.Id == tokenRow.UserId)
