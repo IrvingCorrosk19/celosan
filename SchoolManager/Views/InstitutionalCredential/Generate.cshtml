@@ -6,34 +6,50 @@
     var bg = Model.BackgroundColor;
     var text = Model.TextColor;
     var borderColor = "#e5e7eb";
-    var showBackFace = Model.ShowQr;
     var hasLogo = !string.IsNullOrWhiteSpace(Model.SchoolLogoUrl);
     var showWm = Model.ShowWatermark && hasLogo;
+    var showQrFront = Model.ShowQr && Model.HasActiveCard && !string.IsNullOrEmpty(Model.Card!.QrImageDataUrl);
 }
 <style>
-    .idcard-faces-row { display:flex; flex-wrap:wrap; justify-content:center; gap:2rem; padding:1.5rem; background:#f0f2f5; border-radius:12px; }
+    .idcard-preview-wrap { display:flex; justify-content:center; padding:1.5rem; background:#f0f2f5; border-radius:12px; }
     .idcard-face {
         width:210px; max-width:100%; aspect-ratio:55/85; height:334px; max-height:334px;
-        background:@bg; border-radius:0 0 8px 8px; border:1px solid @borderColor; border-top:none;
+        background:@bg; border-radius:8px; border:1px solid @borderColor;
         box-shadow:0 4px 14px rgba(0,0,0,.12); color:@text; font-family:'Segoe UI',Tahoma,sans-serif;
         display:flex; flex-direction:column; overflow:hidden; position:relative; box-sizing:border-box;
     }
-    .idcard-face-back-screen .idcard-face { border-top:1px solid @borderColor; }
-    .idcard-col-front .idcard-face::before { content:''; position:absolute; top:0; left:0; right:0; height:14px; background:@primary; z-index:1; }
+    .idcard-front-layout { display:flex; flex-direction:column; height:100%; min-height:0; }
     .idcard-watermark { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:0; }
     .idcard-watermark img { width:42%; max-width:100px; opacity:.14; object-fit:contain; }
-    .idcard-z1 { position:relative; z-index:2; }
-    .idcard-header { display:flex; flex-direction:column; align-items:center; padding:8px 6px 5px; background:@primary; width:100%; }
-    .idcard-logo-center { max-width:48px; max-height:48px; object-fit:contain; }
-    .idcard-school-name { font-size:8.5pt; font-weight:800; color:#fff; text-align:center; line-height:1.2; text-transform:uppercase; }
-    .idcard-photo-center { display:flex; justify-content:center; padding-top:6px; }
-    .idcard-photo-inner { width:100px; height:100px; border:1.5px solid @primary; overflow:hidden; display:flex; align-items:center; justify-content:center; border-radius:3px; background:rgba(0,0,0,.04); }
+    .idcard-z1 { position:relative; z-index:2; display:flex; flex-direction:column; flex:1; min-height:0; }
+    .idcard-header { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:6px 8px 5px; background:@primary; flex-shrink:0; }
+    .idcard-logo-center { max-width:40px; max-height:40px; object-fit:contain; margin-bottom:2px; }
+    .idcard-school-name {
+        font-size:7.5pt; font-weight:800; color:#fff; text-align:center; line-height:1.15;
+        text-transform:uppercase; max-width:100%; overflow:hidden;
+        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;
+    }
+    .idcard-body { flex:1; display:flex; flex-direction:column; align-items:center; min-height:0; padding:4px 8px 2px; gap:2px; }
+    .idcard-photo-inner {
+        width:82px; height:82px; border:1.5px solid @primary; overflow:hidden;
+        display:flex; align-items:center; justify-content:center; border-radius:3px; background:rgba(0,0,0,.04); flex-shrink:0;
+    }
     .idcard-photo-inner img { width:100%; height:100%; object-fit:cover; }
-    .idcard-data-center { display:flex; flex-direction:column; align-items:center; text-align:center; padding:6px 8px 0; gap:2px; flex:1; }
-    .idcard-name { font-size:11pt; font-weight:700; line-height:1.15; }
-    .idcard-line { font-size:7.5pt; opacity:.95; }
-    .idcard-back-qr { text-align:center; padding:10px; }
-    .idcard-back-qr img { width:120px; height:120px; }
+    .idcard-data-center { display:flex; flex-direction:column; align-items:center; text-align:center; width:100%; gap:1px; flex-shrink:0; }
+    .idcard-name {
+        font-size:10pt; font-weight:700; line-height:1.12; max-width:100%;
+        overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;
+    }
+    .idcard-line {
+        font-size:7pt; line-height:1.2; max-width:100%;
+        overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;
+    }
+    .idcard-qr-front { margin-top:auto; padding:4px 0 2px; flex-shrink:0; }
+    .idcard-qr-front img { width:72px; height:72px; display:block; }
+    .idcard-footer-strip {
+        flex-shrink:0; background:@primary; color:#fff; text-align:center;
+        font-size:6.5pt; font-weight:600; padding:4px 6px; letter-spacing:.02em;
+    }
 </style>
 
 <div class="container py-3">
@@ -62,15 +78,15 @@
     }
     else
     {
-        <div class="idcard-faces-row">
-            <div class="idcard-col-front">
-                <div class="text-center text-muted small mb-1">Frente</div>
+        <div class="idcard-preview-wrap">
+            <div>
+                <div class="text-center text-muted small mb-1">Credencial institucional</div>
                 <div id="idCardFront" class="idcard-face">
                     @if (showWm && hasLogo)
                     {
                         <div class="idcard-watermark"><img src="@Model.SchoolLogoUrl" alt="" /></div>
                     }
-                    <div class="idcard-z1">
+                    <div class="idcard-z1 idcard-front-layout">
                         <div class="idcard-header">
                             @if (hasLogo)
                             {
@@ -78,7 +94,7 @@
                             }
                             <div class="idcard-school-name">@Model.SchoolName</div>
                         </div>
-                        <div class="idcard-photo-center">
+                        <div class="idcard-body">
                             <div class="idcard-photo-inner">
                                 @if (Model.ShowPhoto && !string.IsNullOrEmpty(Model.Card!.PhotoUrl))
                                 {
@@ -89,45 +105,25 @@
                                     <span class="small">FOTO</span>
                                 }
                             </div>
-                        </div>
-                        <div class="idcard-data-center">
-                            <div class="idcard-name">@Model.Card!.FullName</div>
-                            @if (Model.ShowDocumentId && !string.IsNullOrWhiteSpace(Model.DocumentId))
+                            <div class="idcard-data-center">
+                                <div class="idcard-name">@Model.Card!.FullName</div>
+                                @if (Model.ShowDocumentId && !string.IsNullOrWhiteSpace(Model.DocumentId))
+                                {
+                                    <div class="idcard-line">Cédula: @Model.DocumentId</div>
+                                }
+                                <div class="idcard-line"><strong>Cargo:</strong> @Model.Card.JobTitle</div>
+                            </div>
+                            @if (showQrFront)
                             {
-                                <div class="idcard-line">Cédula: @Model.DocumentId</div>
+                                <div class="idcard-qr-front">
+                                    <img src="@Model.Card.QrImageDataUrl" alt="QR verificación" />
+                                </div>
                             }
-                            <div class="idcard-line"><strong>Rol:</strong> @Model.Card.RoleDisplay</div>
-                            <div class="idcard-line"><strong>Cargo:</strong> @Model.Card.JobTitle</div>
-                            <div class="idcard-line"><strong>Área:</strong> @Model.Card.Department</div>
-                            <div class="idcard-line small text-muted mt-1">@Model.Card.CardNumber</div>
                         </div>
+                        <div class="idcard-footer-strip">Credencial institucional</div>
                     </div>
                 </div>
             </div>
-            @if (showBackFace)
-            {
-                <div class="idcard-face-back-screen">
-                    <div class="text-center text-muted small mb-1">Reverso</div>
-                    <div class="idcard-face">
-                        <div class="idcard-z1 p-2 d-flex flex-column align-items-center h-100">
-                            <div class="idcard-back-qr">
-                                @if (!string.IsNullOrEmpty(Model.Card!.QrImageDataUrl))
-                                {
-                                    <img src="@Model.Card.QrImageDataUrl" alt="QR" />
-                                }
-                            </div>
-                            <div class="small text-center mt-2 px-2">
-                                <div class="fw-bold">@Model.SchoolName</div>
-                                <div>Credencial: @Model.Card.CardNumber</div>
-                                @if (Model.ShowSchoolPhone && !string.IsNullOrWhiteSpace(Model.SchoolPhone))
-                                {
-                                    <div>Tel: @Model.SchoolPhone</div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            }
         </div>
 
         <div class="text-center mt-3">

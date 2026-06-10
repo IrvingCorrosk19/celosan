@@ -37,22 +37,21 @@ public class InstitutionalCredentialHtmlCaptureService : IInstitutionalCredentia
         var launchOpts = BuildLaunchOptions(executablePath);
 
         byte[] frontImg;
-        byte[]? backImg;
         await using (var browser = await Puppeteer.LaunchAsync(launchOpts))
         {
             try
             {
-                (frontImg, backImg) = await CaptureCardFacesAsync(browser, url);
+                frontImg = await CaptureFrontFaceAsync(browser, url);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[InstCredPdf] First capture failed, retry once");
                 await Task.Delay(500);
-                (frontImg, backImg) = await CaptureCardFacesAsync(browser, url);
+                frontImg = await CaptureFrontFaceAsync(browser, url);
             }
         }
 
-        return BuildPdfFromFaceImages(frontImg, backImg);
+        return BuildPdfFromFaceImages(frontImg);
     }
 
     private static bool TryParseUserIdFromGenerateUrl(string url, out Guid userId)
@@ -71,7 +70,7 @@ public class InstitutionalCredentialHtmlCaptureService : IInstitutionalCredentia
         }
     }
 
-    private byte[] BuildPdfFromFaceImages(byte[] frontImg, byte[]? backImg)
+    private byte[] BuildPdfFromFaceImages(byte[] frontImg)
     {
         var pageSize = ResolvePageSize();
         QuestPDF.Settings.License = LicenseType.Community;
@@ -85,16 +84,6 @@ public class InstitutionalCredentialHtmlCaptureService : IInstitutionalCredentia
                 p.Margin(0);
                 p.Content().Image(frontImg).FitArea();
             });
-
-            if (backImg != null)
-            {
-                container.Page(p =>
-                {
-                    p.Size(pageSize.WidthMm, pageSize.HeightMm, Unit.Millimetre);
-                    p.Margin(0);
-                    p.Content().Image(backImg).FitArea();
-                });
-            }
         }).GeneratePdf();
     }
 
@@ -107,7 +96,7 @@ public class InstitutionalCredentialHtmlCaptureService : IInstitutionalCredentia
             Args = BuildLaunchArgs()
         };
 
-    private async Task<(byte[] Front, byte[]? Back)> CaptureCardFacesAsync(IBrowser browser, string url)
+    private async Task<byte[]> CaptureFrontFaceAsync(IBrowser browser, string url)
     {
         await using var page = await browser.NewPageAsync();
         var pageSize = ResolvePageSize();
@@ -135,7 +124,7 @@ public class InstitutionalCredentialHtmlCaptureService : IInstitutionalCredentia
             Timeout = 60000
         });
         await ApplyContentScale(page);
-        await page.WaitForSelectorAsync(".idcard-face", new WaitForSelectorOptions { Timeout = 60000 });
+        await page.WaitForSelectorAsync("#idCardFront", new WaitForSelectorOptions { Timeout = 60000 });
         await Task.Delay(400);
 
         var front = await page.QuerySelectorAsync("#idCardFront")
@@ -164,12 +153,7 @@ public class InstitutionalCredentialHtmlCaptureService : IInstitutionalCredentia
             }
         }
 
-        var allFaces = await page.QuerySelectorAllAsync(".idcard-face");
-        var back = allFaces.Length > 1 ? allFaces[1] : null;
-
-        var frontImg = await Capture(front, pageSize.WidthPx, pageSize.HeightPx);
-        var backImg = back != null ? await Capture(back, pageSize.WidthPx, pageSize.HeightPx) : null;
-        return (frontImg, backImg);
+        return await Capture(front, pageSize.WidthPx, pageSize.HeightPx);
     }
 
     private static Task SetCaptureViewportAsync(IPage page,

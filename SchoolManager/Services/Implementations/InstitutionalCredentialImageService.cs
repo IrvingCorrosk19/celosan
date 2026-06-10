@@ -44,20 +44,20 @@ public class InstitutionalCredentialImageService : IInstitutionalCredentialImage
 
         canvas.Clear(bg);
 
-        float headerH = h * 0.20f;
-        float footerH = h * 0.08f;
+        float headerH = h * 0.18f;
+        float footerH = h * 0.055f;
         float bodyH = h - headerH - footerH;
         float hPad = w * 0.06f;
         float textW = w - hPad * 2f;
         float borderW = Math.Max(2f, h * 0.002f);
 
-        float photoZH = bodyH * 0.34f;
-        float dataZH = bodyH * 0.34f;
-        float bottomZH = bodyH * 0.32f;
+        float photoZH = bodyH * 0.30f;
+        float dataZH = bodyH * 0.32f;
+        float qrZH = bodyH * 0.38f;
 
         float photoZoneTop = headerH;
         float dataZoneTop = headerH + photoZH;
-        float bottomZoneTop = headerH + photoZH + dataZH;
+        float qrZoneTop = headerH + photoZH + dataZH;
 
         DrawWatermark(canvas, dto.WatermarkBytes, w, h, 0.45f);
 
@@ -109,44 +109,28 @@ public class InstitutionalCredentialImageService : IInstitutionalCredentialImage
             DrawPhoto(canvas, dto.PhotoBytes, photoX + borderW, photoY + borderW,
                 photoSz - borderW * 2f, photoSz - borderW * 2f, textCol);
 
-        float nameFs = h * 0.038f;
-        float smallFs = h * 0.026f;
-        float lineH = dataZH * 0.22f;
+        float nameFs = h * 0.036f;
+        float smallFs = h * 0.025f;
+        float lineH = dataZH * 0.28f;
         float ty = dataZoneTop + nameFs * 1.05f;
 
         AutoText(canvas, dto.FullName, hPad, ty, textW, nameFs, textCol, bold: true, center: true);
         ty += lineH;
         if (settings.ShowDocumentId && !string.IsNullOrWhiteSpace(dto.DocumentId))
         {
-            AutoText(canvas, $"Cédula: {dto.DocumentId}", hPad, ty, textW, smallFs, textCol, center: true);
+            AutoText(canvas, $"Cédula: {Trunc(dto.DocumentId, 28)}", hPad, ty, textW, smallFs, textCol, center: true);
             ty += lineH;
         }
 
-        AutoText(canvas, $"Rol: {Trunc(dto.RoleDisplay, 36)}", hPad, ty, textW, smallFs, textCol, center: true);
-        ty += lineH;
-        AutoText(canvas, $"Cargo: {Trunc(dto.JobTitle, 36)}", hPad, ty, textW, smallFs, textCol, center: true);
-        ty += lineH;
-        AutoText(canvas, $"Área: {Trunc(dto.Department, 36)}", hPad, ty, textW, smallFs, textCol, center: true);
-        if (!string.IsNullOrWhiteSpace(dto.EmployeeCode))
-        {
-            ty += lineH;
-            AutoText(canvas, $"Código: {Trunc(dto.EmployeeCode, 24)}", hPad, ty, textW, smallFs, textCol, center: true);
-        }
+        AutoText(canvas, $"Cargo: {Trunc(dto.JobTitle, 40)}", hPad, ty, textW, smallFs, textCol, center: true);
 
-        using (var p = Fill(new SKColor(230, 238, 247)))
-            canvas.DrawRect(0, bottomZoneTop, w, bottomZH, p);
-
-        float qrInset = Math.Max(3f, w * 0.014f);
-        float qrSz = Math.Min(bottomZH * 0.48f, w * 0.26f);
-        float qrX = w - hPad - qrSz - qrInset;
-        float qrY = bottomZoneTop + (bottomZH - qrSz) / 2f;
         if (settings.ShowQr)
+        {
+            float qrSz = Math.Min(qrZH * 0.82f, w * 0.38f);
+            float qrX = (w - qrSz) / 2f;
+            float qrY = qrZoneTop + (qrZH - qrSz) / 2f;
             DrawQr(canvas, dto.QrToken, SKRect.Create(qrX, qrY, qrSz, qrSz));
-
-        float leftW = qrX - hPad * 2f;
-        float polIdFs = h * 0.027f;
-        float lty = bottomZoneTop + bottomZH * 0.22f;
-        AutoText(canvas, Trunc($"ID: {dto.CardNumber}", 26), hPad, lty, leftW, polIdFs, textCol, bold: true);
+        }
 
         float footerY = h - footerH;
         using (var fp = Fill(primary))

@@ -105,11 +105,8 @@ public class InstitutionalCredentialPdfService : IInstitutionalCredentialPdfServ
             renderDto.PhotoBytes = await _fileStorage.GetUserPhotoBytesAsync(renderDto.PhotoUrl);
 
         var frontPng = _imageService.GenerateFrontPng(renderDto, settings);
-        byte[]? backPng = settings.ShowQr ? _imageService.GenerateBackPng(renderDto, settings) : null;
 
         var (widthMm, heightMm) = _imageService.GetPortraitCardMmDimensions();
-        float pageW = backPng != null ? widthMm * 2f + 2f : widthMm;
-        float pageH = heightMm;
 
         QuestPDF.Settings.License = LicenseType.Community;
         QuestPDF.Settings.EnableDebugging = false;
@@ -118,19 +115,9 @@ public class InstitutionalCredentialPdfService : IInstitutionalCredentialPdfServ
         {
             container.Page(page =>
             {
-                page.Size(pageW, pageH, Unit.Millimetre);
+                page.Size(widthMm, heightMm, Unit.Millimetre);
                 page.Margin(0);
-                if (backPng != null)
-                {
-                    page.Content().Row(row =>
-                    {
-                        row.Spacing(2f, Unit.Millimetre);
-                        row.ConstantItem(widthMm, Unit.Millimetre).Image(frontPng).FitArea();
-                        row.ConstantItem(widthMm, Unit.Millimetre).Image(backPng).FitArea();
-                    });
-                }
-                else
-                    page.Content().Image(frontPng).FitArea();
+                page.Content().Image(frontPng).FitArea();
             });
         }).GeneratePdf();
     }
