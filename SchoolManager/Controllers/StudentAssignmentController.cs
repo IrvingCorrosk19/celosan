@@ -10,12 +10,13 @@ using SchoolManager.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using BCrypt.Net;
 
 namespace SchoolManager.Controllers
 {
-    [Authorize(Roles = "admin,secretaria")]
+    [Authorize(Roles = "admin,secretaria,director")]
     public class StudentAssignmentController : Controller
     {
         private readonly IUserService _userService;
@@ -191,17 +192,30 @@ namespace SchoolManager.Controllers
             if (assignments == null || !assignments.Any())
                 return Json(new { success = true, data = Array.Empty<object>(), empty = true });
 
-            var results = new List<(string grado, string grupo)>();
+            var results = new List<object>();
             foreach (var a in assignments)
             {
                 var grade = await _gradeLevelService.GetByIdAsync(a.GradeId);
                 var group = await _groupService.GetByIdAsync(a.GroupId);
                 var shift = !string.IsNullOrEmpty(group?.Shift) ? group.Shift : "Sin jornada";
-                results.Add((grade?.Name ?? "(Sin grado)", $"{group?.Name ?? "(Sin grupo)"} ({shift})"));
+                var activeSubjectsCount = await CountActiveSubjectsForEnrollmentAsync(a);
+
+                results.Add(new
+                {
+                    studentAssignmentId = a.Id,
+                    gradeId = a.GradeId,
+                    groupId = a.GroupId,
+                    shiftId = a.ShiftId,
+                    academicYearId = a.AcademicYearId,
+                    gradeName = grade?.Name ?? "(Sin grado)",
+                    groupName = group?.Name ?? "(Sin grupo)",
+                    shiftName = shift,
+                    activeSubjectsCount,
+                    enrollmentType = a.EnrollmentType
+                });
             }
 
-            var distinct = results.Distinct().Select(x => new { grado = x.grado, grupo = x.grupo }).ToList();
-            return Json(new { success = true, data = distinct });
+            return Json(new { success = true, data = results });
         }
 
         [HttpGet]
@@ -324,6 +338,110 @@ namespace SchoolManager.Controllers
             return Json(new { success = true, message = "Materia removida correctamente." });
         }
 
+        [HttpPost("/StudentAssignment/RemoveEnrollment")]
+        [Authorize(Roles = "admin,secretaria,director")]
+        public async Task<IActionResult> RemoveEnrollment(Guid studentAssignmentId, bool removeActiveSubjects = false)
+        {
+            if (studentAssignmentId == Guid.Empty)
+                return Json(new { success = false, message = "Matrícula inválida." });
+
+            var currentUser = await _currentUserService.GetCurrentUserAsync();
+            if (currentUser == null)
+                return Json(new { success = false, message = "Sesión no válida." });
+
+            var allowedRole = (currentUser.Role ?? string.Empty).Trim().ToLowerInvariant();
+            if (allowedRole is not ("admin" or "secretaria" or "director"))
+                return Forbid();
+
+            var assignment = await _context.StudentAssignments
+                .Include(sa => sa.Student)
+                .Include(sa => sa.Grade)
+                .Include(sa => sa.Group)
+                .Include(sa => sa.Shift)
+                .FirstOrDefaultAsync(sa => sa.Id == studentAssignmentId);
+
+            if (assignment == null)
+                return Json(new { success = false, code = "NOT_FOUND", message = "La matrícula no existe." });
+
+            if (!assignment.IsActive)
+                return Json(new { success = false, code = "INACTIVE", message = "La matrícula ya está inactiva." });
+
+            if (currentUser.SchoolId.HasValue && assignment.Student.SchoolId.HasValue &&
+                currentUser.SchoolId != assignment.Student.SchoolId)
+            {
+                return Json(new { success = false, message = "No puede modificar matrículas de otra institución." });
+            }
+
+            var activeSubjects = await GetActiveSubjectsForEnrollmentAsync(assignment);
+            if (activeSubjects.Count > 0 && !removeActiveSubjects)
+            {
+                return Json(new
+                {
+                    success = false,
+                    code = "HAS_ACTIVE_SUBJECTS",
+                    activeSubjectsCount = activeSubjects.Count,
+                    message = "Este grupo posee materias activas. ¿Desea eliminar también las materias asociadas?"
+                });
+            }
+
+            var now = DateTime.UtcNow;
+            foreach (var subjectEnrollment in activeSubjects)
+            {
+                subjectEnrollment.IsActive = false;
+                subjectEnrollment.Status = "Inactive";
+                subjectEnrollment.EndDate = now;
+                await AuditHelper.SetAuditFieldsForUpdateAsync(subjectEnrollment, _currentUserService);
+            }
+
+            assignment.IsActive = false;
+            assignment.EndDate = now;
+
+            var auditDetails = new
+            {
+                FechaUtc = now,
+                UsuarioId = currentUser.Id,
+                Usuario = currentUser.Email,
+                StudentAssignmentId = assignment.Id,
+                StudentId = assignment.StudentId,
+                Estudiante = $"{assignment.Student.Name} {assignment.Student.LastName}".Trim(),
+                Grado = assignment.Grade?.Name,
+                Grupo = assignment.Group?.Name,
+                Jornada = assignment.Shift?.Name ?? assignment.Group?.Shift,
+                MateriasAfectadas = activeSubjects.Count,
+                Materias = activeSubjects.Select(ssa => new
+                {
+                    ssa.Id,
+                    ssa.SubjectAssignmentId
+                }).ToList()
+            };
+
+            _context.AuditLogs.Add(new AuditLog
+            {
+                Id = Guid.NewGuid(),
+                SchoolId = assignment.Student.SchoolId,
+                UserId = currentUser.Id,
+                UserName = currentUser.Email ?? $"{currentUser.Name} {currentUser.LastName}".Trim(),
+                UserRole = currentUser.Role,
+                Action = "RemoveEnrollment",
+                Resource = "StudentAssignment",
+                Details = JsonSerializer.Serialize(auditDetails),
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                Timestamp = now
+            });
+
+            await _context.SaveChangesAsync();
+
+            return Json(new
+            {
+                success = true,
+                message = activeSubjects.Count > 0
+                    ? "Grupo y materias asociadas inactivados correctamente."
+                    : "Grupo inactivado correctamente.",
+                removedSubjectsCount = activeSubjects.Count,
+                studentId = assignment.StudentId
+            });
+        }
+
         public async Task<IActionResult> Index()
         {
             var students = await _userService.GetAllStudentsAsync();
@@ -427,6 +545,36 @@ namespace SchoolManager.Controllers
             };
 
             return View(indexModel);
+        }
+
+        private async Task<int> CountActiveSubjectsForEnrollmentAsync(StudentAssignment assignment)
+        {
+            return (await GetActiveSubjectsForEnrollmentAsync(assignment)).Count;
+        }
+
+        private async Task<List<StudentSubjectAssignment>> GetActiveSubjectsForEnrollmentAsync(StudentAssignment assignment)
+        {
+            var query = _context.StudentSubjectAssignments
+                .Where(ssa => ssa.StudentId == assignment.StudentId && ssa.IsActive);
+
+            if (assignment.AcademicYearId.HasValue)
+                query = query.Where(ssa => ssa.AcademicYearId == assignment.AcademicYearId.Value);
+
+            var rows = await query
+                .Join(_context.SubjectAssignments,
+                    ssa => ssa.SubjectAssignmentId,
+                    sa => sa.Id,
+                    (ssa, sa) => new { ssa, sa })
+                .Where(x =>
+                    x.ssa.StudentAssignmentId == assignment.Id ||
+                    (x.sa.GradeLevelId == assignment.GradeId && x.sa.GroupId == assignment.GroupId))
+                .Select(x => x.ssa)
+                .ToListAsync();
+
+            return rows
+                .GroupBy(ssa => ssa.Id)
+                .Select(g => g.First())
+                .ToList();
         }
 
         public async Task<IActionResult> Upload()
