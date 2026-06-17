@@ -61,6 +61,20 @@ public partial class SchoolDbContext : DbContext
 
     public virtual DbSet<SubjectPromotionRecord> SubjectPromotionRecords { get; set; }
 
+    public virtual DbSet<CurriculumTrack> CurriculumTracks { get; set; }
+
+    public virtual DbSet<CurriculumSubject> CurriculumSubjects { get; set; }
+
+    public virtual DbSet<CurriculumSubjectPrerequisite> CurriculumSubjectPrerequisites { get; set; }
+
+    public virtual DbSet<StudentAcademicPeriodEnrollment> StudentAcademicPeriodEnrollments { get; set; }
+
+    public virtual DbSet<StudentAcademicCredit> StudentAcademicCredits { get; set; }
+
+    public virtual DbSet<StudentSubjectEquivalency> StudentSubjectEquivalencies { get; set; }
+
+    public virtual DbSet<StudentSubjectEquivalencyItem> StudentSubjectEquivalencyItems { get; set; }
+
     public virtual DbSet<Subject> Subjects { get; set; }
 
     public virtual DbSet<SubjectAssignment> SubjectAssignments { get; set; }
@@ -1051,6 +1065,9 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.StudentAssignmentId, "IX_student_subject_assignments_student_assignment_id");
             entity.HasIndex(e => e.AcademicYearId, "IX_student_subject_assignments_academic_year_id");
             entity.HasIndex(e => e.ShiftId, "IX_student_subject_assignments_shift_id");
+            entity.HasIndex(e => e.PeriodEnrollmentId, "ix_student_subject_assignments_period_enrollment_id");
+            entity.HasIndex(e => e.TrimesterId, "ix_student_subject_assignments_trimester_id");
+            entity.HasIndex(e => e.CurriculumSubjectId, "ix_student_subject_assignments_curriculum_subject_id");
             entity.HasIndex(e => new { e.StudentId, e.SubjectAssignmentId, e.AcademicYearId }, "ix_student_subject_assignments_active_unique")
                 .HasFilter("is_active = true")
                 .IsUnique();
@@ -1061,6 +1078,9 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.StudentAssignmentId).HasColumnName("student_assignment_id");
             entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
             entity.Property(e => e.ShiftId).HasColumnName("shift_id");
+            entity.Property(e => e.PeriodEnrollmentId).HasColumnName("period_enrollment_id");
+            entity.Property(e => e.TrimesterId).HasColumnName("trimester_id");
+            entity.Property(e => e.CurriculumSubjectId).HasColumnName("curriculum_subject_id");
             entity.Property(e => e.EnrollmentType).HasMaxLength(20).HasDefaultValue("Regular").HasColumnName("enrollment_type");
             entity.Property(e => e.Status).HasMaxLength(20).HasDefaultValue("Active").HasColumnName("status");
             entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
@@ -1071,6 +1091,8 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
             entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
             entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+            entity.Property(e => e.ValidationStatus).HasMaxLength(30).HasColumnName("validation_status");
+            entity.Property(e => e.ValidationMessage).HasColumnName("validation_message");
 
             entity.HasOne(d => d.Student).WithMany()
                 .HasForeignKey(d => d.StudentId)
@@ -1092,6 +1114,18 @@ public partial class SchoolDbContext : DbContext
                 .HasForeignKey(d => d.ShiftId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("student_subject_assignments_shift_id_fkey");
+            entity.HasOne(d => d.PeriodEnrollment).WithMany()
+                .HasForeignKey(d => d.PeriodEnrollmentId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_subject_assignments_period_enrollment_id_fkey");
+            entity.HasOne(d => d.Trimester).WithMany()
+                .HasForeignKey(d => d.TrimesterId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_subject_assignments_trimester_id_fkey");
+            entity.HasOne(d => d.CurriculumSubject).WithMany()
+                .HasForeignKey(d => d.CurriculumSubjectId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("student_subject_assignments_curriculum_subject_id_fkey");
             entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId);
             entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy);
             entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy);
@@ -1104,6 +1138,9 @@ public partial class SchoolDbContext : DbContext
 
             entity.HasIndex(e => e.StudentId, "IX_subject_promotion_records_student_id");
             entity.HasIndex(e => e.AcademicYearId, "IX_subject_promotion_records_academic_year_id");
+            entity.HasIndex(e => e.TrimesterId, "ix_subject_promotion_records_trimester_id");
+            entity.HasIndex(e => e.CurriculumSubjectId, "ix_subject_promotion_records_curriculum_subject_id");
+            entity.HasIndex(e => e.AcademicCreditId, "ix_subject_promotion_records_academic_credit_id");
             entity.HasIndex(e => new { e.StudentId, e.SubjectId, e.AcademicYearId, e.Trimester }, "IX_subject_promotion_records_student_subject_year_trimester");
 
             entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
@@ -1111,6 +1148,9 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.SubjectId).HasColumnName("subject_id");
             entity.Property(e => e.GradeLevelId).HasColumnName("grade_level_id");
             entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.TrimesterId).HasColumnName("trimester_id");
+            entity.Property(e => e.CurriculumSubjectId).HasColumnName("curriculum_subject_id");
+            entity.Property(e => e.AcademicCreditId).HasColumnName("academic_credit_id");
             entity.Property(e => e.Trimester).HasMaxLength(10).HasColumnName("trimester");
             entity.Property(e => e.Outcome).HasMaxLength(20).HasColumnName("outcome");
             entity.Property(e => e.FinalScore).HasColumnType("numeric(5,2)").HasColumnName("final_score");
@@ -1136,6 +1176,18 @@ public partial class SchoolDbContext : DbContext
                 .HasForeignKey(d => d.AcademicYearId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("subject_promotion_records_academic_year_id_fkey");
+            entity.HasOne(d => d.TrimesterNavigation).WithMany()
+                .HasForeignKey(d => d.TrimesterId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("subject_promotion_records_trimester_id_fkey");
+            entity.HasOne(d => d.CurriculumSubject).WithMany()
+                .HasForeignKey(d => d.CurriculumSubjectId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("subject_promotion_records_curriculum_subject_id_fkey");
+            entity.HasOne(d => d.AcademicCredit).WithMany()
+                .HasForeignKey(d => d.AcademicCreditId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("subject_promotion_records_academic_credit_id_fkey");
             entity.HasOne(d => d.StudentSubjectAssignment).WithMany()
                 .HasForeignKey(d => d.StudentSubjectAssignmentId)
                 .OnDelete(DeleteBehavior.SetNull)
@@ -1965,6 +2017,7 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.StudentId, "IX_prematriculations_student_id");
             entity.HasIndex(e => e.PrematriculationPeriodId, "IX_prematriculations_period_id");
             entity.HasIndex(e => e.PrematriculationCode, "IX_prematriculations_code").IsUnique();
+            entity.HasIndex(e => e.TargetTrimesterId, "ix_prematriculations_target_trimester_id");
 
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")
@@ -1987,6 +2040,16 @@ public partial class SchoolDbContext : DbContext
 
             entity.Property(e => e.PrematriculationPeriodId)
                 .HasColumnName("prematriculation_period_id");
+
+            entity.Property(e => e.TargetTrimesterId)
+                .HasColumnName("target_trimester_id");
+
+            entity.Property(e => e.EntryType)
+                .HasMaxLength(30)
+                .HasColumnName("entry_type");
+
+            entity.Property(e => e.RequiresEquivalenceReview)
+                .HasColumnName("requires_equivalence_review");
 
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
@@ -2064,6 +2127,12 @@ public partial class SchoolDbContext : DbContext
                 .HasForeignKey(d => d.PrematriculationPeriodId)
                 .HasConstraintName("prematriculations_period_id_fkey")
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.TargetTrimester)
+                .WithMany()
+                .HasForeignKey(d => d.TargetTrimesterId)
+                .HasConstraintName("prematriculations_target_trimester_id_fkey")
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(d => d.ConfirmedByUser)
                 .WithMany()
@@ -3090,6 +3159,199 @@ public partial class SchoolDbContext : DbContext
             entity.HasOne(d => d.User).WithMany().HasForeignKey(d => d.UserId)
                 .HasConstraintName("staff_qr_tokens_user_id_fkey")
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CurriculumTrack>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("curriculum_tracks_pkey");
+            entity.ToTable("curriculum_tracks");
+            entity.HasIndex(e => e.SchoolId, "ix_curriculum_tracks_school_id");
+            entity.HasIndex(e => e.AcademicYearId, "ix_curriculum_tracks_academic_year_id");
+            entity.HasIndex(e => new { e.SchoolId, e.AcademicYearId }, "ix_curriculum_tracks_active_school_year")
+                .HasFilter("is_active = true")
+                .IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.Name).HasMaxLength(150).HasColumnName("name");
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_tracks_school_id_fkey");
+            entity.HasOne(d => d.AcademicYear).WithMany().HasForeignKey(d => d.AcademicYearId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_tracks_academic_year_id_fkey");
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_tracks_created_by_fkey");
+            entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_tracks_updated_by_fkey");
+        });
+
+        modelBuilder.Entity<CurriculumSubject>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("curriculum_subjects_pkey");
+            entity.ToTable("curriculum_subjects");
+            entity.HasIndex(e => e.CurriculumTrackId, "ix_curriculum_subjects_track");
+            entity.HasIndex(e => e.SubjectId, "ix_curriculum_subjects_subject");
+            entity.HasIndex(e => e.GradeLevelId, "ix_curriculum_subjects_grade_level");
+            entity.HasIndex(e => new { e.CurriculumTrackId, e.SubjectId, e.GradeLevelId, e.ModuleOrder }, "uq_curriculum_subjects_track_subject_grade_order").IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.CurriculumTrackId).HasColumnName("curriculum_track_id");
+            entity.Property(e => e.SubjectId).HasColumnName("subject_id");
+            entity.Property(e => e.GradeLevelId).HasColumnName("grade_level_id");
+            entity.Property(e => e.LevelName).HasMaxLength(80).HasColumnName("level_name");
+            entity.Property(e => e.ModuleOrder).HasColumnName("module_order");
+            entity.Property(e => e.Credits).HasColumnType("numeric(5,2)").HasColumnName("credits");
+            entity.Property(e => e.MinimumPassingScore).HasColumnType("numeric(5,2)").HasDefaultValue(3.0m).HasColumnName("minimum_passing_score");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+
+            entity.HasOne(d => d.CurriculumTrack).WithMany(p => p.CurriculumSubjects).HasForeignKey(d => d.CurriculumTrackId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("curriculum_subjects_track_id_fkey");
+            entity.HasOne(d => d.Subject).WithMany().HasForeignKey(d => d.SubjectId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_subjects_subject_id_fkey");
+            entity.HasOne(d => d.GradeLevel).WithMany().HasForeignKey(d => d.GradeLevelId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_subjects_grade_level_id_fkey");
+        });
+
+        modelBuilder.Entity<CurriculumSubjectPrerequisite>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("curriculum_subject_prerequisites_pkey");
+            entity.ToTable("curriculum_subject_prerequisites", table =>
+                table.HasCheckConstraint("ck_curriculum_subject_prerequisites_not_self", "curriculum_subject_id <> prerequisite_curriculum_subject_id"));
+            entity.HasIndex(e => e.CurriculumSubjectId, "ix_curriculum_subject_prerequisites_subject");
+            entity.HasIndex(e => e.PrerequisiteCurriculumSubjectId, "ix_curriculum_subject_prerequisites_prerequisite");
+            entity.HasIndex(e => new { e.CurriculumSubjectId, e.PrerequisiteCurriculumSubjectId }, "uq_curriculum_subject_prerequisite_pair").IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.CurriculumSubjectId).HasColumnName("curriculum_subject_id");
+            entity.Property(e => e.PrerequisiteCurriculumSubjectId).HasColumnName("prerequisite_curriculum_subject_id");
+            entity.Property(e => e.RequirementType).HasMaxLength(30).HasDefaultValue("Required").HasColumnName("requirement_type");
+            entity.Property(e => e.MinimumScore).HasColumnType("numeric(5,2)").HasColumnName("minimum_score");
+            entity.Property(e => e.AllowEquivalence).HasDefaultValue(true).HasColumnName("allow_equivalence");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+
+            entity.HasOne(d => d.CurriculumSubject).WithMany().HasForeignKey(d => d.CurriculumSubjectId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("curriculum_subject_prerequisites_subject_id_fkey");
+            entity.HasOne(d => d.PrerequisiteCurriculumSubject).WithMany().HasForeignKey(d => d.PrerequisiteCurriculumSubjectId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_subject_prerequisites_prerequisite_id_fkey");
+        });
+
+        modelBuilder.Entity<StudentAcademicPeriodEnrollment>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_academic_period_enrollments_pkey");
+            entity.ToTable("student_academic_period_enrollments");
+            entity.HasIndex(e => e.SchoolId, "ix_student_academic_period_enrollments_school");
+            entity.HasIndex(e => e.TrimesterId, "ix_student_academic_period_enrollments_trimester");
+            entity.HasIndex(e => new { e.StudentId, e.AcademicYearId, e.TrimesterId }, "uq_student_academic_period_enrollments_active_period")
+                .HasFilter("status <> 'Cancelled'")
+                .IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.TrimesterId).HasColumnName("trimester_id");
+            entity.Property(e => e.StudentAssignmentId).HasColumnName("student_assignment_id");
+            entity.Property(e => e.EntryType).HasMaxLength(30).HasDefaultValue("Regular").HasColumnName("entry_type");
+            entity.Property(e => e.Status).HasMaxLength(30).HasDefaultValue("Draft").HasColumnName("status");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_academic_period_enrollments_school_id_fkey");
+            entity.HasOne(d => d.Student).WithMany().HasForeignKey(d => d.StudentId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_academic_period_enrollments_student_id_fkey");
+            entity.HasOne(d => d.AcademicYear).WithMany().HasForeignKey(d => d.AcademicYearId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_academic_period_enrollments_academic_year_id_fkey");
+            entity.HasOne(d => d.Trimester).WithMany().HasForeignKey(d => d.TrimesterId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_academic_period_enrollments_trimester_id_fkey");
+            entity.HasOne(d => d.StudentAssignment).WithMany().HasForeignKey(d => d.StudentAssignmentId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_period_enrollments_assignment_id_fkey");
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_period_enrollments_created_by_fkey");
+            entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_period_enrollments_updated_by_fkey");
+        });
+
+        modelBuilder.Entity<StudentAcademicCredit>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_academic_credits_pkey");
+            entity.ToTable("student_academic_credits");
+            entity.HasIndex(e => e.StudentId, "ix_student_academic_credits_student");
+            entity.HasIndex(e => e.SubjectId, "ix_student_academic_credits_subject");
+            entity.HasIndex(e => new { e.StudentId, e.CurriculumSubjectId }, "uq_student_academic_credits_valid_subject")
+                .HasFilter("status = 'Valid'")
+                .IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.CurriculumSubjectId).HasColumnName("curriculum_subject_id");
+            entity.Property(e => e.SubjectId).HasColumnName("subject_id");
+            entity.Property(e => e.GradeLevelId).HasColumnName("grade_level_id");
+            entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.TrimesterId).HasColumnName("trimester_id");
+            entity.Property(e => e.SourceType).HasMaxLength(30).HasColumnName("source_type");
+            entity.Property(e => e.SourceId).HasColumnName("source_id");
+            entity.Property(e => e.FinalScore).HasColumnType("numeric(5,2)").HasColumnName("final_score");
+            entity.Property(e => e.ApprovedAt).HasColumnType("timestamp with time zone").HasColumnName("approved_at");
+            entity.Property(e => e.Status).HasMaxLength(30).HasDefaultValue("Valid").HasColumnName("status");
+            entity.Property(e => e.Notes).HasColumnName("notes");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_credits_school_id_fkey");
+            entity.HasOne(d => d.Student).WithMany().HasForeignKey(d => d.StudentId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_academic_credits_student_id_fkey");
+            entity.HasOne(d => d.CurriculumSubject).WithMany().HasForeignKey(d => d.CurriculumSubjectId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_academic_credits_curriculum_subject_id_fkey");
+            entity.HasOne(d => d.Subject).WithMany().HasForeignKey(d => d.SubjectId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_academic_credits_subject_id_fkey");
+            entity.HasOne(d => d.GradeLevel).WithMany().HasForeignKey(d => d.GradeLevelId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_credits_grade_level_id_fkey");
+            entity.HasOne(d => d.AcademicYear).WithMany().HasForeignKey(d => d.AcademicYearId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_credits_academic_year_id_fkey");
+            entity.HasOne(d => d.Trimester).WithMany().HasForeignKey(d => d.TrimesterId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_credits_trimester_id_fkey");
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_academic_credits_created_by_fkey");
+        });
+
+        modelBuilder.Entity<StudentSubjectEquivalency>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_subject_equivalencies_pkey");
+            entity.ToTable("student_subject_equivalencies");
+            entity.HasIndex(e => e.SchoolId, "ix_student_subject_equivalencies_school");
+            entity.HasIndex(e => e.StudentId, "ix_student_subject_equivalencies_student");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.SourceInstitutionName).HasMaxLength(200).HasColumnName("source_institution_name");
+            entity.Property(e => e.SourceCountry).HasMaxLength(100).HasColumnName("source_country");
+            entity.Property(e => e.CertificateNumber).HasMaxLength(100).HasColumnName("certificate_number");
+            entity.Property(e => e.DocumentUrl).HasColumnName("document_url");
+            entity.Property(e => e.Status).HasMaxLength(30).HasDefaultValue("Pending").HasColumnName("status");
+            entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
+            entity.Property(e => e.ReviewedAt).HasColumnType("timestamp with time zone").HasColumnName("reviewed_at");
+            entity.Property(e => e.Notes).HasColumnName("notes");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_subject_equivalencies_school_id_fkey");
+            entity.HasOne(d => d.Student).WithMany().HasForeignKey(d => d.StudentId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_subject_equivalencies_student_id_fkey");
+            entity.HasOne(d => d.ReviewedByUser).WithMany().HasForeignKey(d => d.ReviewedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_subject_equivalencies_reviewed_by_fkey");
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("student_subject_equivalencies_created_by_fkey");
+        });
+
+        modelBuilder.Entity<StudentSubjectEquivalencyItem>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_subject_equivalency_items_pkey");
+            entity.ToTable("student_subject_equivalency_items");
+            entity.HasIndex(e => e.EquivalencyId, "ix_student_subject_equivalency_items_equivalency");
+            entity.HasIndex(e => e.CurriculumSubjectId, "ix_student_subject_equivalency_items_curriculum_subject");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.EquivalencyId).HasColumnName("equivalency_id");
+            entity.Property(e => e.CurriculumSubjectId).HasColumnName("curriculum_subject_id");
+            entity.Property(e => e.ExternalSubjectName).HasMaxLength(200).HasColumnName("external_subject_name");
+            entity.Property(e => e.ExternalScore).HasMaxLength(50).HasColumnName("external_score");
+            entity.Property(e => e.NormalizedScore).HasColumnType("numeric(5,2)").HasColumnName("normalized_score");
+            entity.Property(e => e.Status).HasMaxLength(30).HasDefaultValue("Pending").HasColumnName("status");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Equivalency).WithMany(p => p.Items).HasForeignKey(d => d.EquivalencyId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("student_subject_equivalency_items_equivalency_id_fkey");
+            entity.HasOne(d => d.CurriculumSubject).WithMany().HasForeignKey(d => d.CurriculumSubjectId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_subject_equivalency_items_curriculum_subject_id_fkey");
         });
     }
 

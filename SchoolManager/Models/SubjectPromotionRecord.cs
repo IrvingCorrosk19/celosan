@@ -12,6 +12,12 @@ public partial class SubjectPromotionRecord
 
     public Guid? AcademicYearId { get; set; }
 
+    public Guid? TrimesterId { get; set; }
+
+    public Guid? CurriculumSubjectId { get; set; }
+
+    public Guid? AcademicCreditId { get; set; }
+
     public string Trimester { get; set; } = "";
 
     /// <summary>Approved, Failed, Pending</summary>
@@ -36,6 +42,12 @@ public partial class SubjectPromotionRecord
     public virtual GradeLevel GradeLevel { get; set; } = null!;
 
     public virtual AcademicYear? AcademicYear { get; set; }
+
+    public virtual Trimester? TrimesterNavigation { get; set; }
+
+    public virtual CurriculumSubject? CurriculumSubject { get; set; }
+
+    public virtual StudentAcademicCredit? AcademicCredit { get; set; }
 
     public virtual StudentSubjectAssignment? StudentSubjectAssignment { get; set; }
 

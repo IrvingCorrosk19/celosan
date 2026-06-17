@@ -16,6 +16,12 @@ public partial class StudentSubjectAssignment
 
     public Guid? ShiftId { get; set; }
 
+    public Guid? PeriodEnrollmentId { get; set; }
+
+    public Guid? TrimesterId { get; set; }
+
+    public Guid? CurriculumSubjectId { get; set; }
+
     public string EnrollmentType { get; set; } = "Nocturno";
 
     public string Status { get; set; } = "Active";
@@ -36,6 +42,10 @@ public partial class StudentSubjectAssignment
 
     public Guid? UpdatedBy { get; set; }
 
+    public string? ValidationStatus { get; set; }
+
+    public string? ValidationMessage { get; set; }
+
     public virtual User Student { get; set; } = null!;
 
     public virtual SubjectAssignment SubjectAssignment { get; set; } = null!;
@@ -45,6 +55,12 @@ public partial class StudentSubjectAssignment
     public virtual AcademicYear? AcademicYear { get; set; }
 
     public virtual Shift? Shift { get; set; }
+
+    public virtual StudentAcademicPeriodEnrollment? PeriodEnrollment { get; set; }
+
+    public virtual Trimester? Trimester { get; set; }
+
+    public virtual CurriculumSubject? CurriculumSubject { get; set; }
 
     public virtual School? School { get; set; }
 

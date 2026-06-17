@@ -17,6 +17,12 @@ public partial class Prematriculation
     public Guid? GroupId { get; set; }
     
     public Guid PrematriculationPeriodId { get; set; }
+
+    public Guid? TargetTrimesterId { get; set; }
+
+    public string? EntryType { get; set; }
+
+    public bool? RequiresEquivalenceReview { get; set; }
     
     public string Status { get; set; } = null!; // Pendiente, Prematriculado, Pagado, Matriculado, Rechazado
     
@@ -53,6 +59,8 @@ public partial class Prematriculation
     public virtual Group? Group { get; set; }
     
     public virtual PrematriculationPeriod PrematriculationPeriod { get; set; } = null!;
+
+    public virtual Trimester? TargetTrimester { get; set; }
     
     public virtual User? ConfirmedByUser { get; set; }
     

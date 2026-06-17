@@ -92,6 +92,38 @@ public partial class SchoolDbContext
             _tenantContext.BypassTenantFilter ||
             (r.SchoolId != null && r.SchoolId == _tenantContext.SchoolId));
 
+        modelBuilder.Entity<CurriculumTrack>().HasQueryFilter(t =>
+            _tenantContext.BypassTenantFilter ||
+            t.SchoolId == null ||
+            t.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<CurriculumSubject>().HasQueryFilter(s =>
+            _tenantContext.BypassTenantFilter ||
+            s.CurriculumTrack.SchoolId == null ||
+            s.CurriculumTrack.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<CurriculumSubjectPrerequisite>().HasQueryFilter(p =>
+            _tenantContext.BypassTenantFilter ||
+            p.CurriculumSubject.CurriculumTrack.SchoolId == null ||
+            p.CurriculumSubject.CurriculumTrack.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<StudentAcademicPeriodEnrollment>().HasQueryFilter(e =>
+            _tenantContext.BypassTenantFilter ||
+            e.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<StudentAcademicCredit>().HasQueryFilter(c =>
+            _tenantContext.BypassTenantFilter ||
+            c.SchoolId == null ||
+            c.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<StudentSubjectEquivalency>().HasQueryFilter(e =>
+            _tenantContext.BypassTenantFilter ||
+            e.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<StudentSubjectEquivalencyItem>().HasQueryFilter(i =>
+            _tenantContext.BypassTenantFilter ||
+            i.Equivalency.SchoolId == _tenantContext.SchoolId);
+
         modelBuilder.Entity<CounselorAssignment>().HasQueryFilter(c =>
             _tenantContext.BypassTenantFilter || c.SchoolId == _tenantContext.SchoolId);
 
