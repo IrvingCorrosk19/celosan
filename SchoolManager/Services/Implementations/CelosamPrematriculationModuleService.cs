@@ -334,6 +334,10 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
             return null;
 
         var selections = await GetSelectedSubjectsAsync(receipt.PrematriculationId);
+        var identityDocument = await _context.StudentIdentityDocuments.AsNoTracking()
+            .Where(d => d.StudentId == receipt.StudentId)
+            .OrderByDescending(d => d.CreatedAt)
+            .FirstOrDefaultAsync();
         QuestPDF.Settings.License = LicenseType.Community;
         return Document.Create(container =>
         {
@@ -383,7 +387,10 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
                     });
                     c.Item().PaddingTop(24).Text("Espacio para sello de la escuela").Italic();
                     c.Item().Height(70).Border(1).BorderColor(Colors.Grey.Lighten1);
-                    c.Item().PaddingTop(10).Text("Documento de identidad: ver archivo registrado en el expediente del estudiante. Si esta vencido, debe ser actualizado por Secretaria antes del sello.").FontSize(9);
+                    var documentText = identityDocument == null
+                        ? "Documento de identidad: no hay archivo registrado."
+                        : $"Documento de identidad: {identityDocument.DocumentNumber ?? receipt.Student.DocumentId ?? "Sin numero"} | Estado: {identityDocument.Status} | Vence: {(identityDocument.ExpirationDate.HasValue ? identityDocument.ExpirationDate.Value.ToString("yyyy-MM-dd") : "Sin fecha")} | Archivo: {identityDocument.FileUrl}";
+                    c.Item().PaddingTop(10).Text(documentText).FontSize(9);
                 });
             });
         }).GeneratePdf();

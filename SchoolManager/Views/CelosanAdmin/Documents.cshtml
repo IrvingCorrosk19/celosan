@@ -1,0 +1,57 @@
+@model IReadOnlyList<SchoolManager.Models.StudentIdentityDocument>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Documentos de identidad";
+    var students = (IEnumerable<SchoolManager.Models.User>)ViewBag.Students;
+}
+
+<div class="container-fluid">
+    <h3>Documentos de identidad CELOSAM</h3>
+
+    @if (TempData["SuccessMessage"] != null) { <div class="alert alert-success">@TempData["SuccessMessage"]</div> }
+    @if (TempData["ErrorMessage"] != null) { <div class="alert alert-danger">@TempData["ErrorMessage"]</div> }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5>Actualizar cédula</h5>
+            <form asp-action="UploadDocument" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <select class="form-select" name="studentId" required>
+                            @foreach (var student in students)
+                            {
+                                <option value="@student.Id">@student.LastName @student.Name (@student.Email)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2"><input class="form-control" name="documentNumber" placeholder="Cédula" /></div>
+                    <div class="col-md-2"><input class="form-control" name="expirationDate" type="date" /></div>
+                    <div class="col-md-3"><input class="form-control" name="file" type="file" accept=".pdf,.jpg,.jpeg,.png" required /></div>
+                    <div class="col-md-1"><button class="btn btn-primary w-100">Subir</button></div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body table-responsive">
+            <table class="table table-striped">
+                <thead><tr><th>Estudiante</th><th>Número</th><th>Vence</th><th>Estado</th><th>Archivo</th><th>Actualizado</th></tr></thead>
+                <tbody>
+                    @foreach (var doc in Model)
+                    {
+                        <tr>
+                            <td>@doc.Student.LastName @doc.Student.Name</td>
+                            <td>@doc.DocumentNumber</td>
+                            <td>@(doc.ExpirationDate?.ToString("yyyy-MM-dd") ?? "Sin fecha")</td>
+                            <td><span class="badge @(doc.Status == "Expired" ? "bg-danger" : "bg-success")">@doc.Status</span></td>
+                            <td><a href="@doc.FileUrl" target="_blank">Ver</a></td>
+                            <td>@doc.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

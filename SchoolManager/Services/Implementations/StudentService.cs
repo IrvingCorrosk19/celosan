@@ -103,7 +103,8 @@ namespace SchoolManager.Services
                                     FullName = $"{student.LastName}, {student.Name}",
                                     GradeName = grade.Name,
                                     GroupName = grupo.Name,
-                                    DocumentId = student.DocumentId ?? ""
+                                    DocumentId = student.DocumentId ?? "",
+                                    StudentSubjectAssignmentId = ssa.Id
                                 }).Distinct().ToListAsync();
 
             return result;

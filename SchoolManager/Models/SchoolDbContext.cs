@@ -99,6 +99,10 @@ public partial class SchoolDbContext : DbContext
 
     public virtual DbSet<StudentSubjectWithdrawalRequest> StudentSubjectWithdrawalRequests { get; set; }
 
+    public virtual DbSet<StudentIdentityDocument> StudentIdentityDocuments { get; set; }
+
+    public virtual DbSet<CelosanBulkImportLog> CelosanBulkImportLogs { get; set; }
+
     public virtual DbSet<Payment> Payments { get; set; }
 
     public virtual DbSet<PaymentConcept> PaymentConcepts { get; set; }
@@ -2313,6 +2317,59 @@ public partial class SchoolDbContext : DbContext
             entity.HasOne(d => d.SubjectAssignment).WithMany().HasForeignKey(d => d.SubjectAssignmentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(d => d.RequestedByUser).WithMany().HasForeignKey(d => d.RequestedBy).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(d => d.ReviewedByUser).WithMany().HasForeignKey(d => d.ReviewedBy).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<StudentIdentityDocument>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_identity_documents_pkey");
+            entity.ToTable("student_identity_documents");
+
+            entity.HasIndex(e => e.SchoolId, "ix_student_identity_documents_school_id");
+            entity.HasIndex(e => e.StudentId, "ix_student_identity_documents_student_id");
+            entity.HasIndex(e => e.Status, "ix_student_identity_documents_status");
+            entity.HasIndex(e => e.ExpirationDate, "ix_student_identity_documents_expiration_date");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.DocumentType).HasMaxLength(40).HasDefaultValue("Cedula").HasColumnName("document_type");
+            entity.Property(e => e.DocumentNumber).HasMaxLength(50).HasColumnName("document_number");
+            entity.Property(e => e.FileUrl).HasColumnName("file_url");
+            entity.Property(e => e.ExpirationDate).HasColumnType("timestamp with time zone").HasColumnName("expiration_date");
+            entity.Property(e => e.Status).HasMaxLength(30).HasDefaultValue("Valid").HasColumnName("status");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp with time zone").HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.Student).WithMany().HasForeignKey(d => d.StudentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CelosanBulkImportLog>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("celosan_bulk_import_logs_pkey");
+            entity.ToTable("celosan_bulk_import_logs");
+
+            entity.HasIndex(e => e.SchoolId, "ix_celosan_bulk_import_logs_school_id");
+            entity.HasIndex(e => e.ImportType, "ix_celosan_bulk_import_logs_import_type");
+            entity.HasIndex(e => e.CreatedAt, "ix_celosan_bulk_import_logs_created_at");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.ImportType).HasMaxLength(50).HasColumnName("import_type");
+            entity.Property(e => e.FileName).HasMaxLength(255).HasColumnName("file_name");
+            entity.Property(e => e.ProcessedRows).HasColumnName("processed_rows");
+            entity.Property(e => e.SuccessRows).HasColumnName("success_rows");
+            entity.Property(e => e.ErrorRows).HasColumnName("error_rows");
+            entity.Property(e => e.ErrorSummary).HasColumnName("error_summary");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp with time zone").HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull);
         });
 
         // Configuración de Payment

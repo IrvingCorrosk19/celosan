@@ -1582,6 +1582,29 @@
             return trimmed || '(Sin nombre)';
         }
 
+        window.requestSubjectWithdrawal = function(studentSubjectAssignmentId) {
+            const reason = prompt('Motivo del retiro de esta asignatura:');
+            if (!reason || !reason.trim()) return;
+            const observation = prompt('Observación adicional (opcional):') || '';
+            const formData = new FormData();
+            formData.append('__RequestVerificationToken', $('input[name="__RequestVerificationToken"]').val());
+            formData.append('studentSubjectAssignmentId', studentSubjectAssignmentId);
+            formData.append('reason', reason.trim());
+            formData.append('observation', observation.trim());
+            formData.append('returnUrl', window.location.pathname + window.location.search);
+
+            fetch('/SubjectWithdrawalRequests/Create', {
+                method: 'POST',
+                body: formData
+            }).then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else {
+                    window.location.reload();
+                }
+            }).catch(() => alert('No se pudo enviar la solicitud de retiro.'));
+        };
+
         function escapeAttr(text) {
             if (text == null || text === '') return '';
             return String(text)
@@ -1829,6 +1852,7 @@
                     hdrRow.append('<th class="text-center gradebook-col-empty gradebook-th-empty" scope="col">Sin actividades</th>');
                 }
                 hdrRow.append('<th class="text-center gradebook-col-final gradebook-th-final" scope="col">Nota final</th>');
+                hdrRow.append('<th class="text-center gradebook-col-empty" scope="col">Acciones</th>');
 
                 const body = $('#bodyRows');
                 body.empty();
@@ -1854,6 +1878,12 @@
                             row += `<td class="text-center gradebook-col-final text-dark fw-bold final-grade"></td>`;
                         } else {
                             row += `<td class="text-muted text-center gradebook-col-empty">—</td>`;
+                        }
+
+                        if (s.studentSubjectAssignmentId) {
+                            row += `<td class="text-center gradebook-col-empty"><button type="button" class="btn btn-sm btn-outline-danger" onclick="requestSubjectWithdrawal('${escapeAttr(String(s.studentSubjectAssignmentId))}')">Solicitar retiro</button></td>`;
+                        } else {
+                            row += `<td class="text-muted text-center gradebook-col-empty">Sin inscripción</td>`;
                         }
 
                         row += `</tr>`;
@@ -2179,7 +2209,7 @@
                         if (data && Array.isArray(data)) {
                             data.forEach(s => {
                                 if (s.studentId && !ids.has(s.studentId)) {
-                                    students.push({ id: s.studentId, fullName: s.fullName, documentId: s.documentId });
+                                    students.push({ id: s.studentId, fullName: s.fullName, documentId: s.documentId, studentSubjectAssignmentId: s.studentSubjectAssignmentId });
                                     ids.add(s.studentId);
                                 }
                             });

@@ -1,0 +1,48 @@
+@model IReadOnlyList<SchoolManager.Models.CelosanBulkImportLog>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Carga masiva CELOSAM";
+}
+
+<div class="container-fluid">
+    <h3>Carga masiva de créditos/convalidaciones</h3>
+
+    @if (TempData["SuccessMessage"] != null) { <div class="alert alert-success">@TempData["SuccessMessage"]</div> }
+    @if (TempData["ErrorMessage"] != null) { <div class="alert alert-warning">@TempData["ErrorMessage"]</div> }
+    @if (TempData["ErrorDetails"] != null) { <pre class="alert alert-danger">@TempData["ErrorDetails"]</pre> }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <p>Formato CSV requerido: <code>email,materia,nivel,nota</code></p>
+            <form asp-action="UploadBulkCredits" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="row g-2">
+                    <div class="col-md-10"><input class="form-control" type="file" name="file" accept=".csv,text/csv" required /></div>
+                    <div class="col-md-2"><button class="btn btn-primary w-100">Procesar</button></div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body table-responsive">
+            <table class="table table-striped">
+                <thead><tr><th>Fecha</th><th>Archivo</th><th>Tipo</th><th>Procesadas</th><th>Exitosas</th><th>Errores</th><th>Detalle</th></tr></thead>
+                <tbody>
+                    @foreach (var log in Model)
+                    {
+                        <tr>
+                            <td>@log.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@log.FileName</td>
+                            <td>@log.ImportType</td>
+                            <td>@log.ProcessedRows</td>
+                            <td>@log.SuccessRows</td>
+                            <td>@log.ErrorRows</td>
+                            <td><pre class="mb-0">@log.ErrorSummary</pre></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

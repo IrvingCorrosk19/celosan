@@ -1,0 +1,49 @@
+@model SchoolManager.Services.Interfaces.CelosanReportDashboardDto
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Reportes CELOSAM";
+    var sections = new (string Title, IReadOnlyList<SchoolManager.Services.Interfaces.CelosanReportRow> Rows)[]
+    {
+        ("Estudiantes prematriculados", Model.PrematriculatedStudents),
+        ("Materias con mayor demanda", Model.SubjectDemand),
+        ("Cupos disponibles", Model.AvailableSeats),
+        ("Grupos llenos", Model.FullGroups),
+        ("Estudiantes por profesor", Model.StudentsByTeacher),
+        ("Estudiantes con cédula vencida", Model.ExpiredDocuments),
+        ("Materias retiradas", Model.WithdrawnSubjects),
+        ("Avance académico por estudiante", Model.AcademicProgress),
+        ("Historial de cambios de prematrícula", Model.ChangeHistory)
+    };
+}
+
+<div class="container-fluid">
+    <h3>Reportes CELOSAM</h3>
+    <div class="row">
+        @foreach (var reportSection in sections)
+        {
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header"><strong>@reportSection.Title</strong></div>
+                    <div class="card-body table-responsive">
+                        @if (!reportSection.Rows.Any())
+                        {
+                            <div class="text-muted">Sin datos.</div>
+                        }
+                        else
+                        {
+                            <table class="table table-sm table-striped">
+                                <thead><tr><th>Concepto</th><th>Valor</th><th>Detalle</th></tr></thead>
+                                <tbody>
+                                    @foreach (var row in reportSection.Rows)
+                                    {
+                                        <tr><td>@row.Label</td><td>@row.Value</td><td>@row.Detail</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>

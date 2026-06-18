@@ -92,3 +92,41 @@ public partial class StudentSubjectWithdrawalRequest
     public virtual User RequestedByUser { get; set; } = null!;
     public virtual User? ReviewedByUser { get; set; }
 }
+
+public partial class StudentIdentityDocument
+{
+    public Guid Id { get; set; }
+    public Guid SchoolId { get; set; }
+    public Guid StudentId { get; set; }
+    public string DocumentType { get; set; } = "Cedula";
+    public string? DocumentNumber { get; set; }
+    public string FileUrl { get; set; } = null!;
+    public DateTime? ExpirationDate { get; set; }
+    public string Status { get; set; } = "Valid";
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public Guid? CreatedBy { get; set; }
+    public Guid? UpdatedBy { get; set; }
+
+    public virtual School School { get; set; } = null!;
+    public virtual User Student { get; set; } = null!;
+    public virtual User? CreatedByUser { get; set; }
+    public virtual User? UpdatedByUser { get; set; }
+}
+
+public partial class CelosanBulkImportLog
+{
+    public Guid Id { get; set; }
+    public Guid SchoolId { get; set; }
+    public string ImportType { get; set; } = null!;
+    public string FileName { get; set; } = null!;
+    public int ProcessedRows { get; set; }
+    public int SuccessRows { get; set; }
+    public int ErrorRows { get; set; }
+    public string? ErrorSummary { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public Guid? CreatedBy { get; set; }
+
+    public virtual School School { get; set; } = null!;
+    public virtual User? CreatedByUser { get; set; }
+}

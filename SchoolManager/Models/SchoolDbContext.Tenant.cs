@@ -177,5 +177,13 @@ public partial class SchoolDbContext
         modelBuilder.Entity<StudentSubjectWithdrawalRequest>().HasQueryFilter(r =>
             _tenantContext.BypassTenantFilter ||
             r.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<StudentIdentityDocument>().HasQueryFilter(d =>
+            _tenantContext.BypassTenantFilter ||
+            d.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<CelosanBulkImportLog>().HasQueryFilter(l =>
+            _tenantContext.BypassTenantFilter ||
+            l.SchoolId == _tenantContext.SchoolId);
     }
 }

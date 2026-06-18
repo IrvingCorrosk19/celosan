@@ -1,0 +1,45 @@
+@model IReadOnlyList<SchoolManager.Models.StudentSubjectAssignment>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Solicitar retiro desde asistencia";
+    var attendance = (SchoolManager.Models.Attendance)ViewBag.Attendance;
+}
+
+<div class="container-fluid">
+    <h3>Solicitar retiro por asignatura</h3>
+    <p class="text-muted">@attendance.Student?.Name @attendance.Student?.LastName - @(attendance.Group?.Name ?? "Grupo")</p>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-info">No hay materias activas para este estudiante en el grupo seleccionado.</div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body table-responsive">
+                <table class="table table-striped">
+                    <thead><tr><th>Materia</th><th>Grupo</th><th>Acción</th></tr></thead>
+                    <tbody>
+                        @foreach (var enrollment in Model)
+                        {
+                            <tr>
+                                <td>@enrollment.SubjectAssignment.Subject.Name</td>
+                                <td>@enrollment.SubjectAssignment.Group.Name</td>
+                                <td>
+                                    <form asp-action="Create" method="post">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="studentSubjectAssignmentId" value="@enrollment.Id" />
+                                        <input type="hidden" name="returnUrl" value="@Url.Action("Index", "Attendance")" />
+                                        <input class="form-control form-control-sm mb-1" name="reason" placeholder="Motivo" required />
+                                        <input class="form-control form-control-sm mb-1" name="observation" placeholder="Observación" />
+                                        <button class="btn btn-sm btn-danger">Solicitar retiro</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
