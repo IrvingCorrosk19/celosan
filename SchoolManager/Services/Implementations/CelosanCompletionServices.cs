@@ -105,16 +105,13 @@ public class CelosanBulkImportService : ICelosanBulkImportService
 {
     private readonly SchoolDbContext _context;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IAcademicCreditService _creditService;
 
     public CelosanBulkImportService(
         SchoolDbContext context,
-        ICurrentUserService currentUserService,
-        IAcademicCreditService creditService)
+        ICurrentUserService currentUserService)
     {
         _context = context;
         _currentUserService = currentUserService;
-        _creditService = creditService;
     }
 
     public async Task<CelosanBulkImportResult> ImportApprovedCreditsAsync(IFormFile file)
@@ -144,6 +141,7 @@ public class CelosanBulkImportService : ICelosanBulkImportService
             return new CelosanBulkImportResult(false, processed, success, errors.Count, errors);
         }
 
+        var rows = new List<(int RowNumber, string Email, string SubjectName, string LevelName, string? ScoreText)>();
         while (!reader.EndOfStream)
         {
             var line = await reader.ReadLineAsync();
@@ -151,30 +149,66 @@ public class CelosanBulkImportService : ICelosanBulkImportService
                 continue;
             processed++;
             var columns = SplitCsv(line).ToList();
+            rows.Add((
+                processed + 1,
+                Get(columns, emailIdx),
+                Get(columns, subjectIdx),
+                Get(columns, levelIdx),
+                scoreIdx >= 0 ? Get(columns, scoreIdx) : null));
+        }
+
+        var normalizedEmails = rows
+            .Select(r => NormalizeKey(r.Email))
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Distinct()
+            .ToList();
+        var students = await _context.Users.AsNoTracking()
+            .Where(u => u.SchoolId == currentUser.SchoolId && normalizedEmails.Contains(u.Email.ToLower()))
+            .ToDictionaryAsync(u => NormalizeKey(u.Email), u => u);
+
+        var curriculumSubjects = await _context.CurriculumSubjects.AsNoTracking()
+            .Include(cs => cs.Subject)
+            .Include(cs => cs.GradeLevel)
+            .Include(cs => cs.CurriculumTrack)
+            .Where(cs => cs.CurriculumTrack.SchoolId == null || cs.CurriculumTrack.SchoolId == currentUser.SchoolId)
+            .ToListAsync();
+        var subjectsByNameAndLevel = curriculumSubjects
+            .GroupBy(cs => (Subject: NormalizeKey(cs.Subject.Name), Level: NormalizeKey(cs.GradeLevel?.Name ?? cs.LevelName)))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var studentIds = students.Values.Select(s => s.Id).ToList();
+        var curriculumSubjectIds = curriculumSubjects.Select(cs => cs.Id).ToList();
+        var existingCredits = await _context.StudentAcademicCredits.AsNoTracking()
+            .Where(c => studentIds.Contains(c.StudentId) &&
+                        curriculumSubjectIds.Contains(c.CurriculumSubjectId) &&
+                        c.Status == "Valid")
+            .Select(c => new { c.StudentId, c.CurriculumSubjectId })
+            .ToListAsync();
+        var existingPairs = existingCredits
+            .Select(c => (c.StudentId, c.CurriculumSubjectId))
+            .ToHashSet();
+        var newPairs = new HashSet<(Guid StudentId, Guid CurriculumSubjectId)>();
+        var now = DateTime.UtcNow;
+
+        foreach (var row in rows)
+        {
             try
             {
-                var email = Get(columns, emailIdx);
-                var subjectName = Get(columns, subjectIdx);
-                var levelName = Get(columns, levelIdx);
-                var scoreText = scoreIdx >= 0 ? Get(columns, scoreIdx) : null;
-                var student = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u =>
-                    u.Email.ToLower() == email.ToLower() && u.SchoolId == currentUser.SchoolId);
-                if (student == null)
-                    throw new InvalidOperationException($"Estudiante no encontrado: {email}");
+                if (!students.TryGetValue(NormalizeKey(row.Email), out var student))
+                    throw new InvalidOperationException($"Estudiante no encontrado: {row.Email}");
 
-                var curriculumSubject = await _context.CurriculumSubjects
-                    .Include(cs => cs.Subject)
-                    .Include(cs => cs.GradeLevel)
-                    .Where(cs => cs.CurriculumTrack.SchoolId == null || cs.CurriculumTrack.SchoolId == currentUser.SchoolId)
-                    .FirstOrDefaultAsync(cs =>
-                        cs.Subject.Name.ToLower() == subjectName.ToLower() &&
-                        (cs.LevelName.ToLower() == levelName.ToLower() || (cs.GradeLevel != null && cs.GradeLevel.Name.ToLower() == levelName.ToLower())));
-                if (curriculumSubject == null)
-                    throw new InvalidOperationException($"Materia curricular no encontrada: {subjectName} {levelName}");
+                var subjectKey = (Subject: NormalizeKey(row.SubjectName), Level: NormalizeKey(row.LevelName));
+                if (!subjectsByNameAndLevel.TryGetValue(subjectKey, out var curriculumSubject))
+                    throw new InvalidOperationException($"Materia curricular no encontrada: {row.SubjectName} {row.LevelName}");
 
-                decimal? score = decimal.TryParse(scoreText, out var parsed) ? parsed : null;
-                await _creditService.CreateCreditAsync(new StudentAcademicCredit
+                var pair = (student.Id, curriculumSubject.Id);
+                if (existingPairs.Contains(pair) || !newPairs.Add(pair))
+                    continue;
+
+                decimal? score = decimal.TryParse(row.ScoreText, out var parsed) ? parsed : null;
+                _context.StudentAcademicCredits.Add(new StudentAcademicCredit
                 {
+                    Id = Guid.NewGuid(),
                     SchoolId = currentUser.SchoolId,
                     StudentId = student.Id,
                     CurriculumSubjectId = curriculumSubject.Id,
@@ -182,15 +216,17 @@ public class CelosanBulkImportService : ICelosanBulkImportService
                     GradeLevelId = curriculumSubject.GradeLevelId,
                     SourceType = "BulkEquivalence",
                     FinalScore = score,
-                    ApprovedAt = DateTime.UtcNow,
+                    ApprovedAt = now,
                     Status = "Valid",
-                    Notes = $"Carga masiva CELOSAM desde {file.FileName}"
+                    Notes = $"Carga masiva CELOSAM desde {file.FileName}",
+                    CreatedAt = now,
+                    CreatedBy = currentUser.Id
                 });
                 success++;
             }
             catch (Exception ex)
             {
-                errors.Add($"Fila {processed + 1}: {ex.Message}");
+                errors.Add($"Fila {row.RowNumber}: {ex.Message}");
             }
         }
 
@@ -231,6 +267,11 @@ public class CelosanBulkImportService : ICelosanBulkImportService
     private static string Get(IReadOnlyList<string> columns, int index)
     {
         return index >= 0 && index < columns.Count ? columns[index].Trim() : string.Empty;
+    }
+
+    private static string NormalizeKey(string? value)
+    {
+        return (value ?? string.Empty).Trim().ToLowerInvariant();
     }
 
     private static IEnumerable<string> SplitCsv(string line)
@@ -298,12 +339,19 @@ public class CelosanReportService : ICelosanReportService
             .Where(sa => !schoolId.HasValue || sa.SchoolId == null || sa.SchoolId == schoolId.Value)
             .ToListAsync();
 
+        var groupAssignmentIds = groups.Select(g => g.Id).ToList();
+        var activeCountsByAssignment = await _context.StudentSubjectAssignments.AsNoTracking()
+            .Where(ssa => groupAssignmentIds.Contains(ssa.SubjectAssignmentId) && ssa.IsActive)
+            .GroupBy(ssa => ssa.SubjectAssignmentId)
+            .Select(g => new { SubjectAssignmentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SubjectAssignmentId, x => x.Count);
+
         var seats = new List<CelosanReportRow>();
         var fullGroups = new List<CelosanReportRow>();
         var studentsByTeacher = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var assignment in groups)
         {
-            var active = await _context.StudentSubjectAssignments.CountAsync(ssa => ssa.SubjectAssignmentId == assignment.Id && ssa.IsActive);
+            var active = activeCountsByAssignment.GetValueOrDefault(assignment.Id);
             var max = assignment.Group.MaxCapacity ?? 0;
             var available = max <= 0 ? 0 : Math.Max(max - active, 0);
             seats.Add(new CelosanReportRow($"{assignment.Subject.Name} - {assignment.Group.Name}", available.ToString(), $"Cupo maximo: {(max <= 0 ? "Sin definir" : max)}"));
@@ -361,10 +409,16 @@ public class CelosanReportService : ICelosanReportService
             .Take(200)
             .ToListAsync();
         var totalPlan = await _context.CurriculumSubjects.CountAsync(cs => cs.IsActive);
+        var studentIds = students.Select(s => s.Id).ToList();
+        var approvedCounts = await _context.StudentAcademicCredits.AsNoTracking()
+            .Where(c => studentIds.Contains(c.StudentId) && c.Status == "Valid")
+            .GroupBy(c => c.StudentId)
+            .Select(g => new { StudentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.StudentId, x => x.Count);
         var rows = new List<CelosanReportRow>();
         foreach (var student in students)
         {
-            var approved = await _context.StudentAcademicCredits.CountAsync(c => c.StudentId == student.Id && c.Status == "Valid");
+            var approved = approvedCounts.GetValueOrDefault(student.Id);
             var percent = totalPlan == 0 ? 0 : Math.Round((decimal)approved * 100m / totalPlan, 1);
             rows.Add(new CelosanReportRow($"{student.Name} {student.LastName}", $"{percent}%", $"Aprobadas: {approved}/{totalPlan}"));
         }

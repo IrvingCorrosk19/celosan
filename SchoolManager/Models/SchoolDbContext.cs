@@ -438,6 +438,8 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.SchoolId, "IX_audit_logs_school_id");
 
             entity.HasIndex(e => e.UserId, "IX_audit_logs_user_id");
+            entity.HasIndex(e => new { e.SchoolId, e.Timestamp }, "ix_audit_logs_school_timestamp");
+            entity.HasIndex(e => new { e.SchoolId, e.Action }, "ix_audit_logs_school_action");
 
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")
@@ -1073,6 +1075,7 @@ public partial class SchoolDbContext : DbContext
             entity.ToTable("student_subject_assignments");
 
             entity.HasIndex(e => e.StudentId, "IX_student_subject_assignments_student_id");
+            entity.HasIndex(e => e.SchoolId, "IX_student_subject_assignments_school_id");
             entity.HasIndex(e => e.SubjectAssignmentId, "IX_student_subject_assignments_subject_assignment_id");
             entity.HasIndex(e => e.StudentAssignmentId, "IX_student_subject_assignments_student_assignment_id");
             entity.HasIndex(e => e.AcademicYearId, "IX_student_subject_assignments_academic_year_id");
@@ -1080,6 +1083,9 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.PeriodEnrollmentId, "ix_student_subject_assignments_period_enrollment_id");
             entity.HasIndex(e => e.TrimesterId, "ix_student_subject_assignments_trimester_id");
             entity.HasIndex(e => e.CurriculumSubjectId, "ix_student_subject_assignments_curriculum_subject_id");
+            entity.HasIndex(e => new { e.SubjectAssignmentId, e.IsActive }, "ix_student_subject_assignments_assignment_active");
+            entity.HasIndex(e => new { e.StudentId, e.CurriculumSubjectId, e.Status }, "ix_student_subject_assignments_student_curriculum_status");
+            entity.HasIndex(e => new { e.SchoolId, e.Status }, "ix_student_subject_assignments_school_status");
             entity.HasIndex(e => new { e.StudentId, e.SubjectAssignmentId, e.AcademicYearId }, "ix_student_subject_assignments_active_unique")
                 .HasFilter("is_active = true")
                 .IsUnique();
@@ -1153,6 +1159,7 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.TrimesterId, "ix_subject_promotion_records_trimester_id");
             entity.HasIndex(e => e.CurriculumSubjectId, "ix_subject_promotion_records_curriculum_subject_id");
             entity.HasIndex(e => e.AcademicCreditId, "ix_subject_promotion_records_academic_credit_id");
+            entity.HasIndex(e => new { e.StudentId, e.CurriculumSubjectId, e.Outcome }, "ix_subject_promotion_records_student_curriculum_outcome");
             entity.HasIndex(e => new { e.StudentId, e.SubjectId, e.AcademicYearId, e.Trimester }, "IX_subject_promotion_records_student_subject_year_trimester");
 
             entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
@@ -1268,6 +1275,7 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.GroupId, "IX_subject_assignments_group_id");
 
             entity.HasIndex(e => e.SubjectId, "IX_subject_assignments_subject_id");
+            entity.HasIndex(e => new { e.SchoolId, e.SubjectId, e.GradeLevelId, e.Status }, "ix_subject_assignments_school_subject_grade_status");
 
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("gen_random_uuid()")
@@ -1473,6 +1481,7 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.SchoolId, "IX_users_school_id");
 
             entity.HasIndex(e => e.Role, "IX_users_role");
+            entity.HasIndex(e => new { e.SchoolId, e.Role, e.LastName, e.Name }, "ix_users_school_role_name");
 
             entity.HasIndex(e => e.DocumentId, "users_document_id_key").IsUnique();
 
@@ -2203,6 +2212,8 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.StudentId, "ix_spm_subject_selections_student_id");
             entity.HasIndex(e => e.CurriculumSubjectId, "ix_spm_subject_selections_curriculum_subject_id");
             entity.HasIndex(e => e.SubjectAssignmentId, "ix_spm_subject_selections_subject_assignment_id");
+            entity.HasIndex(e => new { e.SubjectAssignmentId, e.Status }, "ix_spm_subject_selections_assignment_status");
+            entity.HasIndex(e => new { e.SchoolId, e.Status }, "ix_spm_subject_selections_school_status");
             entity.HasIndex(e => new { e.PrematriculationId, e.CurriculumSubjectId }, "uq_spm_subject_selection")
                 .IsUnique()
                 .HasFilter("status <> 'Removed'");
@@ -2243,6 +2254,7 @@ public partial class SchoolDbContext : DbContext
 
             entity.HasIndex(e => e.SchoolId, "ix_prematriculation_receipts_school_id");
             entity.HasIndex(e => e.PrematriculationId, "ix_prematriculation_receipts_prematriculation_id");
+            entity.HasIndex(e => new { e.SchoolId, e.GeneratedAt }, "ix_prematriculation_receipts_school_generated_at");
             entity.HasIndex(e => e.Consecutive, "uq_prematriculation_receipts_consecutive").IsUnique();
             entity.HasIndex(e => new { e.PrematriculationId, e.Version }, "uq_prematriculation_receipts_version").IsUnique();
 
@@ -2296,6 +2308,7 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.SchoolId, "ix_subject_withdrawal_requests_school_id");
             entity.HasIndex(e => e.StudentSubjectAssignmentId, "ix_subject_withdrawal_requests_ssa_id");
             entity.HasIndex(e => e.Status, "ix_subject_withdrawal_requests_status");
+            entity.HasIndex(e => new { e.SchoolId, e.Status, e.CreatedAt }, "ix_subject_withdrawal_requests_school_status_created");
 
             entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
             entity.Property(e => e.SchoolId).HasColumnName("school_id");
@@ -2328,6 +2341,7 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.StudentId, "ix_student_identity_documents_student_id");
             entity.HasIndex(e => e.Status, "ix_student_identity_documents_status");
             entity.HasIndex(e => e.ExpirationDate, "ix_student_identity_documents_expiration_date");
+            entity.HasIndex(e => new { e.SchoolId, e.Status, e.ExpirationDate }, "ix_student_identity_documents_school_status_expiration");
 
             entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
             entity.Property(e => e.SchoolId).HasColumnName("school_id");
@@ -3493,7 +3507,10 @@ public partial class SchoolDbContext : DbContext
             entity.HasKey(e => e.Id).HasName("student_academic_credits_pkey");
             entity.ToTable("student_academic_credits");
             entity.HasIndex(e => e.StudentId, "ix_student_academic_credits_student");
+            entity.HasIndex(e => e.SchoolId, "IX_student_academic_credits_school_id");
             entity.HasIndex(e => e.SubjectId, "ix_student_academic_credits_subject");
+            entity.HasIndex(e => new { e.StudentId, e.Status }, "ix_student_academic_credits_student_status");
+            entity.HasIndex(e => new { e.SchoolId, e.Status }, "ix_student_academic_credits_school_status");
             entity.HasIndex(e => new { e.StudentId, e.CurriculumSubjectId }, "uq_student_academic_credits_valid_subject")
                 .HasFilter("status = 'Valid'")
                 .IsUnique();

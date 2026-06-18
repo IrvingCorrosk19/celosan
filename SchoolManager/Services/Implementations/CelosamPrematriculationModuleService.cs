@@ -60,24 +60,38 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
             .Select(s => s.CurriculumSubjectId)
             .ToHashSetAsync();
 
+        var subjectIds = subjects.Select(s => s.Id).ToList();
+        var validCreditIds = await _context.StudentAcademicCredits.AsNoTracking()
+            .Where(c => c.StudentId == prematriculation.StudentId &&
+                        subjectIds.Contains(c.CurriculumSubjectId) &&
+                        c.Status == "Valid")
+            .Select(c => c.CurriculumSubjectId)
+            .ToHashSetAsync();
+        var failedIds = await _context.SubjectPromotionRecords.AsNoTracking()
+            .Where(r => r.StudentId == prematriculation.StudentId &&
+                        r.CurriculumSubjectId.HasValue &&
+                        subjectIds.Contains(r.CurriculumSubjectId.Value) &&
+                        r.Outcome == "Failed")
+            .Select(r => r.CurriculumSubjectId!.Value)
+            .ToHashSetAsync();
+        var withdrawnIds = await _context.StudentSubjectAssignments.AsNoTracking()
+            .Where(ssa => ssa.StudentId == prematriculation.StudentId &&
+                          ssa.CurriculumSubjectId.HasValue &&
+                          subjectIds.Contains(ssa.CurriculumSubjectId.Value) &&
+                          ssa.Status == "Withdrawn")
+            .Select(ssa => ssa.CurriculumSubjectId!.Value)
+            .ToHashSetAsync();
+        var availableGroupsBySubject = await CountAvailableGroupsBySubjectAsync(prematriculation.SchoolId, period, subjects);
+
         var available = new List<CelosamAvailableSubjectDto>();
         var approved = 0;
         var failedOrWithdrawn = 0;
 
         foreach (var subject in subjects)
         {
-            var validCredit = await _context.StudentAcademicCredits.AnyAsync(c =>
-                c.StudentId == prematriculation.StudentId &&
-                c.CurriculumSubjectId == subject.Id &&
-                c.Status == "Valid");
-            var failed = await _context.SubjectPromotionRecords.AnyAsync(r =>
-                r.StudentId == prematriculation.StudentId &&
-                r.CurriculumSubjectId == subject.Id &&
-                r.Outcome == "Failed");
-            var withdrawn = await _context.StudentSubjectAssignments.AnyAsync(ssa =>
-                ssa.StudentId == prematriculation.StudentId &&
-                ssa.CurriculumSubjectId == subject.Id &&
-                ssa.Status == "Withdrawn");
+            var validCredit = validCreditIds.Contains(subject.Id);
+            var failed = failedIds.Contains(subject.Id);
+            var withdrawn = withdrawnIds.Contains(subject.Id);
 
             if (validCredit)
                 approved++;
@@ -85,7 +99,7 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
                 failedOrWithdrawn++;
 
             var validation = await _prerequisiteService.ValidateAsync(prematriculation.StudentId, subject.Id);
-            var availableGroups = await CountAvailableGroupsAsync(prematriculation.SchoolId, period, subject);
+            var availableGroups = availableGroupsBySubject.GetValueOrDefault(subject.Id);
             var isSelected = selectedIds.Contains(subject.Id);
             var canSelect = !validCredit && !isSelected && validation.CanEnroll && availableGroups > 0;
             var message = validCredit
@@ -424,16 +438,49 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
                status.Equals("Reabierta", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task<int> CountAvailableGroupsAsync(Guid schoolId, PrematriculationPeriod period, CurriculumSubject subject)
+    private async Task<Dictionary<Guid, int>> CountAvailableGroupsBySubjectAsync(
+        Guid schoolId,
+        PrematriculationPeriod period,
+        IReadOnlyList<CurriculumSubject> subjects)
     {
-        var assignments = await GetCandidateAssignmentsAsync(schoolId, subject);
-        var count = 0;
-        foreach (var assignment in assignments)
+        if (subjects.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        var subjectIds = subjects.Select(s => s.SubjectId).Distinct().ToList();
+        var candidates = await _context.SubjectAssignments
+            .Include(sa => sa.Group)
+            .AsNoTracking()
+            .Where(sa => subjectIds.Contains(sa.SubjectId) &&
+                         (sa.SchoolId == null || sa.SchoolId == schoolId) &&
+                         sa.Status != "Closed")
+            .ToListAsync();
+
+        var candidateIds = candidates.Select(c => c.Id).ToList();
+        var activeCounts = await _context.StudentSubjectAssignments.AsNoTracking()
+            .Where(ssa => candidateIds.Contains(ssa.SubjectAssignmentId) && ssa.IsActive)
+            .GroupBy(ssa => ssa.SubjectAssignmentId)
+            .Select(g => new { SubjectAssignmentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SubjectAssignmentId, x => x.Count);
+        var finalizedCounts = await _context.StudentPrematriculationSubjectSelections.AsNoTracking()
+            .Where(s => s.SubjectAssignmentId.HasValue &&
+                        candidateIds.Contains(s.SubjectAssignmentId.Value) &&
+                        s.Status == "Finalized")
+            .GroupBy(s => s.SubjectAssignmentId!.Value)
+            .Select(g => new { SubjectAssignmentId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.SubjectAssignmentId, x => x.Count);
+
+        var result = new Dictionary<Guid, int>();
+        foreach (var subject in subjects)
         {
-            if (await HasCapacityAsync(assignment, period))
-                count++;
+            var count = candidates.Count(assignment =>
+                assignment.SubjectId == subject.SubjectId &&
+                (!subject.GradeLevelId.HasValue || assignment.GradeLevelId == subject.GradeLevelId.Value) &&
+                activeCounts.GetValueOrDefault(assignment.Id) + finalizedCounts.GetValueOrDefault(assignment.Id) <
+                (assignment.Group.MaxCapacity ?? period.MaxCapacityPerGroup));
+            result[subject.Id] = count;
         }
-        return count;
+
+        return result;
     }
 
     private async Task<IReadOnlyList<SubjectAssignment>> GetCandidateAssignmentsAsync(Guid schoolId, CurriculumSubject subject)

@@ -138,12 +138,10 @@ public class CurriculumService : ICurriculumService
 public class AcademicPrerequisiteService : IAcademicPrerequisiteService
 {
     private readonly SchoolDbContext _context;
-    private readonly IAcademicCreditService _creditService;
 
-    public AcademicPrerequisiteService(SchoolDbContext context, IAcademicCreditService creditService)
+    public AcademicPrerequisiteService(SchoolDbContext context)
     {
         _context = context;
-        _creditService = creditService;
     }
 
     public async Task<PrerequisiteValidationResult> ValidateAsync(Guid studentId, Guid curriculumSubjectId)
@@ -159,13 +157,17 @@ public class AcademicPrerequisiteService : IAcademicPrerequisiteService
         if (prerequisites.Count == 0)
             return new PrerequisiteValidationResult(true, "La materia no tiene prerrequisitos obligatorios.", Array.Empty<CurriculumSubject>(), false);
 
-        var missing = new List<CurriculumSubject>();
-        foreach (var prerequisite in prerequisites)
-        {
-            var credit = await _creditService.GetValidCreditAsync(studentId, prerequisite.PrerequisiteCurriculumSubjectId);
-            if (credit == null)
-                missing.Add(prerequisite.PrerequisiteCurriculumSubject);
-        }
+        var prerequisiteIds = prerequisites.Select(p => p.PrerequisiteCurriculumSubjectId).ToList();
+        var approvedPrerequisiteIds = await _context.StudentAcademicCredits.AsNoTracking()
+            .Where(c => c.StudentId == studentId &&
+                        prerequisiteIds.Contains(c.CurriculumSubjectId) &&
+                        c.Status == "Valid")
+            .Select(c => c.CurriculumSubjectId)
+            .ToHashSetAsync();
+        var missing = prerequisites
+            .Where(prerequisite => !approvedPrerequisiteIds.Contains(prerequisite.PrerequisiteCurriculumSubjectId))
+            .Select(prerequisite => prerequisite.PrerequisiteCurriculumSubject)
+            .ToList();
 
         if (missing.Count == 0)
             return new PrerequisiteValidationResult(true, "Prerrequisitos satisfechos.", Array.Empty<CurriculumSubject>(), false);
