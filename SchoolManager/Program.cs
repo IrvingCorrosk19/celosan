@@ -197,6 +197,8 @@ builder.Services.AddDbContext<SchoolDbContext>(options =>
 
 builder.Services.Configure<NocturnalAdvancedEnrollmentOptions>(
     builder.Configuration.GetSection(NocturnalAdvancedEnrollmentOptions.SectionName));
+builder.Services.Configure<NocturnalModularEnrollmentOptions>(
+    builder.Configuration.GetSection(NocturnalModularEnrollmentOptions.SectionName));
 builder.Services.AddScoped<INocturnalEnrollmentSettingsService, NocturnalEnrollmentSettingsService>();
 // Una sola instancia scoped por request: middleware y controladores pueden inyectar ITenantContext o TenantContext.
 builder.Services.AddScoped<TenantContext>();
@@ -232,6 +234,12 @@ builder.Services.AddScoped<IGradeLevelService, GradeLevelService>();
 builder.Services.AddScoped<IAcademicAssignmentService, AcademicAssignmentService>();
 builder.Services.AddScoped<IStudentAssignmentService, StudentAssignmentService>();
 builder.Services.AddScoped<ISubjectPromotionService, SubjectPromotionService>();
+builder.Services.AddScoped<ICurriculumService, CurriculumService>();
+builder.Services.AddScoped<IAcademicPrerequisiteService, AcademicPrerequisiteService>();
+builder.Services.AddScoped<IModularEnrollmentService, ModularEnrollmentService>();
+builder.Services.AddScoped<IAcademicCreditService, AcademicCreditService>();
+builder.Services.AddScoped<IEquivalencyService, EquivalencyService>();
+builder.Services.AddScoped<IModularPromotionService, ModularPromotionService>();
 builder.Services.AddScoped<IAreaService, AreaService>();
 builder.Services.AddScoped<ISpecialtyService, SpecialtyService>();
 builder.Services.AddScoped<IShiftService, ShiftService>();

@@ -28,6 +28,7 @@ namespace SchoolManager.Controllers
         private readonly IDateTimeHomologationService _dateTimeHomologationService;
         private readonly ICurrentUserService _currentUserService;
         private readonly IShiftService _shiftService;
+        private readonly IModularEnrollmentService _modularEnrollmentService;
         private readonly SchoolDbContext _context;
 
         public StudentAssignmentController(
@@ -40,6 +41,7 @@ namespace SchoolManager.Controllers
             IDateTimeHomologationService dateTimeHomologationService,
             ICurrentUserService currentUserService,
             IShiftService shiftService,
+            IModularEnrollmentService modularEnrollmentService,
             SchoolDbContext context)
         {
             _userService = userService;
@@ -51,6 +53,7 @@ namespace SchoolManager.Controllers
             _dateTimeHomologationService = dateTimeHomologationService;
             _currentUserService = currentUserService;
             _shiftService = shiftService;
+            _modularEnrollmentService = modularEnrollmentService;
             _context = context;
         }
 
@@ -304,12 +307,17 @@ namespace SchoolManager.Controllers
         }
 
         [HttpPost("/StudentAssignment/AddSubjectEnrollment")]
-        public async Task<IActionResult> AddSubjectEnrollment(Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false)
+        public async Task<IActionResult> AddSubjectEnrollment(
+            Guid studentId,
+            Guid subjectAssignmentId,
+            bool asCarryOver = false,
+            Guid? trimesterId = null,
+            string? entryType = null)
         {
             if (studentId == Guid.Empty || subjectAssignmentId == Guid.Empty)
                 return Json(new { success = false, message = "Datos inválidos." });
 
-            var result = await _studentAssignmentService.AddSubjectEnrollmentAsync(studentId, subjectAssignmentId, asCarryOver);
+            var result = await _studentAssignmentService.AddSubjectEnrollmentAsync(studentId, subjectAssignmentId, asCarryOver, trimesterId, entryType);
             return Json(new { success = result.Success, message = result.Message, enrollmentId = result.StudentSubjectAssignmentId });
         }
 
@@ -779,7 +787,9 @@ namespace SchoolManager.Controllers
                 Guid? ShiftId,
                 Guid SubjectAssignmentId,
                 bool Inscrito,
-                string? TipoInscripcion)>();
+                string? TipoInscripcion,
+                Guid? TrimesterId,
+                string? TipoIngreso)>();
 
             var pendingKeys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -861,6 +871,29 @@ namespace SchoolManager.Controllers
                         subjectAssignment = createdSa;
                     }
 
+                    Guid? trimesterId = null;
+                    if (!string.IsNullOrWhiteSpace(row.Trimestre))
+                    {
+                        var trimmedTrimester = row.Trimestre.Trim();
+                        if (Guid.TryParse(trimmedTrimester, out var parsedTrimesterId))
+                        {
+                            trimesterId = parsedTrimesterId;
+                        }
+                        else
+                        {
+                            trimesterId = await _context.Trimesters
+                                .Where(t => t.SchoolId == schoolId && t.Name == trimmedTrimester)
+                                .Select(t => (Guid?)t.Id)
+                                .FirstOrDefaultAsync();
+                        }
+
+                        if (!trimesterId.HasValue)
+                        {
+                            errors.Add($"Trimestre no encontrado: {row.Trimestre} ({row.EstudianteEmail}).");
+                            continue;
+                        }
+                    }
+
                     var pendingKey = $"{student.Id}::{subjectAssignment.Id}::{grade.Id}::{group.Id}";
                     if (!pendingKeys.Add(pendingKey))
                         continue;
@@ -873,7 +906,9 @@ namespace SchoolManager.Controllers
                         group.ShiftId ?? shift.Id,
                         subjectAssignment.Id,
                         row.Inscrito,
-                        row.TipoInscripcion));
+                        row.TipoInscripcion,
+                        trimesterId,
+                        row.TipoIngreso));
                 }
                 catch (Exception ex)
                 {
@@ -945,6 +980,8 @@ namespace SchoolManager.Controllers
             var keepSetByKey = new Dictionary<string, HashSet<Guid>>();
             var enrollmentTypeByKey = new Dictionary<string, string>();
             var ssaEnrollmentTypeBySubject = new Dictionary<string, string>();
+            var trimesterBySubject = new Dictionary<string, Guid?>();
+            var entryTypeBySubject = new Dictionary<string, string?>();
 
             foreach (var row in pendingRows)
             {
@@ -969,6 +1006,8 @@ namespace SchoolManager.Controllers
 
                 enrollmentTypeByKey[key] = baseType;
                 ssaEnrollmentTypeBySubject[$"{row.StudentId}::{row.SubjectAssignmentId}"] = ssaType;
+                trimesterBySubject[$"{row.StudentId}::{row.SubjectAssignmentId}"] = row.TrimesterId;
+                entryTypeBySubject[$"{row.StudentId}::{row.SubjectAssignmentId}"] = row.TipoIngreso;
 
                 if (row.Inscrito)
                     keepSet.Add(row.SubjectAssignmentId);
@@ -1061,6 +1100,24 @@ namespace SchoolManager.Controllers
                     var ssaType = ssaEnrollmentTypeBySubject.TryGetValue($"{studentId}::{subjectAssignmentId}", out var resolvedType)
                         ? resolvedType
                         : EnrollmentTypeConstants.NormalizePrimary(baseAssignment.EnrollmentType);
+
+                    trimesterBySubject.TryGetValue($"{studentId}::{subjectAssignmentId}", out var modularTrimesterId);
+                    entryTypeBySubject.TryGetValue($"{studentId}::{subjectAssignmentId}", out var modularEntryType);
+                    var modularResult = await _modularEnrollmentService.EnrollSubjectAsync(
+                        new ModularSubjectEnrollmentRequest(
+                            studentId,
+                            subjectAssignmentId,
+                            modularTrimesterId,
+                            modularEntryType,
+                            EnrollmentTypeConstants.IsCarryOver(ssaType)));
+                    if (modularResult.Handled)
+                    {
+                        if (modularResult.Success)
+                            activadas++;
+                        else
+                            errors.Add(modularResult.Message);
+                        continue;
+                    }
 
                     var existing = await _context.StudentSubjectAssignments
                         .Where(ssa =>

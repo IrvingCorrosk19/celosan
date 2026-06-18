@@ -763,6 +763,9 @@ public class PrematriculationService : IPrematriculationService
             _context.StudentAssignments.Update(prevAssignment);
         }
 
+        StudentAssignment? createdAssignment = null;
+        AcademicYear? createdAssignmentAcademicYear = null;
+
         // Crear nueva asignación del estudiante al grupo
         if (prematriculation.GroupId.HasValue && prematriculation.GradeId.HasValue)
         {
@@ -779,6 +782,7 @@ public class PrematriculationService : IPrematriculationService
 
                 // MEJORADO: Obtener año académico activo para la nueva asignación
                 var activeAcademicYear = await _academicYearService.GetActiveAcademicYearAsync(prematriculation.SchoolId);
+                createdAssignmentAcademicYear = activeAcademicYear;
 
                 var assignment = new StudentAssignment
                 {
@@ -792,7 +796,27 @@ public class PrematriculationService : IPrematriculationService
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.StudentAssignments.Add(assignment);
+                createdAssignment = assignment;
             }
+        }
+
+        if (prematriculation.TargetTrimesterId.HasValue &&
+            createdAssignment != null &&
+            createdAssignmentAcademicYear != null)
+        {
+            _context.StudentAcademicPeriodEnrollments.Add(new StudentAcademicPeriodEnrollment
+            {
+                Id = Guid.NewGuid(),
+                SchoolId = prematriculation.SchoolId,
+                StudentId = prematriculation.StudentId,
+                AcademicYearId = createdAssignmentAcademicYear.Id,
+                TrimesterId = prematriculation.TargetTrimesterId.Value,
+                StudentAssignmentId = createdAssignment.Id,
+                EntryType = string.IsNullOrWhiteSpace(prematriculation.EntryType) ? "Regular" : prematriculation.EntryType.Trim(),
+                Status = "Active",
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = confirmedBy
+            });
         }
 
         // Registrar historial de cambio de estado

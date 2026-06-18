@@ -10,15 +10,18 @@ public class SubjectPromotionService : ISubjectPromotionService
     private readonly SchoolDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IAcademicYearService _academicYearService;
+    private readonly IAcademicCreditService _academicCreditService;
 
     public SubjectPromotionService(
         SchoolDbContext context,
         ICurrentUserService currentUserService,
-        IAcademicYearService academicYearService)
+        IAcademicYearService academicYearService,
+        IAcademicCreditService academicCreditService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _academicYearService = academicYearService;
+        _academicCreditService = academicCreditService;
     }
 
     public async Task<(bool Success, string Message)> PromoteSubjectAsync(
@@ -54,6 +57,8 @@ public class SubjectPromotionService : ISubjectPromotionService
             SubjectId = ssa.SubjectAssignment.SubjectId,
             GradeLevelId = ssa.SubjectAssignment.GradeLevelId,
             AcademicYearId = ssa.AcademicYearId ?? academicYear?.Id,
+            TrimesterId = ssa.TrimesterId,
+            CurriculumSubjectId = ssa.CurriculumSubjectId,
             Trimester = trimester.Trim(),
             Outcome = normalizedOutcome,
             FinalScore = finalScore,
@@ -82,6 +87,13 @@ public class SubjectPromotionService : ISubjectPromotionService
 
         _context.SubjectPromotionRecords.Add(record);
         await _context.SaveChangesAsync();
+
+        var credit = await _academicCreditService.CreateFromPromotionAsync(record);
+        if (credit != null)
+        {
+            record.AcademicCreditId = credit.Id;
+            await _context.SaveChangesAsync();
+        }
 
         return (true, "Promoción registrada correctamente.");
     }

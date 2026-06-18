@@ -1,0 +1,93 @@
+@model IReadOnlyList<SchoolManager.Models.StudentSubjectEquivalency>
+@{
+    ViewData["Title"] = "Convalidaciones";
+    var students = (IEnumerable<SchoolManager.Models.User>)ViewBag.Students;
+    var curriculumSubjects = (IEnumerable<SchoolManager.Models.CurriculumSubject>)ViewBag.CurriculumSubjects;
+}
+
+<h1>Convalidaciones</h1>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+}
+
+<section class="card mb-4">
+    <div class="card-body">
+        <h2 class="h5">Registrar institución externa</h2>
+        <form asp-action="Create" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <select class="form-select" name="studentId" required>
+                        @foreach (var student in students)
+                        {
+                            <option value="@student.Id">@student.LastName @student.Name (@student.Email)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3"><input class="form-control" name="externalInstitutionName" placeholder="Institución externa" required /></div>
+                <div class="col-md-3"><input class="form-control" name="referenceDocument" placeholder="Referencia/documento" /></div>
+                <div class="col-md-2"><input class="form-control" name="notes" placeholder="Notas" /></div>
+                <div class="col-md-1"><button class="btn btn-primary w-100">Crear</button></div>
+            </div>
+        </form>
+    </div>
+</section>
+
+<table class="table table-striped align-middle">
+    <thead>
+        <tr><th>Estudiante</th><th>Institución</th><th>Estado</th><th>Materias externas</th><th>Agregar materia</th></tr>
+    </thead>
+    <tbody>
+        @foreach (var equivalency in Model)
+        {
+            <tr>
+                <td>@equivalency.Student.LastName @equivalency.Student.Name</td>
+                <td>@equivalency.SourceInstitutionName</td>
+                <td>@equivalency.Status</td>
+                <td>
+                    @foreach (var item in equivalency.Items)
+                    {
+                        <div class="mb-2">
+                            <strong>@item.ExternalSubjectName</strong> → @item.CurriculumSubject.Subject.Name (@item.Status)
+                            @if (item.Status == "Pending")
+                            {
+                                <form asp-action="ApproveItem" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="itemId" value="@item.Id" />
+                                    <button class="btn btn-sm btn-success">Aprobar</button>
+                                </form>
+                                <form asp-action="RejectItem" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="itemId" value="@item.Id" />
+                                    <button class="btn btn-sm btn-danger">Rechazar</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                </td>
+                <td>
+                    <form asp-action="AddItem" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="equivalencyId" value="@equivalency.Id" />
+                        <select class="form-select mb-1" name="curriculumSubjectId" required>
+                            @foreach (var subject in curriculumSubjects)
+                            {
+                                <option value="@subject.Id">@subject.Subject.Name - @subject.GradeLevel.Name</option>
+                            }
+                        </select>
+                        <input class="form-control mb-1" name="externalSubjectName" placeholder="Materia externa" required />
+                        <input class="form-control mb-1" name="externalScore" type="number" step="0.1" placeholder="Nota externa" />
+                        <input class="form-control mb-1" name="normalizedScore" type="number" step="0.1" placeholder="Nota normalizada" />
+                        <button class="btn btn-sm btn-primary">Agregar</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

@@ -23,6 +23,12 @@ namespace SchoolManager.ViewModels
         // Jornada/Tipo inscripcion opcional (Refuerzo, Libre, Nocturno).
         public string? TipoInscripcion { get; set; }
 
+        // Modelo modular: código/nombre de trimestre (1T/2T/3T) o ID en texto.
+        public string? Trimestre { get; set; }
+
+        // Modelo modular: Regular, LateEntry, Transfer, Reentry.
+        public string? TipoIngreso { get; set; }
+
         // Si viene false, se desactiva (IsActive=false) la inscripción para esa materia en el año académico.
         public bool Inscrito { get; set; } = true;
     }

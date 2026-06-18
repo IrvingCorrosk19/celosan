@@ -16,17 +16,20 @@ namespace SchoolManager.Services.Implementations
         private readonly ICurrentUserService _currentUserService;
         private readonly IAcademicYearService _academicYearService;
         private readonly INocturnalEnrollmentSettingsService _nocturnalSettings;
+        private readonly IModularEnrollmentService _modularEnrollmentService;
 
         public StudentAssignmentService(
             SchoolDbContext context,
             ICurrentUserService currentUserService,
             IAcademicYearService academicYearService,
-            INocturnalEnrollmentSettingsService nocturnalSettings)
+            INocturnalEnrollmentSettingsService nocturnalSettings,
+            IModularEnrollmentService modularEnrollmentService)
         {
             _context = context;
             _currentUserService = currentUserService;
             _academicYearService = academicYearService;
             _nocturnalSettings = nocturnalSettings;
+            _modularEnrollmentService = modularEnrollmentService;
         }
 
         private async Task<bool> IsAdvancedForStudentAsync(Guid studentId)
@@ -562,10 +565,15 @@ namespace SchoolManager.Services.Implementations
         }
 
         public async Task<(bool Success, string Message, Guid? StudentSubjectAssignmentId)> AddSubjectEnrollmentAsync(
-            Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false)
+            Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false, Guid? trimesterId = null, string? entryType = null)
         {
             if (studentId == Guid.Empty || subjectAssignmentId == Guid.Empty)
                 return (false, "Datos inválidos.", null);
+
+            var modular = await _modularEnrollmentService.EnrollSubjectAsync(
+                new ModularSubjectEnrollmentRequest(studentId, subjectAssignmentId, trimesterId, entryType, asCarryOver));
+            if (modular.Handled)
+                return (modular.Success, modular.Message, modular.StudentSubjectAssignmentId);
 
             var subjectAssignment = await _context.SubjectAssignments.AsNoTracking()
                 .FirstOrDefaultAsync(sa => sa.Id == subjectAssignmentId);

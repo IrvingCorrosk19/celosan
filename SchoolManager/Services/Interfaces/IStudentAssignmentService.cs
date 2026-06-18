@@ -36,7 +36,7 @@ public interface IStudentAssignmentService
 
     /// <summary>Inscribe una materia (oferta académica) al estudiante.</summary>
     Task<(bool Success, string Message, Guid? StudentSubjectAssignmentId)> AddSubjectEnrollmentAsync(
-        Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false);
+        Guid studentId, Guid subjectAssignmentId, bool asCarryOver = false, Guid? trimesterId = null, string? entryType = null);
 
     /// <summary>Catálogo de materias disponibles para inscripción (incluye otros grados si modo avanzado).</summary>
     Task<IReadOnlyList<SubjectCatalogItemDto>> GetAvailableSubjectCatalogAsync(Guid studentId, Guid? schoolId, bool advancedMode);
