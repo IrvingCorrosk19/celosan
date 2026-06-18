@@ -46,10 +46,12 @@
                         <table class="table table-hover" id="periodsTable">
                             <thead>
                                 <tr>
+                                    <th>Nombre</th>
                                     <th>Fecha Inicio</th>
                                     <th>Fecha Fin</th>
                                     <th>Estado</th>
                                     <th>Cupo Máximo</th>
+                                    <th>Máx. Materias</th>
                                     <th>Asignación Auto</th>
                                     <th>Período Activo</th>
                                     <th>Acciones</th>
@@ -59,6 +61,7 @@
                                 @foreach (var period in Model)
                                 {
                                     <tr>
+                                        <td>@(period.Name ?? "Prematrícula")</td>
                                         <td>@TimeZoneService.ToLocalDisplayString(period.StartDate, "dd/MM/yyyy HH:mm")</td>
                                         <td>@TimeZoneService.ToLocalDisplayString(period.EndDate, "dd/MM/yyyy HH:mm")</td>
                                         <td>
@@ -72,6 +75,7 @@
                                             }
                                         </td>
                                         <td>@period.MaxCapacityPerGroup</td>
+                                        <td>@(period.MaxSubjectsAllowed?.ToString() ?? "Sin límite")</td>
                                         <td>
                                             @if (period.AutoAssignByShift)
                                             {

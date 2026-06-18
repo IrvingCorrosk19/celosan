@@ -1,0 +1,67 @@
+@model IReadOnlyList<SchoolManager.Models.StudentSubjectWithdrawalRequest>
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Solicitudes de retiro";
+}
+
+<div class="container-fluid">
+    <h3>Solicitudes de retiro por asignatura</h3>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+    }
+
+    <div class="card">
+        <div class="card-body">
+            @if (!Model.Any())
+            {
+                <div class="alert alert-info">No hay solicitudes pendientes.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Estudiante</th>
+                                <th>Materia</th>
+                                <th>Grupo</th>
+                                <th>Docente solicitante</th>
+                                <th>Motivo</th>
+                                <th>Observación</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var request in Model)
+                            {
+                                <tr>
+                                    <td>@request.Student.Name @request.Student.LastName</td>
+                                    <td>@request.SubjectAssignment.Subject.Name</td>
+                                    <td>@request.SubjectAssignment.Group.Name</td>
+                                    <td>@request.RequestedByUser.Name @request.RequestedByUser.LastName</td>
+                                    <td>@request.Reason</td>
+                                    <td>@request.Observation</td>
+                                    <td>
+                                        <form asp-action="ReviewSubjectWithdrawal" method="post" class="mb-2">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="requestId" value="@request.Id" />
+                                            <textarea class="form-control form-control-sm mb-1" name="reviewObservation" placeholder="Observación del Director"></textarea>
+                                            <button class="btn btn-sm btn-success" name="approve" value="true">Aprobar</button>
+                                            <button class="btn btn-sm btn-danger" name="approve" value="false">Rechazar</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

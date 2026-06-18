@@ -1,0 +1,139 @@
+@model SchoolManager.Services.Interfaces.CelosamPrematriculationDashboardDto
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Prematrícula modular";
+}
+
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-12">
+            <h3>Prematrícula modular CELOSAM</h3>
+            <p class="text-muted mb-0">@Model.Prematriculation.Student.Name @Model.Prematriculation.Student.LastName - @(Model.Period.Name ?? "Periodo activo")</p>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="card"><div class="card-body"><small>Total plan</small><h4>@Model.Progress.TotalSubjects</h4></div></div></div>
+        <div class="col-md-3"><div class="card"><div class="card-body"><small>Aprobadas</small><h4>@Model.Progress.ApprovedSubjects</h4></div></div></div>
+        <div class="col-md-3"><div class="card"><div class="card-body"><small>Pendientes</small><h4>@Model.Progress.PendingSubjects</h4></div></div></div>
+        <div class="col-md-3"><div class="card"><div class="card-body"><small>Avance</small><h4>@Model.Progress.ProgressPercent%</h4></div></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header"><strong>Materias disponibles</strong></div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Materia</th>
+                                    <th>Nivel</th>
+                                    <th>Estado</th>
+                                    <th>Cupos</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in Model.AvailableSubjects)
+                                {
+                                    <tr>
+                                        <td>@item.SubjectName</td>
+                                        <td>@item.GradeName</td>
+                                        <td>
+                                            <span class="badge @(item.CanSelect ? "bg-success" : item.IsApproved ? "bg-primary" : item.IsFailedOrWithdrawn ? "bg-warning" : "bg-secondary")">@item.Status</span>
+                                            <div class="small text-muted">@item.Message</div>
+                                        </td>
+                                        <td>@item.AvailableGroups</td>
+                                        <td class="text-end">
+                                            @if (item.CanSelect)
+                                            {
+                                                <form asp-action="SelectModularSubject" method="post">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="prematriculationId" value="@Model.Prematriculation.Id" />
+                                                    <input type="hidden" name="curriculumSubjectId" value="@item.CurriculumSubjectId" />
+                                                    <button class="btn btn-sm btn-primary">Agregar</button>
+                                                </form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header"><strong>Selección actual</strong></div>
+                <div class="card-body">
+                    @if (!Model.SelectedSubjects.Any())
+                    {
+                        <div class="alert alert-info">Todavía no hay materias seleccionadas.</div>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.SelectedSubjects)
+                        {
+                            <div class="border rounded p-2 mb-2">
+                                <strong>@item.SubjectName</strong> <span class="text-muted">@item.GradeName</span>
+                                <div class="small">Grupo: @(item.GroupName ?? "Se asigna al finalizar")</div>
+                                <div class="small">Docente: @(item.TeacherName ?? "Por asignar docente")</div>
+                                <div class="small">Horario: @item.ScheduleText</div>
+                                @if (!string.IsNullOrWhiteSpace(item.ValidationMessage))
+                                {
+                                    <div class="small text-danger">@item.ValidationMessage</div>
+                                }
+                                @if (item.Status != "Finalized")
+                                {
+                                    <form asp-action="RemoveModularSubject" method="post" class="mt-2">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="prematriculationId" value="@Model.Prematriculation.Id" />
+                                        <input type="hidden" name="selectionId" value="@item.SelectionId" />
+                                        <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+                                    </form>
+                                }
+                            </div>
+                        }
+                    }
+
+                    @if (Model.Prematriculation.Status == "Finalizada")
+                    {
+                        <div class="alert alert-success">Prematrícula finalizada. Para cambios, Secretaría debe reabrirla.</div>
+                    }
+                    else
+                    {
+                        <form asp-action="FinalizeModular" method="post" class="mt-3">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Prematriculation.Id" />
+                            <button class="btn btn-success w-100">Finalizar Prematrícula</button>
+                        </form>
+                    }
+
+                    @if (User.IsInRole("admin") || User.IsInRole("superadmin"))
+                    {
+                        <hr />
+                        <form asp-action="ReopenModular" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Prematriculation.Id" />
+                            <textarea class="form-control mb-2" name="reason" placeholder="Motivo de reapertura"></textarea>
+                            <button class="btn btn-warning w-100">Reabrir para modificación</button>
+                        </form>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

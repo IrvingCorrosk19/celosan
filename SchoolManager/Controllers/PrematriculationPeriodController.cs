@@ -54,10 +54,14 @@ public class PrematriculationPeriodController : Controller
             var period = new PrematriculationPeriod
             {
                 SchoolId = currentUser.SchoolId.Value,
+                Name = dto.Name,
+                AcademicYearId = dto.AcademicYearId,
+                TrimesterId = dto.TrimesterId,
                 StartDate = dto.StartDate,
                 EndDate = dto.EndDate,
                 IsActive = dto.IsActive,
                 MaxCapacityPerGroup = dto.MaxCapacityPerGroup,
+                MaxSubjectsAllowed = dto.MaxSubjectsAllowed,
                 AutoAssignByShift = dto.AutoAssignByShift
             };
 
@@ -88,10 +92,14 @@ public class PrematriculationPeriodController : Controller
         {
             Id = period.Id,
             SchoolId = period.SchoolId,
+            Name = period.Name,
+            AcademicYearId = period.AcademicYearId,
+            TrimesterId = period.TrimesterId,
             StartDate = period.StartDate,
             EndDate = period.EndDate,
             IsActive = period.IsActive,
             MaxCapacityPerGroup = period.MaxCapacityPerGroup,
+            MaxSubjectsAllowed = period.MaxSubjectsAllowed,
             AutoAssignByShift = period.AutoAssignByShift
         };
 
@@ -118,9 +126,13 @@ public class PrematriculationPeriodController : Controller
                 return Unauthorized();
 
             period.StartDate = dto.StartDate;
+            period.Name = dto.Name;
+            period.AcademicYearId = dto.AcademicYearId;
+            period.TrimesterId = dto.TrimesterId;
             period.EndDate = dto.EndDate;
             period.IsActive = dto.IsActive;
             period.MaxCapacityPerGroup = dto.MaxCapacityPerGroup;
+            period.MaxSubjectsAllowed = dto.MaxSubjectsAllowed;
             period.AutoAssignByShift = dto.AutoAssignByShift;
 
             await _periodService.UpdateAsync(period, currentUser.Id);

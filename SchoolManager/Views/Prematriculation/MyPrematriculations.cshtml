@@ -104,6 +104,9 @@
                                                 <a href="@Url.Action("Details", new { id = item.Id })" class="btn btn-sm btn-info" title="Ver detalles">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
+                                                <a href="@Url.Action("ModularSubjects", new { id = item.Id })" class="btn btn-sm btn-primary" title="Seleccionar materias">
+                                                    <i class="fas fa-list-check"></i>
+                                                </a>
                                                 @if (item.Status == "Matriculado")
                                                 {
                                                     <a href="@Url.Action("Certificate", new { id = item.Id })" class="btn btn-sm btn-success" target="_blank" title="Ver comprobante">

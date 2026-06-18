@@ -7,6 +7,12 @@ public partial class PrematriculationPeriod
     public Guid Id { get; set; }
     
     public Guid SchoolId { get; set; }
+
+    public string? Name { get; set; }
+
+    public Guid? AcademicYearId { get; set; }
+
+    public Guid? TrimesterId { get; set; }
     
     public DateTime StartDate { get; set; }
     
@@ -15,6 +21,8 @@ public partial class PrematriculationPeriod
     public bool IsActive { get; set; }
     
     public int MaxCapacityPerGroup { get; set; }
+
+    public int? MaxSubjectsAllowed { get; set; }
     
     public bool AutoAssignByShift { get; set; }
     
@@ -29,11 +37,21 @@ public partial class PrematriculationPeriod
     public Guid? UpdatedBy { get; set; }
     
     public virtual School School { get; set; } = null!;
+
+    public virtual AcademicYear? AcademicYear { get; set; }
+
+    public virtual Trimester? Trimester { get; set; }
     
     public virtual User? CreatedByUser { get; set; }
     
     public virtual User? UpdatedByUser { get; set; }
     
     public virtual ICollection<Prematriculation> Prematriculations { get; set; } = new List<Prematriculation>();
+
+    public virtual ICollection<StudentPrematriculationSubjectSelection> SubjectSelections { get; set; } = new List<StudentPrematriculationSubjectSelection>();
+
+    public virtual ICollection<PrematriculationReceipt> Receipts { get; set; } = new List<PrematriculationReceipt>();
+
+    public virtual ICollection<PrematriculationReopenAuthorization> ReopenAuthorizations { get; set; } = new List<PrematriculationReopenAuthorization>();
 }
 

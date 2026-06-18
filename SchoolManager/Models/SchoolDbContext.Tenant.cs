@@ -161,5 +161,21 @@ public partial class SchoolDbContext
         modelBuilder.Entity<PrematriculationPeriod>().HasQueryFilter(p =>
             _tenantContext.BypassTenantFilter ||
             p.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<StudentPrematriculationSubjectSelection>().HasQueryFilter(s =>
+            _tenantContext.BypassTenantFilter ||
+            s.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<PrematriculationReceipt>().HasQueryFilter(r =>
+            _tenantContext.BypassTenantFilter ||
+            r.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<PrematriculationReopenAuthorization>().HasQueryFilter(a =>
+            _tenantContext.BypassTenantFilter ||
+            a.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<StudentSubjectWithdrawalRequest>().HasQueryFilter(r =>
+            _tenantContext.BypassTenantFilter ||
+            r.SchoolId == _tenantContext.SchoolId);
     }
 }

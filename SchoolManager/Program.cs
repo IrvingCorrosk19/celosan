@@ -240,6 +240,8 @@ builder.Services.AddScoped<IModularEnrollmentService, ModularEnrollmentService>(
 builder.Services.AddScoped<IAcademicCreditService, AcademicCreditService>();
 builder.Services.AddScoped<IEquivalencyService, EquivalencyService>();
 builder.Services.AddScoped<IModularPromotionService, ModularPromotionService>();
+builder.Services.AddScoped<ICelosamPrematriculationModuleService, CelosamPrematriculationModuleService>();
+builder.Services.AddScoped<ISubjectWithdrawalRequestService, SubjectWithdrawalRequestService>();
 builder.Services.AddScoped<IAreaService, AreaService>();
 builder.Services.AddScoped<ISpecialtyService, SpecialtyService>();
 builder.Services.AddScoped<IShiftService, ShiftService>();

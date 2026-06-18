@@ -17,6 +17,7 @@ public class PrematriculationController : Controller
     private readonly ICurrentUserService _currentUserService;
     private readonly IStudentService _studentService;
     private readonly IGradeLevelService _gradeLevelService;
+    private readonly ICelosamPrematriculationModuleService _celosamPrematriculationModuleService;
     private readonly SchoolDbContext _context;
     private readonly ILogger<PrematriculationController> _logger;
 
@@ -26,6 +27,7 @@ public class PrematriculationController : Controller
         ICurrentUserService currentUserService,
         IStudentService studentService,
         IGradeLevelService gradeLevelService,
+        ICelosamPrematriculationModuleService celosamPrematriculationModuleService,
         SchoolDbContext context,
         ILogger<PrematriculationController> logger)
     {
@@ -34,6 +36,7 @@ public class PrematriculationController : Controller
         _currentUserService = currentUserService;
         _studentService = studentService;
         _gradeLevelService = gradeLevelService;
+        _celosamPrematriculationModuleService = celosamPrematriculationModuleService;
         _context = context;
         _logger = logger;
     }
@@ -631,6 +634,71 @@ public class PrematriculationController : Controller
     public IActionResult ApplyAcademicYearChangesPage()
     {
         return View("ApplyAcademicYearChanges");
+    }
+
+    [Authorize(Roles = "acudiente,parent,student,estudiante,admin,superadmin")]
+    [HttpGet]
+    public async Task<IActionResult> ModularSubjects(Guid id)
+    {
+        var model = await _celosamPrematriculationModuleService.GetDashboardAsync(id);
+        if (model == null)
+            return NotFound();
+
+        return View(model);
+    }
+
+    [Authorize(Roles = "acudiente,parent,student,estudiante,admin,superadmin")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SelectModularSubject(Guid prematriculationId, Guid curriculumSubjectId)
+    {
+        var result = await _celosamPrematriculationModuleService.SelectSubjectAsync(prematriculationId, curriculumSubjectId);
+        TempData[result.Success ? "SuccessMessage" : "ErrorMessage"] = result.Message;
+        return RedirectToAction(nameof(ModularSubjects), new { id = prematriculationId });
+    }
+
+    [Authorize(Roles = "acudiente,parent,student,estudiante,admin,superadmin")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveModularSubject(Guid prematriculationId, Guid selectionId)
+    {
+        var result = await _celosamPrematriculationModuleService.RemoveSubjectAsync(selectionId);
+        TempData[result.Success ? "SuccessMessage" : "ErrorMessage"] = result.Message;
+        return RedirectToAction(nameof(ModularSubjects), new { id = prematriculationId });
+    }
+
+    [Authorize(Roles = "acudiente,parent,student,estudiante,admin,superadmin")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> FinalizeModular(Guid id)
+    {
+        var result = await _celosamPrematriculationModuleService.FinalizeAsync(id);
+        TempData[result.Success ? "SuccessMessage" : "ErrorMessage"] = result.Message;
+        if (result.Success && result.ReceiptId.HasValue)
+            return RedirectToAction(nameof(ModularReceiptPdf), new { receiptId = result.ReceiptId.Value });
+
+        return RedirectToAction(nameof(ModularSubjects), new { id });
+    }
+
+    [Authorize(Roles = "admin,superadmin")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReopenModular(Guid id, string reason)
+    {
+        var result = await _celosamPrematriculationModuleService.ReopenAsync(id, reason);
+        TempData[result.Success ? "SuccessMessage" : "ErrorMessage"] = result.Message;
+        return RedirectToAction(nameof(ModularSubjects), new { id });
+    }
+
+    [Authorize(Roles = "acudiente,parent,student,estudiante,admin,superadmin")]
+    [HttpGet]
+    public async Task<IActionResult> ModularReceiptPdf(Guid receiptId)
+    {
+        var pdf = await _celosamPrematriculationModuleService.GenerateReceiptPdfAsync(receiptId);
+        if (pdf == null)
+            return NotFound();
+
+        return File(pdf, "application/pdf", $"comprobante-prematricula-{receiptId:N}.pdf");
     }
 }
 

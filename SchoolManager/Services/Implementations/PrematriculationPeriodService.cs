@@ -59,10 +59,14 @@ public class PrematriculationPeriodService : IPrematriculationPeriodService
             {
                 Id = p.Id,
                 SchoolId = p.SchoolId,
+                Name = p.Name,
+                AcademicYearId = p.AcademicYearId,
+                TrimesterId = p.TrimesterId,
                 StartDate = p.StartDate,
                 EndDate = p.EndDate,
                 IsActive = p.IsActive,
                 MaxCapacityPerGroup = p.MaxCapacityPerGroup,
+                MaxSubjectsAllowed = p.MaxSubjectsAllowed,
                 AutoAssignByShift = p.AutoAssignByShift,
                 CreatedAt = p.CreatedAt,
                 IsPeriodActive = p.StartDate <= now && p.EndDate >= now

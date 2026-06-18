@@ -26,6 +26,12 @@
                         <input type="hidden" asp-for="SchoolId" />
                         <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
 
+                        <div class="mb-3">
+                            <label asp-for="Name" class="form-label">Nombre del período</label>
+                            <input asp-for="Name" class="form-control" />
+                            <span asp-validation-for="Name" class="text-danger"></span>
+                        </div>
+
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <label asp-for="StartDate" class="form-label">Fecha de Inicio *</label>
@@ -45,6 +51,14 @@
                                 <input asp-for="MaxCapacityPerGroup" type="number" class="form-control" min="1" required />
                                 <span asp-validation-for="MaxCapacityPerGroup" class="text-danger"></span>
                             </div>
+                            <div class="col-md-6">
+                                <label asp-for="MaxSubjectsAllowed" class="form-label">Máximo de Materias</label>
+                                <input asp-for="MaxSubjectsAllowed" type="number" class="form-control" min="1" />
+                                <span asp-validation-for="MaxSubjectsAllowed" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
                             <div class="col-md-6">
                                 <div class="form-check mt-4 pt-3">
                                     <input asp-for="AutoAssignByShift" type="checkbox" class="form-check-input" />

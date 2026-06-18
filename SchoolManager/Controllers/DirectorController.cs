@@ -13,11 +13,16 @@ namespace SchoolManager.Controllers
     {
         private readonly IDirectorService _directorService;
         private readonly ITrimesterService _trimesterService;
+        private readonly ISubjectWithdrawalRequestService _withdrawalRequestService;
 
-        public DirectorController(IDirectorService directorService, ITrimesterService trimesterService)
+        public DirectorController(
+            IDirectorService directorService,
+            ITrimesterService trimesterService,
+            ISubjectWithdrawalRequestService withdrawalRequestService)
         {
             _directorService = directorService;
             _trimesterService = trimesterService;
+            _withdrawalRequestService = withdrawalRequestService;
         }
 
         public async Task<IActionResult> Index()
@@ -76,6 +81,22 @@ namespace SchoolManager.Controllers
                 };
                 return View("Director", emptyModel);
             }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> SubjectWithdrawalRequests()
+        {
+            var requests = await _withdrawalRequestService.GetPendingAsync();
+            return View(requests);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReviewSubjectWithdrawal(Guid requestId, bool approve, string? reviewObservation)
+        {
+            var result = await _withdrawalRequestService.ReviewAsync(requestId, approve, reviewObservation);
+            TempData[result.Success ? "SuccessMessage" : "ErrorMessage"] = result.Message;
+            return RedirectToAction(nameof(SubjectWithdrawalRequests));
         }
 
         [HttpPost]
