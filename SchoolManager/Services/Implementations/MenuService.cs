@@ -29,6 +29,30 @@ namespace SchoolManager.Services.Implementations
                     Url = "/Student/Index",
                     RequiredRoles = new[] { "student", "estudiante" }
                 },
+                new MenuItem
+                {
+                    Title = "Prematrícula",
+                    Icon = "fas fa-user-plus",
+                    Url = "#",
+                    RequiredRoles = new[] { "acudiente", "parent", "student", "estudiante" },
+                    SubItems = new List<MenuItem>
+                    {
+                        new MenuItem
+                        {
+                            Title = "Mis Prematrículas",
+                            Icon = "far fa-circle",
+                            Url = "/Prematriculation/MyPrematriculations",
+                            RequiredRoles = new[] { "acudiente", "parent", "student", "estudiante" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Nueva Prematrícula",
+                            Icon = "far fa-circle",
+                            Url = "/Prematriculation/Create",
+                            RequiredRoles = new[] { "acudiente", "parent", "student", "estudiante" }
+                        }
+                    }
+                },
                 new MenuItem 
                 { 
                     Title = "Portal Docente", 

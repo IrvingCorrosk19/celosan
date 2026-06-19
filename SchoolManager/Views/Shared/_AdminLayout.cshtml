@@ -183,7 +183,6 @@
                                 </li>
                             </ul>
                         </li>
-                        @* Oculto por el momento - Prematrícula (acudiente/parent/student)
                         @if (userRole == "acudiente" || userRole == "parent" || userRole == "student" || userRole == "estudiante") {
                         <li class="nav-item has-treeview">
                             <a href="#" class="nav-link">
@@ -209,7 +208,6 @@
                             </ul>
                         </li>
                         }
-                        *@
                         @if (userRole == "student" || userRole == "estudiante") {
                         <li class="nav-item">
                                 <a href="@Url.Action("Index", "StudentReport")" class="nav-link">
