@@ -173,15 +173,37 @@ public class PrematriculationService : IPrematriculationService
     public async Task<List<AvailableGroupsDto>> GetAvailableGroupsAsync(Guid schoolId, Guid? gradeId)
     {
         var query = _context.Groups.Where(g => g.SchoolId == schoolId);
+        string? selectedGradeName = null;
+
+        var nightShiftId = await _context.Shifts
+            .Where(s => s.SchoolId == schoolId && s.Name == "Noche" && s.IsActive)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync();
+
+        if (nightShiftId.HasValue)
+        {
+            query = query.Where(g => g.ShiftId == nightShiftId.Value || g.Shift == "Noche");
+        }
         
         if (gradeId.HasValue)
         {
+            selectedGradeName = await _context.GradeLevels
+                .Where(g => g.Id == gradeId.Value)
+                .Select(g => g.Name)
+                .FirstOrDefaultAsync();
+
             // Filtrar por grado si se especifica
             query = query.Where(g => _context.SubjectAssignments
                 .Any(sa => sa.GroupId == g.Id && sa.GradeLevelId == gradeId.Value));
         }
 
         var groups = await query.ToListAsync();
+        if (!string.IsNullOrWhiteSpace(selectedGradeName))
+        {
+            groups = groups
+                .Where(g => IsGroupCompatibleWithGrade(g, selectedGradeName))
+                .ToList();
+        }
 
         var result = new List<AvailableGroupsDto>();
 
@@ -230,6 +252,27 @@ public class PrematriculationService : IPrematriculationService
         }
 
         return result.OrderBy(g => g.GroupName).ToList();
+    }
+
+    private static bool IsGroupCompatibleWithGrade(Group group, string gradeName)
+    {
+        var gradeNumber = ExtractGradeNumber(gradeName);
+        if (gradeNumber == null)
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(group.Grade))
+            return ExtractGradeNumber(group.Grade) == gradeNumber;
+
+        return group.Name.StartsWith($"{gradeNumber}-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int? ExtractGradeNumber(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"\d+");
+        return match.Success && int.TryParse(match.Value, out var number) ? number : null;
     }
 
     public async Task<int> GetFailedSubjectsCountAsync(Guid studentId)

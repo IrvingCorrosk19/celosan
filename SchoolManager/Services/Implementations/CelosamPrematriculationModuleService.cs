@@ -449,10 +449,13 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
         var subjectIds = subjects.Select(s => s.SubjectId).Distinct().ToList();
         var candidates = await _context.SubjectAssignments
             .Include(sa => sa.Group)
+                .ThenInclude(g => g.ShiftNavigation)
             .AsNoTracking()
             .Where(sa => subjectIds.Contains(sa.SubjectId) &&
                          (sa.SchoolId == null || sa.SchoolId == schoolId) &&
-                         sa.Status != "Closed")
+                         (sa.Status == null || sa.Status != "Closed") &&
+                         (sa.Group.Shift == "Noche" ||
+                          (sa.Group.ShiftNavigation != null && sa.Group.ShiftNavigation.Name == "Noche")))
             .ToListAsync();
 
         var candidateIds = candidates.Select(c => c.Id).ToList();
@@ -475,6 +478,7 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
             var count = candidates.Count(assignment =>
                 assignment.SubjectId == subject.SubjectId &&
                 (!subject.GradeLevelId.HasValue || assignment.GradeLevelId == subject.GradeLevelId.Value) &&
+                IsGroupCompatibleWithGrade(assignment.Group, subject.GradeLevel?.Name ?? subject.LevelName) &&
                 activeCounts.GetValueOrDefault(assignment.Id) + finalizedCounts.GetValueOrDefault(assignment.Id) <
                 (assignment.Group.MaxCapacity ?? period.MaxCapacityPerGroup));
             result[subject.Id] = count;
@@ -486,15 +490,46 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
     private async Task<IReadOnlyList<SubjectAssignment>> GetCandidateAssignmentsAsync(Guid schoolId, CurriculumSubject subject)
     {
         var gradeLevelId = subject.GradeLevelId;
-        return await _context.SubjectAssignments
+        var assignments = await _context.SubjectAssignments
             .Include(sa => sa.Group)
+                .ThenInclude(g => g.ShiftNavigation)
             .Include(sa => sa.TeacherAssignments)
                 .ThenInclude(ta => ta.Teacher)
             .Where(sa => sa.SubjectId == subject.SubjectId &&
                          (sa.SchoolId == null || sa.SchoolId == schoolId) &&
                          (!gradeLevelId.HasValue || sa.GradeLevelId == gradeLevelId.Value) &&
-                         sa.Status != "Closed")
+                         (sa.Status == null || sa.Status != "Closed") &&
+                         (sa.Group.Shift == "Noche" ||
+                          (sa.Group.ShiftNavigation != null && sa.Group.ShiftNavigation.Name == "Noche")))
             .ToListAsync();
+
+        return assignments
+            .Where(a => IsGroupCompatibleWithGrade(a.Group, subject.GradeLevel?.Name ?? subject.LevelName))
+            .ToList();
+    }
+
+    private static bool IsGroupCompatibleWithGrade(Group? group, string? gradeName)
+    {
+        if (group == null)
+            return false;
+
+        var gradeNumber = ExtractGradeNumber(gradeName);
+        if (gradeNumber == null)
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(group.Grade))
+            return ExtractGradeNumber(group.Grade) == gradeNumber;
+
+        return group.Name.StartsWith($"{gradeNumber}-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int? ExtractGradeNumber(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"\d+");
+        return match.Success && int.TryParse(match.Value, out var number) ? number : null;
     }
 
     private async Task<SubjectAssignment?> ResolveBestSubjectAssignmentAsync(

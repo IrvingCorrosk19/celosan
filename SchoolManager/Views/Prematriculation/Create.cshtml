@@ -33,7 +33,22 @@
         <div class="alert alert-info">
             <i class="fas fa-info-circle mr-2"></i>
             <strong>Período Activo:</strong> @TimeZoneService.ToLocalDisplayString(activePeriod.StartDate, "dd/MM/yyyy") - @TimeZoneService.ToLocalDisplayString(activePeriod.EndDate, "dd/MM/yyyy")
+            <div class="small mt-1">
+                Jornada: <strong>@(ViewBag.NocturnalShiftName ?? "Noche")</strong>
+                @if (activePeriod.AcademicYear != null)
+                {
+                    <span> | Año académico: <strong>@activePeriod.AcademicYear.Name</strong></span>
+                }
+            </div>
         </div>
+
+        @if (grades == null || !grades.Any())
+        {
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                No hay niveles nocturnos disponibles. Secretaría debe verificar la malla curricular y las asignaciones de materias para grupos de jornada Noche.
+            </div>
+        }
 
         <div class="row">
             <div class="col-md-8 offset-md-2">

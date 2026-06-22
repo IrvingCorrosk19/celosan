@@ -33,6 +33,24 @@
             <div class="card">
                 <div class="card-header"><strong>Materias disponibles</strong></div>
                 <div class="card-body p-0">
+                    @if (!Model.AvailableSubjects.Any())
+                    {
+                        <div class="alert alert-warning m-3">
+                            <strong>No hay materias disponibles para esta prematrícula.</strong>
+                            <div class="small">
+                                Verifique que exista un período activo, una malla curricular modular activa y materias compatibles con grupos de jornada Noche.
+                            </div>
+                        </div>
+                    }
+                    else if (!Model.AvailableSubjects.Any(s => s.CanSelect))
+                    {
+                        <div class="alert alert-info m-3">
+                            <strong>Hay materias en el plan, pero ninguna está disponible para agregar.</strong>
+                            <div class="small">
+                                Revise los estados mostrados: puede deberse a cupos llenos, materias ya aprobadas/seleccionadas o reglas académicas.
+                            </div>
+                        </div>
+                    }
                     <div class="table-responsive">
                         <table class="table table-sm table-hover mb-0">
                             <thead>
