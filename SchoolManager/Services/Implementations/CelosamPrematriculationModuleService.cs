@@ -127,7 +127,7 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
                 : isSelected
                     ? "Ya seleccionada"
                     : validation.CanEnroll
-                        ? availableGroups > 0 ? "Disponible" : "Sin cupo/horario publicado"
+                        ? availableGroups > 0 ? "Disponible" : "Sin grupo nocturno compatible o sin cupo"
                         : validation.Message;
 
             available.Add(new CelosamAvailableSubjectDto(
@@ -508,12 +508,6 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
             .ToListAsync();
 
         var candidateIds = candidates.Select(c => c.Id).ToList();
-        var scheduledAssignmentIds = await _context.ScheduleEntries.AsNoTracking()
-            .Where(se => candidateIds.Contains(se.TeacherAssignment.SubjectAssignmentId) &&
-                         (!period.AcademicYearId.HasValue || se.AcademicYearId == period.AcademicYearId.Value))
-            .Select(se => se.TeacherAssignment.SubjectAssignmentId)
-            .Distinct()
-            .ToHashSetAsync();
 
         var activeCounts = await _context.StudentSubjectAssignments.AsNoTracking()
             .Where(ssa => candidateIds.Contains(ssa.SubjectAssignmentId) && ssa.IsActive)
@@ -535,7 +529,6 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
                 assignment.SubjectId == subject.SubjectId &&
                 (!subject.GradeLevelId.HasValue || assignment.GradeLevelId == subject.GradeLevelId.Value) &&
                 IsGroupCompatibleWithGrade(assignment.Group, subject.GradeLevel?.Name ?? subject.LevelName) &&
-                scheduledAssignmentIds.Contains(assignment.Id) &&
                 activeCounts.GetValueOrDefault(assignment.Id) + finalizedCounts.GetValueOrDefault(assignment.Id) <
                 (assignment.Group.MaxCapacity ?? period.MaxCapacityPerGroup));
             result[subject.Id] = count;

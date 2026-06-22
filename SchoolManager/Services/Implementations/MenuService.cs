@@ -67,6 +67,37 @@ namespace SchoolManager.Services.Implementations
                     Url = "/TeacherWorkPlan/Index",
                     RequiredRoles = new[] { "teacher", "admin" }
                 },
+                new MenuItem
+                {
+                    Title = "Horarios",
+                    Icon = "fas fa-calendar-alt",
+                    Url = "#",
+                    RequiredRoles = new[] { "admin", "director", "teacher" },
+                    SubItems = new List<MenuItem>
+                    {
+                        new MenuItem
+                        {
+                            Title = "Cargar horarios por docente",
+                            Icon = "fas fa-table",
+                            Url = "/Schedule/ByTeacher",
+                            RequiredRoles = new[] { "admin", "director", "teacher" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Configuración de jornada",
+                            Icon = "fas fa-cog",
+                            Url = "/ScheduleConfiguration/Index",
+                            RequiredRoles = new[] { "admin", "director" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Ajustar bloques horarios",
+                            Icon = "fas fa-clock",
+                            Url = "/TimeSlot/Manage",
+                            RequiredRoles = new[] { "admin", "director" }
+                        }
+                    }
+                },
                 new MenuItem 
                 { 
                     Title = "Portal Director", 
