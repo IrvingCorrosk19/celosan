@@ -2,6 +2,8 @@
 @{
     Layout = "_AdminLayout";
     ViewData["Title"] = "Crear Período de Prematrícula";
+    var academicYears = ViewBag.AcademicYears as IEnumerable<SchoolManager.Models.AcademicYear> ?? Enumerable.Empty<SchoolManager.Models.AcademicYear>();
+    var trimesters = ViewBag.Trimesters as IEnumerable<SchoolManager.Models.Trimester> ?? Enumerable.Empty<SchoolManager.Models.Trimester>();
 }
 
 <div class="container-fluid">
@@ -28,6 +30,31 @@
                             <label asp-for="Name" class="form-label">Nombre del período</label>
                             <input asp-for="Name" class="form-control" placeholder="Prematrícula Segundo Trimestre 2026" />
                             <span asp-validation-for="Name" class="text-danger"></span>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label asp-for="AcademicYearId" class="form-label">Año lectivo *</label>
+                                <select asp-for="AcademicYearId" class="form-select" required>
+                                    <option value="">Seleccione año lectivo</option>
+                                    @foreach (var year in academicYears)
+                                    {
+                                        <option value="@year.Id">@year.Name @(year.IsActive ? "(Activo)" : "")</option>
+                                    }
+                                </select>
+                                <span asp-validation-for="AcademicYearId" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="TrimesterId" class="form-label">Trimestre / período académico *</label>
+                                <select asp-for="TrimesterId" class="form-select" required>
+                                    <option value="">Seleccione trimestre</option>
+                                    @foreach (var trimester in trimesters)
+                                    {
+                                        <option value="@trimester.Id">@trimester.Name @(trimester.IsActive ? "(Activo)" : "")</option>
+                                    }
+                                </select>
+                                <span asp-validation-for="TrimesterId" class="text-danger"></span>
+                            </div>
                         </div>
 
                         <div class="row mb-3">

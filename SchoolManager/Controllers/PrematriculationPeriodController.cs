@@ -4,6 +4,7 @@ using SchoolManager.Dtos;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace SchoolManager.Controllers;
 
@@ -12,15 +13,18 @@ public class PrematriculationPeriodController : Controller
 {
     private readonly IPrematriculationPeriodService _periodService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly SchoolDbContext _context;
     private readonly ILogger<PrematriculationPeriodController> _logger;
 
     public PrematriculationPeriodController(
         IPrematriculationPeriodService periodService,
         ICurrentUserService currentUserService,
+        SchoolDbContext context,
         ILogger<PrematriculationPeriodController> logger)
     {
         _periodService = periodService;
         _currentUserService = currentUserService;
+        _context = context;
         _logger = logger;
     }
 
@@ -34,8 +38,27 @@ public class PrematriculationPeriodController : Controller
         return View(periods);
     }
 
-    public IActionResult Create()
+    private async Task PopulatePeriodCatalogsAsync(Guid schoolId)
     {
+        ViewBag.AcademicYears = await _context.AcademicYears.AsNoTracking()
+            .Where(y => y.SchoolId == schoolId)
+            .OrderByDescending(y => y.IsActive)
+            .ThenByDescending(y => y.StartDate)
+            .ToListAsync();
+        ViewBag.Trimesters = await _context.Trimesters.AsNoTracking()
+            .Where(t => t.SchoolId == schoolId)
+            .OrderBy(t => t.Order)
+            .ThenBy(t => t.StartDate)
+            .ToListAsync();
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        var currentUser = await _currentUserService.GetCurrentUserAsync();
+        if (currentUser?.SchoolId == null)
+            return Unauthorized();
+
+        await PopulatePeriodCatalogsAsync(currentUser.SchoolId.Value);
         return View();
     }
 
@@ -43,7 +66,12 @@ public class PrematriculationPeriodController : Controller
     public async Task<IActionResult> Create(PrematriculationPeriodDto dto)
     {
         if (!ModelState.IsValid)
+        {
+            var invalidUser = await _currentUserService.GetCurrentUserAsync();
+            if (invalidUser?.SchoolId != null)
+                await PopulatePeriodCatalogsAsync(invalidUser.SchoolId.Value);
             return View(dto);
+        }
 
         var currentUser = await _currentUserService.GetCurrentUserAsync();
         if (currentUser?.SchoolId == null)
@@ -74,6 +102,7 @@ public class PrematriculationPeriodController : Controller
         {
             _logger.LogError(ex, "Error al crear período de prematrícula");
             ModelState.AddModelError("", "Error al crear el período de prematrícula: " + ex.Message);
+            await PopulatePeriodCatalogsAsync(currentUser.SchoolId.Value);
             return View(dto);
         }
     }
@@ -103,6 +132,7 @@ public class PrematriculationPeriodController : Controller
             AutoAssignByShift = period.AutoAssignByShift
         };
 
+        await PopulatePeriodCatalogsAsync(currentUser.SchoolId.Value);
         return View(dto);
     }
 
@@ -110,7 +140,12 @@ public class PrematriculationPeriodController : Controller
     public async Task<IActionResult> Edit(PrematriculationPeriodDto dto)
     {
         if (!ModelState.IsValid)
+        {
+            var invalidUser = await _currentUserService.GetCurrentUserAsync();
+            if (invalidUser?.SchoolId != null)
+                await PopulatePeriodCatalogsAsync(invalidUser.SchoolId.Value);
             return View(dto);
+        }
 
         var currentUser = await _currentUserService.GetCurrentUserAsync();
         if (currentUser == null)
@@ -144,6 +179,8 @@ public class PrematriculationPeriodController : Controller
         {
             _logger.LogError(ex, "Error al actualizar período de prematrícula");
             ModelState.AddModelError("", "Error al actualizar el período: " + ex.Message);
+            if (currentUser.SchoolId != null)
+                await PopulatePeriodCatalogsAsync(currentUser.SchoolId.Value);
             return View(dto);
         }
     }

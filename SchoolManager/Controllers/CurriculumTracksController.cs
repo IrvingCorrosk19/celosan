@@ -6,7 +6,7 @@ using SchoolManager.Services.Interfaces;
 
 namespace SchoolManager.Controllers;
 
-[Authorize(Roles = "superadmin")]
+[Authorize(Roles = "admin,superadmin,secretaria")]
 [Route("SuperAdmin/CurriculumTracks")]
 public class CurriculumTracksController : Controller
 {

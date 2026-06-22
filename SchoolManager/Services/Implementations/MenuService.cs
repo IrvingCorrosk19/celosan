@@ -86,7 +86,7 @@ namespace SchoolManager.Services.Implementations
                     Title = "Administración", 
                     Icon = "fas fa-cogs",
                     Url = "#",
-                    RequiredRoles = new[] { "admin" },
+                    RequiredRoles = new[] { "admin", "secretaria" },
                     SubItems = new List<MenuItem>
                     {
                         new MenuItem 
@@ -102,6 +102,13 @@ namespace SchoolManager.Services.Implementations
                             Icon = "fas fa-layer-group",
                             Url = "/AcademicCatalog/Index",
                             RequiredRoles = new[] { "admin" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Malla y Prerrequisitos",
+                            Icon = "fas fa-project-diagram",
+                            Url = "/SuperAdmin/CurriculumTracks",
+                            RequiredRoles = new[] { "admin", "secretaria" }
                         },
                         new MenuItem 
                         { 
@@ -144,6 +151,34 @@ namespace SchoolManager.Services.Implementations
                             Icon = "fas fa-clipboard-list",
                             Url = "/TeacherWorkPlan/Index",
                             RequiredRoles = new[] { "admin" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Documentos CELOSAM",
+                            Icon = "fas fa-id-card",
+                            Url = "/Celosan/Documents",
+                            RequiredRoles = new[] { "admin", "secretaria" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Créditos / Convalidaciones",
+                            Icon = "fas fa-file-import",
+                            Url = "/Celosan/BulkCredits",
+                            RequiredRoles = new[] { "admin", "secretaria" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Revisión de Convalidaciones",
+                            Icon = "fas fa-exchange-alt",
+                            Url = "/SuperAdmin/Equivalencies",
+                            RequiredRoles = new[] { "admin", "secretaria" }
+                        },
+                        new MenuItem
+                        {
+                            Title = "Reportes CELOSAM",
+                            Icon = "fas fa-chart-bar",
+                            Url = "/Celosan/Reports",
+                            RequiredRoles = new[] { "admin", "secretaria" }
                         }
                     }
                 },

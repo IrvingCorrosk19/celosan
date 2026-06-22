@@ -95,7 +95,9 @@ public class ScheduleController : Controller
         ViewBag.TeachersJson = System.Text.Json.JsonSerializer.Serialize(teachers, jsonOptions);
         ViewBag.TeacherId = effectiveTeacherId;
         ViewBag.AcademicYearId = academicYearId ?? Guid.Empty;
-        ViewBag.IsEditable = isTeacher;
+        ViewBag.IsEditable = isTeacher ||
+                             string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(role, "director", StringComparison.OrdinalIgnoreCase);
         ViewBag.IsTeacher = isTeacher;
         ViewBag.HasNoAcademicYears = academicYears.Count == 0;
         return View();

@@ -26,6 +26,26 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
         _modularEnrollmentService = modularEnrollmentService;
     }
 
+    private async Task AddAuditAsync(Guid schoolId, Guid? userId, string action, string resource, string details)
+    {
+        var user = userId.HasValue
+            ? await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId.Value)
+            : null;
+
+        _context.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            SchoolId = schoolId,
+            UserId = userId,
+            UserName = user == null ? null : $"{user.Name} {user.LastName}".Trim(),
+            UserRole = user?.Role,
+            Action = action,
+            Resource = resource,
+            Details = details,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
     public async Task<CelosamPrematriculationDashboardDto?> GetDashboardAsync(Guid prematriculationId)
     {
         var prematriculation = await _context.Prematriculations
@@ -209,6 +229,14 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
             });
         }
 
+        var userId = await _currentUserService.GetCurrentUserIdAsync();
+        await AddAuditAsync(
+            prematriculation.SchoolId,
+            userId,
+            "Prematriculation.SubjectSelected",
+            "StudentPrematriculationSubjectSelection",
+            $"Prematrícula {prematriculation.Id}: materia {subject.Subject.Name} seleccionada.");
+
         await _context.SaveChangesAsync();
         return (true, $"{subject.Subject.Name} agregada a la prematricula.");
     }
@@ -227,6 +255,14 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
         selection.Status = "Removed";
         selection.UpdatedAt = DateTime.UtcNow;
         selection.UpdatedBy = await _currentUserService.GetCurrentUserIdAsync();
+
+        await AddAuditAsync(
+            selection.Prematriculation.SchoolId,
+            selection.UpdatedBy,
+            "Prematriculation.SubjectRemoved",
+            "StudentPrematriculationSubjectSelection",
+            $"Prematrícula {selection.PrematriculationId}: selección {selection.Id} removida.");
+
         await _context.SaveChangesAsync();
         return (true, "Materia removida de la prematricula.");
     }
@@ -302,6 +338,12 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
         prematriculation.UpdatedAt = DateTime.UtcNow;
 
         var receipt = await CreateReceiptAsync(prematriculation);
+        await AddAuditAsync(
+            prematriculation.SchoolId,
+            await _currentUserService.GetCurrentUserIdAsync(),
+            "Prematriculation.Finalized",
+            "Prematriculation",
+            $"Prematrícula {prematriculation.Id} finalizada con {selections.Count} materia(s). Comprobante {receipt.Consecutive}.");
         await _context.SaveChangesAsync();
         return new CelosamFinalizeResult(true, "Prematricula finalizada correctamente.", receipt.Id);
     }
@@ -332,6 +374,13 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
             AuthorizedAt = DateTime.UtcNow,
             AuthorizedBy = currentUserId.Value
         });
+
+        await AddAuditAsync(
+            prematriculation.SchoolId,
+            currentUserId,
+            "Prematriculation.Reopened",
+            "Prematriculation",
+            $"Prematrícula {prematriculation.Id} reabierta. Motivo: {reason.Trim()}");
 
         await _context.SaveChangesAsync();
         return (true, "Prematricula reabierta para modificacion.");
@@ -459,6 +508,13 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
             .ToListAsync();
 
         var candidateIds = candidates.Select(c => c.Id).ToList();
+        var scheduledAssignmentIds = await _context.ScheduleEntries.AsNoTracking()
+            .Where(se => candidateIds.Contains(se.TeacherAssignment.SubjectAssignmentId) &&
+                         (!period.AcademicYearId.HasValue || se.AcademicYearId == period.AcademicYearId.Value))
+            .Select(se => se.TeacherAssignment.SubjectAssignmentId)
+            .Distinct()
+            .ToHashSetAsync();
+
         var activeCounts = await _context.StudentSubjectAssignments.AsNoTracking()
             .Where(ssa => candidateIds.Contains(ssa.SubjectAssignmentId) && ssa.IsActive)
             .GroupBy(ssa => ssa.SubjectAssignmentId)
@@ -479,6 +535,7 @@ public class CelosamPrematriculationModuleService : ICelosamPrematriculationModu
                 assignment.SubjectId == subject.SubjectId &&
                 (!subject.GradeLevelId.HasValue || assignment.GradeLevelId == subject.GradeLevelId.Value) &&
                 IsGroupCompatibleWithGrade(assignment.Group, subject.GradeLevel?.Name ?? subject.LevelName) &&
+                scheduledAssignmentIds.Contains(assignment.Id) &&
                 activeCounts.GetValueOrDefault(assignment.Id) + finalizedCounts.GetValueOrDefault(assignment.Id) <
                 (assignment.Group.MaxCapacity ?? period.MaxCapacityPerGroup));
             result[subject.Id] = count;
@@ -673,6 +730,26 @@ public class SubjectWithdrawalRequestService : ISubjectWithdrawalRequestService
         _currentUserService = currentUserService;
     }
 
+    private async Task AddAuditAsync(Guid schoolId, Guid? userId, string action, string resource, string details)
+    {
+        var user = userId.HasValue
+            ? await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId.Value)
+            : null;
+
+        _context.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            SchoolId = schoolId,
+            UserId = userId,
+            UserName = user == null ? null : $"{user.Name} {user.LastName}".Trim(),
+            UserRole = user?.Role,
+            Action = action,
+            Resource = resource,
+            Details = details,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
     public async Task<(bool Success, string Message)> RequestAsync(Guid studentSubjectAssignmentId, string reason, string? observation)
     {
         if (string.IsNullOrWhiteSpace(reason))
@@ -692,7 +769,7 @@ public class SubjectWithdrawalRequestService : ISubjectWithdrawalRequestService
         if (exists)
             return (false, "Ya existe una solicitud pendiente para esta materia.");
 
-        _context.StudentSubjectWithdrawalRequests.Add(new StudentSubjectWithdrawalRequest
+        var request = new StudentSubjectWithdrawalRequest
         {
             Id = Guid.NewGuid(),
             SchoolId = currentUser.SchoolId.Value,
@@ -704,7 +781,15 @@ public class SubjectWithdrawalRequestService : ISubjectWithdrawalRequestService
             Observation = string.IsNullOrWhiteSpace(observation) ? null : observation.Trim(),
             Status = "Pending",
             CreatedAt = DateTime.UtcNow
-        });
+        };
+        _context.StudentSubjectWithdrawalRequests.Add(request);
+        await AddAuditAsync(
+            currentUser.SchoolId.Value,
+            currentUser.Id,
+            "SubjectWithdrawal.Requested",
+            "StudentSubjectWithdrawalRequest",
+            $"Solicitud {request.Id}: retiro solicitado para inscripción {enrollment.Id}. Motivo: {reason.Trim()}");
+
         await _context.SaveChangesAsync();
         return (true, "Solicitud de retiro enviada al Director.");
     }
@@ -748,6 +833,13 @@ public class SubjectWithdrawalRequestService : ISubjectWithdrawalRequestService
             request.StudentSubjectAssignment.UpdatedAt = DateTime.UtcNow;
             request.StudentSubjectAssignment.UpdatedBy = currentUser.Id;
         }
+
+        await AddAuditAsync(
+            request.SchoolId,
+            currentUser.Id,
+            approve ? "SubjectWithdrawal.Approved" : "SubjectWithdrawal.Rejected",
+            "StudentSubjectWithdrawalRequest",
+            $"Solicitud {request.Id}: {(approve ? "aprobada" : "rechazada")}. Observación: {request.ReviewObservation ?? "Sin observación"}");
 
         await _context.SaveChangesAsync();
         return (true, approve ? "Retiro aprobado." : "Retiro rechazado.");

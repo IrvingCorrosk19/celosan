@@ -209,6 +209,13 @@ public class AcademicCreditService : IAcademicCreditService
 
     public async Task<StudentAcademicCredit> CreateCreditAsync(StudentAcademicCredit credit)
     {
+        if (string.Equals(credit.Status, "Valid", StringComparison.OrdinalIgnoreCase) &&
+            credit.FinalScore.HasValue &&
+            credit.FinalScore.Value < 3.0m)
+        {
+            throw new InvalidOperationException("No se puede crear un crédito académico válido con nota menor a 3.0.");
+        }
+
         var existing = await _context.StudentAcademicCredits.FirstOrDefaultAsync(c =>
             c.StudentId == credit.StudentId &&
             c.CurriculumSubjectId == credit.CurriculumSubjectId &&

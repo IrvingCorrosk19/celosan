@@ -6,7 +6,7 @@ using SchoolManager.Services.Interfaces;
 
 namespace SchoolManager.Controllers;
 
-[Authorize(Roles = "superadmin")]
+[Authorize(Roles = "admin,superadmin,secretaria")]
 [Route("SuperAdmin/Equivalencies")]
 public class EquivalenciesController : Controller
 {
@@ -91,10 +91,18 @@ public class EquivalenciesController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var credit = await _equivalencyService.ApproveItemAsync(itemId, userId.Value);
-        TempData[credit == null ? "ErrorMessage" : "SuccessMessage"] = credit == null
-            ? "No se pudo aprobar la convalidacion."
-            : "Convalidacion aprobada y credito academico creado.";
+        try
+        {
+            var credit = await _equivalencyService.ApproveItemAsync(itemId, userId.Value);
+            TempData[credit == null ? "ErrorMessage" : "SuccessMessage"] = credit == null
+                ? "No se pudo aprobar la convalidacion."
+                : "Convalidacion aprobada y credito academico creado.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["ErrorMessage"] = ex.Message;
+        }
+
         return RedirectToAction(nameof(Index));
     }
 

@@ -11,7 +11,11 @@
     <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
         @foreach (var item in menuItems)
         {
-            if (item.SubItems.Any())
+            var filteredSubItems = item.SubItems
+                .Where(subItem => subItem.RequiredRoles.Contains((userRole ?? "guest").ToLower()))
+                .ToList();
+
+            if (filteredSubItems.Any())
             {
                 <li class="nav-item">
                     <a href="@item.Url" class="nav-link">
@@ -22,7 +26,7 @@
                         </p>
                     </a>
                     <ul class="nav nav-treeview">
-                        @foreach (var subItem in item.SubItems)
+                        @foreach (var subItem in filteredSubItems)
                         {
                             <li class="nav-item">
                                 <a href="@subItem.Url" class="nav-link">

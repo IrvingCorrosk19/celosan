@@ -646,7 +646,7 @@ public class PrematriculationController : Controller
         return RedirectToAction(nameof(ModularSubjects), new { id });
     }
 
-    [Authorize(Roles = "admin,superadmin")]
+    [Authorize(Roles = "admin,superadmin,secretaria")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ReopenModular(Guid id, string reason)
