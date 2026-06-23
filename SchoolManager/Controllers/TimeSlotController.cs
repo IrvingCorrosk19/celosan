@@ -157,6 +157,7 @@ public class TimeSlotController : Controller
     }
 
     [HttpPost]
+    [Route("TimeSlot/DeleteAll")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteAll(string confirmation)
     {
@@ -171,8 +172,9 @@ public class TimeSlotController : Controller
         }
 
         var schoolId = user.SchoolId.Value;
-        var slots = await _context.TimeSlots
+        var slots = await _context.TimeSlots.AsNoTracking()
             .Where(t => t.SchoolId == schoolId)
+            .Select(t => t.Id)
             .ToListAsync();
 
         if (slots.Count == 0)
@@ -181,18 +183,26 @@ public class TimeSlotController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var slotIds = slots.Select(t => t.Id).ToList();
-        var entries = await _context.ScheduleEntries
-            .Where(e => slotIds.Contains(e.TimeSlotId))
-            .ToListAsync();
-
         await using var transaction = await _context.Database.BeginTransactionAsync();
-        _context.ScheduleEntries.RemoveRange(entries);
-        _context.TimeSlots.RemoveRange(slots);
-        await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
+        try
+        {
+            var deletedEntries = await _context.ScheduleEntries
+                .Where(e => slots.Contains(e.TimeSlotId))
+                .ExecuteDeleteAsync();
 
-        TempData["Success"] = $"Se eliminaron {slots.Count} bloque(s) horario(s) y {entries.Count} entrada(s) de horario asociada(s).";
+            var deletedSlots = await _context.TimeSlots
+                .Where(t => t.SchoolId == schoolId)
+                .ExecuteDeleteAsync();
+
+            await transaction.CommitAsync();
+            TempData["Success"] = $"Se eliminaron {deletedSlots} bloque(s) horario(s) y {deletedEntries} entrada(s) de horario asociada(s).";
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            TempData["Error"] = $"No se pudieron eliminar los bloques horarios: {ex.Message}";
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
