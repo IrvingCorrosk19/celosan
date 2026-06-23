@@ -28,11 +28,8 @@ public class TimeSlotController : Controller
         var user = await _currentUserService.GetCurrentUserAsync();
         if (user?.SchoolId == null)
             return RedirectToAction("Index", "Home");
-        var list = await _context.TimeSlots
-            .Where(t => t.SchoolId == user.SchoolId.Value)
-            .OrderBy(t => t.DisplayOrder)
-            .ThenBy(t => t.StartTime)
-            .ToListAsync();
+        var list = await GetTimeSlotsForCurrentSchoolAsync(user.SchoolId.Value);
+        await PopulateTimeSlotStatsAsync(list);
         return View("Index", list);
     }
 
@@ -42,11 +39,8 @@ public class TimeSlotController : Controller
         if (user?.SchoolId == null)
             return RedirectToAction("Index", "Home");
 
-        var list = await _context.TimeSlots
-            .Where(t => t.SchoolId == user.SchoolId.Value)
-            .OrderBy(t => t.DisplayOrder)
-            .ThenBy(t => t.StartTime)
-            .ToListAsync();
+        var list = await GetTimeSlotsForCurrentSchoolAsync(user.SchoolId.Value);
+        await PopulateTimeSlotStatsAsync(list);
         return View(list);
     }
 
@@ -160,5 +154,68 @@ public class TimeSlotController : Controller
             TempData["Success"] = "Bloque horario eliminado.";
         }
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteAll(string confirmation)
+    {
+        var user = await _currentUserService.GetCurrentUserAsync();
+        if (user?.SchoolId == null)
+            return RedirectToAction("Index", "Home");
+
+        if (!string.Equals(confirmation?.Trim(), "ELIMINAR", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["Error"] = "Debe escribir ELIMINAR para confirmar el borrado total de bloques horarios.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var schoolId = user.SchoolId.Value;
+        var slots = await _context.TimeSlots
+            .Where(t => t.SchoolId == schoolId)
+            .ToListAsync();
+
+        if (slots.Count == 0)
+        {
+            TempData["Success"] = "No hay bloques horarios para eliminar.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var slotIds = slots.Select(t => t.Id).ToList();
+        var entries = await _context.ScheduleEntries
+            .Where(e => slotIds.Contains(e.TimeSlotId))
+            .ToListAsync();
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        _context.ScheduleEntries.RemoveRange(entries);
+        _context.TimeSlots.RemoveRange(slots);
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        TempData["Success"] = $"Se eliminaron {slots.Count} bloque(s) horario(s) y {entries.Count} entrada(s) de horario asociada(s).";
+        return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<List<TimeSlot>> GetTimeSlotsForCurrentSchoolAsync(Guid schoolId)
+    {
+        return await _context.TimeSlots
+            .Where(t => t.SchoolId == schoolId)
+            .OrderBy(t => t.DisplayOrder)
+            .ThenBy(t => t.StartTime)
+            .ThenBy(t => t.Name)
+            .ToListAsync();
+    }
+
+    private async Task PopulateTimeSlotStatsAsync(IReadOnlyCollection<TimeSlot> slots)
+    {
+        var slotIds = slots.Select(t => t.Id).ToList();
+        var scheduleEntryCount = slotIds.Count == 0
+            ? 0
+            : await _context.ScheduleEntries.CountAsync(e => slotIds.Contains(e.TimeSlotId));
+
+        ViewBag.ActiveTimeSlotCount = slots.Count(t => t.IsActive);
+        ViewBag.InactiveTimeSlotCount = slots.Count(t => !t.IsActive);
+        ViewBag.ScheduleEntryCount = scheduleEntryCount;
+        ViewBag.CanDeleteAllTimeSlots = slots.Any();
     }
 }

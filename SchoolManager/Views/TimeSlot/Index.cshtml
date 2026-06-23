@@ -2,6 +2,10 @@
 @{
     Layout = "_AdminLayout";
     ViewData["Title"] = "Bloques horarios";
+    var activeTimeSlotCount = ViewBag.ActiveTimeSlotCount as int? ?? 0;
+    var inactiveTimeSlotCount = ViewBag.InactiveTimeSlotCount as int? ?? 0;
+    var scheduleEntryCount = ViewBag.ScheduleEntryCount as int? ?? 0;
+    var canDeleteAllTimeSlots = ViewBag.CanDeleteAllTimeSlots as bool? ?? false;
 }
 
 <div class="content-wrapper">
@@ -20,16 +24,34 @@
                     <button type="button" class="close" data-dismiss="alert">&times;</button>
                 </div>
             }
+            @if (TempData["Error"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show">
+                    @TempData["Error"]
+                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+                </div>
+            }
             <div class="card card-outline card-primary">
                 <div class="card-header">
                     <h3 class="card-title">Lista de bloques</h3>
                     <div class="card-tools">
+                        @if (canDeleteAllTimeSlots)
+                        {
+                            <button type="button" class="btn btn-danger btn-sm mr-2" data-toggle="modal" data-target="#deleteAllTimeSlotsModal">
+                                <i class="fas fa-trash-alt"></i> Eliminar todos
+                            </button>
+                        }
                         <a href="@Url.Action("Create")" class="btn btn-primary btn-sm">
                             <i class="fas fa-plus"></i> Nuevo bloque
                         </a>
                     </div>
                 </div>
                 <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>Uso conjunto:</strong> estos bloques alimentan la tabla de <a href="@Url.Action("ByTeacher", "Schedule")">horarios por docente</a>.
+                        Hay <strong>@activeTimeSlotCount</strong> bloque(s) activo(s), <strong>@inactiveTimeSlotCount</strong> inactivo(s) y
+                        <strong>@scheduleEntryCount</strong> entrada(s) de horario usando estos bloques.
+                    </div>
                     @if (Model == null || !Model.Any())
                     {
                         <p class="text-muted">No hay bloques horarios. Cree uno para poder armar el horario por docente.</p>
@@ -85,3 +107,69 @@
         </div>
     </section>
 </div>
+
+@if (canDeleteAllTimeSlots)
+{
+    <div class="modal fade" id="deleteAllTimeSlotsModal" tabindex="-1" role="dialog" aria-labelledby="deleteAllTimeSlotsModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <form asp-action="DeleteAll" method="post" id="deleteAllTimeSlotsForm">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title" id="deleteAllTimeSlotsModalLabel">Eliminar todos los bloques horarios</h5>
+                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            Esta acción eliminará <strong>todos los bloques horarios</strong> de esta escuela.
+                        </p>
+                        <p class="mb-2">
+                            También se eliminarán <strong>@scheduleEntryCount</strong> entrada(s) de horario asociada(s), por eso
+                            <strong>/Schedule/ByTeacher</strong> quedará vacío hasta que cree nuevos bloques y vuelva a cargar horarios.
+                        </p>
+                        <div class="alert alert-warning mb-3">
+                            Esta acción no borra docentes, grupos, materias ni estudiantes.
+                        </div>
+                        <div class="form-group mb-0">
+                            <label for="deleteAllConfirmation">Escriba <strong>ELIMINAR</strong> para confirmar</label>
+                            <input type="text" name="confirmation" id="deleteAllConfirmation" class="form-control" autocomplete="off" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-danger" id="deleteAllTimeSlotsButton" disabled>
+                            Eliminar todos los bloques
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        (function () {
+            var confirmationInput = document.getElementById('deleteAllConfirmation');
+            var submitButton = document.getElementById('deleteAllTimeSlotsButton');
+            var form = document.getElementById('deleteAllTimeSlotsForm');
+            if (!confirmationInput || !submitButton || !form) return;
+
+            confirmationInput.addEventListener('input', function () {
+                submitButton.disabled = confirmationInput.value.trim().toUpperCase() !== 'ELIMINAR';
+            });
+
+            form.addEventListener('submit', function (event) {
+                if (confirmationInput.value.trim().toUpperCase() !== 'ELIMINAR') {
+                    event.preventDefault();
+                    return;
+                }
+
+                var confirmed = window.confirm('Confirmación final: se eliminarán todos los bloques y sus horarios asociados. ¿Desea continuar?');
+                if (!confirmed) event.preventDefault();
+            });
+        })();
+    </script>
+}
