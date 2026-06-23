@@ -129,6 +129,111 @@
             var teacherAssignments = [];
             var entriesByKey = {};
 
+            function normalizeText(value) {
+                return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+            }
+
+            function getId(value) {
+                return value !== undefined && value !== null ? String(value) : '';
+            }
+
+            function uniqueIds(ids) {
+                var seen = {};
+                var result = [];
+                (ids || []).forEach(function (id) {
+                    var normalized = getId(id).toLowerCase();
+                    if (!normalized || seen[normalized]) return;
+                    seen[normalized] = true;
+                    result.push(getId(id));
+                });
+                return result;
+            }
+
+            function readAliasIds(item, primaryId) {
+                var aliases = item.aliasIds || item.AliasIds || [];
+                return uniqueIds([primaryId].concat(aliases));
+            }
+
+            function dedupeAcademicYears(items) {
+                var map = {};
+                (items || []).forEach(function (a) {
+                    var id = getId(a.id || a.Id);
+                    var name = a.name || a.Name || '';
+                    var start = String(a.startDate || a.StartDate || '').substring(0, 10);
+                    var end = String(a.endDate || a.EndDate || '').substring(0, 10);
+                    var key = normalizeText(name) + '|' + start + '|' + end;
+                    if (!key) key = id.toLowerCase();
+                    if (!map[key]) map[key] = a;
+                });
+                return Object.keys(map)
+                    .map(function (k) { return map[k]; })
+                    .sort(function (a, b) {
+                        return String(b.startDate || b.StartDate || '').localeCompare(String(a.startDate || a.StartDate || '')) ||
+                            String(a.name || a.Name || '').localeCompare(String(b.name || b.Name || ''));
+                    });
+            }
+
+            function dedupePeople(items) {
+                var map = {};
+                (items || []).forEach(function (t) {
+                    var id = getId(t.id || t.Id).toLowerCase();
+                    if (id && !map[id]) map[id] = t;
+                });
+                return Object.keys(map)
+                    .map(function (k) { return map[k]; })
+                    .sort(function (a, b) {
+                        var an = a.displayName || (a.name + ' ' + (a.lastName || '')).trim();
+                        var bn = b.displayName || (b.name + ' ' + (b.lastName || '')).trim();
+                        return String(an || '').localeCompare(String(bn || ''));
+                    });
+            }
+
+            function dedupeTimeSlots(items) {
+                var map = {};
+                (items || []).forEach(function (ts) {
+                    var id = getId(ts.id || ts.Id);
+                    var name = ts.name || ts.Name || '';
+                    var shiftName = ts.shiftName || ts.ShiftName || '';
+                    var start = toHhMm(ts.startTime || ts.StartTime);
+                    var end = toHhMm(ts.endTime || ts.EndTime);
+                    var key = normalizeText(shiftName) + '|' + normalizeText(name) + '|' + start + '|' + end;
+                    if (!map[key]) {
+                        ts.aliasIds = readAliasIds(ts, id);
+                        map[key] = ts;
+                    } else {
+                        map[key].aliasIds = uniqueIds((map[key].aliasIds || []).concat(readAliasIds(ts, id)));
+                    }
+                });
+                return Object.keys(map).map(function (k) { return map[k]; });
+            }
+
+            function dedupeTeacherAssignments(items) {
+                var map = {};
+                (items || []).forEach(function (ta) {
+                    var id = getId(ta.teacherAssignmentId || ta.Id || ta.id);
+                    var key = [
+                        ta.subjectId || ta.SubjectId || normalizeText(ta.subject || ta.Subject),
+                        ta.gradeLevelId || ta.GradeLevelId || normalizeText(ta.grade || ta.Grade),
+                        ta.groupId || ta.GroupId || normalizeText(ta.group || ta.Group),
+                        ta.areaId || ta.AreaId || '',
+                        ta.specialtyId || ta.SpecialtyId || ''
+                    ].join('|').toLowerCase();
+                    if (!map[key]) {
+                        ta.aliasIds = readAliasIds(ta, id);
+                        map[key] = ta;
+                    } else {
+                        map[key].aliasIds = uniqueIds((map[key].aliasIds || []).concat(readAliasIds(ta, id)));
+                    }
+                });
+                return Object.keys(map)
+                    .map(function (k) { return map[k]; })
+                    .sort(function (a, b) {
+                        var ad = (a.subject || a.Subject || '') + ' ' + (a.grade || a.Grade || '') + ' ' + (a.group || a.Group || '');
+                        var bd = (b.subject || b.Subject || '') + ' ' + (b.grade || b.Grade || '') + ' ' + (b.group || b.Group || '');
+                        return ad.localeCompare(bd);
+                    });
+            }
+
             function initDropdowns() {
                 const aySelect = document.getElementById('academicYearSelect');
                 aySelect.innerHTML = '<option value="">-- Seleccione año --</option>';
@@ -168,6 +273,10 @@
                 return '--:--';
             }
 
+            academicYears = dedupeAcademicYears(academicYears);
+            timeSlots = dedupeTimeSlots(timeSlots);
+            teachers = dedupePeople(teachers);
+
             function buildTable() {
                 if (!timeSlots || timeSlots.length === 0) {
                     document.getElementById('noDataMessage').textContent = 'No hay bloques horarios configurados para su escuela.';
@@ -203,6 +312,7 @@
                 tbody.innerHTML = '';
                 sortedSlots.forEach(function (ts) {
                     const id = ts.id || ts.Id;
+                    const aliasIds = readAliasIds(ts, id);
                     const name = ts.name || ts.Name || 'Bloque';
                     const shiftName = ts.shiftName || ts.ShiftName || '';
                     const startStr = toHhMm(ts.startTime || ts.StartTime);
@@ -242,6 +352,7 @@
                         sel.className = 'form-control form-control-sm cell-select';
                         sel.setAttribute('data-day', day);
                         sel.setAttribute('data-time-slot-id', id);
+                        sel.setAttribute('data-time-slot-ids', aliasIds.join('|'));
                         if (!isEditable) sel.disabled = true;
                         var optEmpty = document.createElement('option');
                         optEmpty.value = '';
@@ -251,6 +362,7 @@
                             var o = document.createElement('option');
                             o.value = ta.teacherAssignmentId || ta.Id;
                             o.textContent = (ta.subject || ta.Subject || '') + ' - ' + (ta.group || ta.Group || '');
+                            o.setAttribute('data-teacher-assignment-ids', readAliasIds(ta, o.value).join('|'));
                             o.setAttribute('data-subject', (ta.subject || ta.Subject || ''));
                             o.setAttribute('data-group', (ta.group || ta.Group || ''));
                             sel.appendChild(o);
@@ -284,18 +396,25 @@
             function fillTableWithEntries(entries) {
                 entriesByKey = {};
                 (entries || []).forEach(function (e) {
-                    const key = e.dayOfWeek + '_' + e.timeSlotId;
+                    const key = e.dayOfWeek + '_' + String(e.timeSlotId || '').toLowerCase();
                     entriesByKey[key] = e;
                 });
                 document.querySelectorAll('.cell-select').forEach(function (sel) {
                     const day = sel.getAttribute('data-day');
                     const timeSlotId = sel.getAttribute('data-time-slot-id');
-                    const key = day + '_' + timeSlotId;
-                    const entry = entriesByKey[key];
+                    const slotIds = (sel.getAttribute('data-time-slot-ids') || timeSlotId || '').split('|');
+                    var entry = null;
+                    for (var i = 0; i < slotIds.length; i++) {
+                        var key = day + '_' + String(slotIds[i] || '').toLowerCase();
+                        if (entriesByKey[key]) {
+                            entry = entriesByKey[key];
+                            break;
+                        }
+                    }
                     const td = sel.closest('td');
                     sel.value = '';
                     if (entry && entry.teacherAssignmentId) {
-                        sel.value = entry.teacherAssignmentId;
+                        sel.value = findTeacherAssignmentOptionValue(sel, entry.teacherAssignmentId);
                         td.setAttribute('data-entry-id', entry.id || '');
                         setCellDisplay(td, entry.subjectName || entry.subject, entry.groupName || entry.group);
                     } else {
@@ -304,6 +423,18 @@
                     }
                     td.classList.remove('table-danger');
                 });
+            }
+
+            function findTeacherAssignmentOptionValue(sel, teacherAssignmentId) {
+                var target = String(teacherAssignmentId || '').toLowerCase();
+                if (!target) return '';
+                for (var i = 0; i < sel.options.length; i++) {
+                    var option = sel.options[i];
+                    if (String(option.value || '').toLowerCase() === target) return option.value;
+                    var ids = (option.getAttribute('data-teacher-assignment-ids') || '').split('|');
+                    if (ids.some(function (id) { return String(id || '').toLowerCase() === target; })) return option.value;
+                }
+                return '';
             }
 
             function onCellChange(ev) {
@@ -454,7 +585,7 @@
                 ]).then(function (results) {
                     const assignData = results[0];
                     const scheduleData = results[1];
-                    teacherAssignments = assignData.currentAssignments || [];
+                    teacherAssignments = dedupeTeacherAssignments(assignData.currentAssignments || []);
                     const entries = scheduleData.success ? (scheduleData.data || []) : [];
                     buildTable();
                     fillTableWithEntries(entries);

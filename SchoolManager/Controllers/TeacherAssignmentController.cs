@@ -292,36 +292,67 @@ public class TeacherAssignmentController : Controller
             var assignments = await _teacherAssignmentService.GetAssignmentsForModalByTeacherIdAsync(id);
             var assignmentsAll = await _subjectAssignmentService.GetAllSubjectAssignments();
 
-            var currentAssignments = assignments.Select(a => new
-            {
-                teacherAssignmentId = a.Id,
-                subjectAssignmentId = a.SubjectAssignmentId,
-                specialtyId = a.SubjectAssignment?.SpecialtyId,
-                specialty = a.SubjectAssignment?.Specialty?.Name,
-                areaId = a.SubjectAssignment?.AreaId,
-                area = a.SubjectAssignment?.Area?.Name,
-                subjectId = a.SubjectAssignment?.SubjectId,
-                subject = a.SubjectAssignment?.Subject?.Name,
-                gradeLevelId = a.SubjectAssignment?.GradeLevelId,
-                grade = a.SubjectAssignment?.GradeLevel?.Name,
-                groupId = a.SubjectAssignment?.GroupId,
-                group = a.SubjectAssignment?.Group?.Name
-            });
+            var currentAssignments = assignments
+                .Where(a => a.SubjectAssignment != null)
+                .GroupBy(a => new
+                {
+                    a.SubjectAssignment!.SubjectId,
+                    a.SubjectAssignment.GradeLevelId,
+                    a.SubjectAssignment.GroupId,
+                    a.SubjectAssignment.AreaId,
+                    a.SubjectAssignment.SpecialtyId
+                })
+                .Select(g =>
+                {
+                    var ordered = g.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).ToList();
+                    var a = ordered.First();
+                    return new
+                    {
+                        teacherAssignmentId = a.Id,
+                        aliasIds = ordered.Select(x => x.Id).Distinct().ToList(),
+                        subjectAssignmentId = a.SubjectAssignmentId,
+                        specialtyId = a.SubjectAssignment?.SpecialtyId,
+                        specialty = a.SubjectAssignment?.Specialty?.Name,
+                        areaId = a.SubjectAssignment?.AreaId,
+                        area = a.SubjectAssignment?.Area?.Name,
+                        subjectId = a.SubjectAssignment?.SubjectId,
+                        subject = a.SubjectAssignment?.Subject?.Name,
+                        gradeLevelId = a.SubjectAssignment?.GradeLevelId,
+                        grade = a.SubjectAssignment?.GradeLevel?.Name,
+                        groupId = a.SubjectAssignment?.GroupId,
+                        group = a.SubjectAssignment?.Group?.Name
+                    };
+                })
+                .OrderBy(a => a.subject)
+                .ThenBy(a => a.grade)
+                .ThenBy(a => a.group)
+                .ToList();
 
-            var allPossibleAssignments = assignmentsAll.Select(a => new
-            {
-                id = a.Id,
-                specialtyId = a.SpecialtyId,
-                specialtyName = a.Specialty?.Name,
-                areaId = a.AreaId,
-                areaName = a.Area?.Name,
-                subjectId = a.SubjectId,
-                subjectName = a.Subject?.Name,
-                gradeLevelId = a.GradeLevelId,
-                gradeLevelName = a.GradeLevel?.Name,
-                groupId = a.GroupId,
-                groupName = a.Group?.Name
-            });
+            var allPossibleAssignments = assignmentsAll
+                .GroupBy(a => new { a.SubjectId, a.GradeLevelId, a.GroupId, a.AreaId, a.SpecialtyId })
+                .Select(g =>
+                {
+                    var a = g.OrderBy(x => x.Subject?.Name).ThenBy(x => x.Id).First();
+                    return new
+                    {
+                        id = a.Id,
+                        aliasIds = g.Select(x => x.Id).Distinct().ToList(),
+                        specialtyId = a.SpecialtyId,
+                        specialtyName = a.Specialty?.Name,
+                        areaId = a.AreaId,
+                        areaName = a.Area?.Name,
+                        subjectId = a.SubjectId,
+                        subjectName = a.Subject?.Name,
+                        gradeLevelId = a.GradeLevelId,
+                        gradeLevelName = a.GradeLevel?.Name,
+                        groupId = a.GroupId,
+                        groupName = a.Group?.Name
+                    };
+                })
+                .OrderBy(a => a.subjectName)
+                .ThenBy(a => a.gradeLevelName)
+                .ThenBy(a => a.groupName)
+                .ToList();
 
             return Json(new { currentAssignments, allPossibleAssignments });
         }

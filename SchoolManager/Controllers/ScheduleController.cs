@@ -56,14 +56,70 @@ public class ScheduleController : Controller
         else
             effectiveTeacherId = teacherId ?? user.Id;
 
-        var timeSlots = await _context.TimeSlots
+        var rawTimeSlots = await _context.TimeSlots
             .Where(t => t.SchoolId == user.SchoolId && t.IsActive)
             .OrderBy(t => t.DisplayOrder)
             .ThenBy(t => t.StartTime)
-            .Select(t => new { t.Id, t.Name, t.StartTime, t.EndTime, t.DisplayOrder, ShiftName = t.Shift != null ? t.Shift.Name : (string?)null })
+            .Select(t => new
+            {
+                t.Id,
+                t.ShiftId,
+                t.Name,
+                t.StartTime,
+                t.EndTime,
+                t.DisplayOrder,
+                t.CreatedAt,
+                ShiftName = t.Shift != null ? t.Shift.Name : (string?)null
+            })
             .ToListAsync();
 
-        var academicYears = await _academicYearService.GetAllBySchoolAsync(user.SchoolId.Value);
+        var timeSlots = rawTimeSlots
+            .GroupBy(t => new
+            {
+                ShiftId = t.ShiftId ?? Guid.Empty,
+                Name = NormalizeScheduleLabel(t.Name),
+                t.StartTime,
+                t.EndTime
+            })
+            .Select(g =>
+            {
+                var ordered = g.OrderBy(t => t.DisplayOrder)
+                    .ThenBy(t => t.CreatedAt ?? DateTime.MaxValue)
+                    .ThenBy(t => t.Id)
+                    .ToList();
+                var first = ordered.First();
+                return new
+                {
+                    first.Id,
+                    first.Name,
+                    first.StartTime,
+                    first.EndTime,
+                    first.DisplayOrder,
+                    first.ShiftName,
+                    AliasIds = ordered.Select(t => t.Id).Distinct().ToList()
+                };
+            })
+            .OrderBy(t => t.DisplayOrder)
+            .ThenBy(t => t.StartTime)
+            .ThenBy(t => t.Name)
+            .ToList();
+
+        var rawAcademicYears = await _academicYearService.GetAllBySchoolAsync(user.SchoolId.Value);
+        var academicYears = rawAcademicYears
+            .GroupBy(a => new
+            {
+                Name = NormalizeScheduleLabel(a.Name),
+                StartDate = a.StartDate.Date,
+                EndDate = a.EndDate.Date
+            })
+            .Select(g => g
+                .OrderByDescending(a => a.IsActive)
+                .ThenByDescending(a => a.CreatedAt)
+                .ThenBy(a => a.Id)
+                .First())
+            .OrderByDescending(a => a.StartDate)
+            .ThenBy(a => a.Name)
+            .ToList();
         _logger.LogInformation("[Schedule/ByTeacher] SchoolId={SchoolId}, AcademicYearsCount={Count}. Si el desplegable no muestra años, verifique que existan registros en academic_years para esta escuela.", user.SchoolId, academicYears.Count);
 
         List<object> teachers = new List<object>();
@@ -91,7 +147,7 @@ public class ScheduleController : Controller
 
         var jsonOptions = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
         ViewBag.TimeSlotsJson = System.Text.Json.JsonSerializer.Serialize(timeSlots, jsonOptions);
-        ViewBag.AcademicYearsJson = System.Text.Json.JsonSerializer.Serialize(academicYears.Select(a => new { a.Id, a.Name }), jsonOptions);
+        ViewBag.AcademicYearsJson = System.Text.Json.JsonSerializer.Serialize(academicYears.Select(a => new { a.Id, a.Name, a.StartDate, a.EndDate, a.IsActive }), jsonOptions);
         ViewBag.TeachersJson = System.Text.Json.JsonSerializer.Serialize(teachers, jsonOptions);
         ViewBag.TeacherId = effectiveTeacherId;
         ViewBag.AcademicYearId = academicYearId ?? Guid.Empty;
@@ -113,12 +169,52 @@ public class ScheduleController : Controller
         if (user?.SchoolId == null)
             return Json(new { success = false, message = "Usuario sin escuela.", data = (object?)null });
 
-        var slots = await _context.TimeSlots
+        var rawSlots = await _context.TimeSlots
             .Where(t => t.SchoolId == user.SchoolId && t.IsActive)
             .OrderBy(t => t.DisplayOrder)
             .ThenBy(t => t.StartTime)
-            .Select(t => new { t.Id, t.Name, startTime = t.StartTime.ToString("HH:mm"), endTime = t.EndTime.ToString("HH:mm"), t.DisplayOrder })
+            .Select(t => new
+            {
+                t.Id,
+                t.ShiftId,
+                t.Name,
+                t.StartTime,
+                t.EndTime,
+                t.DisplayOrder,
+                t.CreatedAt,
+                ShiftName = t.Shift != null ? t.Shift.Name : (string?)null
+            })
             .ToListAsync();
+        var slots = rawSlots
+            .GroupBy(t => new
+            {
+                ShiftId = t.ShiftId ?? Guid.Empty,
+                Name = NormalizeScheduleLabel(t.Name),
+                t.StartTime,
+                t.EndTime
+            })
+            .Select(g =>
+            {
+                var ordered = g.OrderBy(t => t.DisplayOrder)
+                    .ThenBy(t => t.CreatedAt ?? DateTime.MaxValue)
+                    .ThenBy(t => t.Id)
+                    .ToList();
+                var first = ordered.First();
+                return new
+                {
+                    first.Id,
+                    first.Name,
+                    startTime = first.StartTime.ToString("HH:mm"),
+                    endTime = first.EndTime.ToString("HH:mm"),
+                    first.DisplayOrder,
+                    first.ShiftName,
+                    aliasIds = ordered.Select(t => t.Id).Distinct().ToList()
+                };
+            })
+            .OrderBy(t => t.DisplayOrder)
+            .ThenBy(t => t.startTime)
+            .ThenBy(t => t.Name)
+            .ToList();
         return Json(new { success = true, message = "", data = slots });
     }
 
@@ -295,6 +391,9 @@ public class ScheduleController : Controller
             createdAt = e.CreatedAt
         };
     }
+
+    private static string NormalizeScheduleLabel(string? value) =>
+        string.Join(" ", (value ?? string.Empty).Trim().ToUpperInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
 }
 
 public class SaveEntryRequest

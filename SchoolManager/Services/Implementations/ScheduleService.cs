@@ -53,21 +53,23 @@ public class ScheduleService : IScheduleService
         var dayLabel = SpanishDayName(dayOfWeek);
 
         // A) Conflicto docente: mismo docente no puede tener mismo año + día + bloque
-        var blockingForTeacher = await _context.ScheduleEntries
+        var blockingForTeacherCandidates = await _context.ScheduleEntries
             .AsNoTracking()
+            .Include(e => e.TimeSlot)
             .Include(e => e.TeacherAssignment)
                 .ThenInclude(t => t!.SubjectAssignment)
                     .ThenInclude(sa => sa!.Subject)
             .Include(e => e.TeacherAssignment)
                 .ThenInclude(t => t!.SubjectAssignment)
                     .ThenInclude(sa => sa!.Group)
-            .FirstOrDefaultAsync(e =>
+            .Where(e =>
                 e.AcademicYearId == academicYearId &&
                 e.DayOfWeek == dayOfWeek &&
-                e.TimeSlotId == timeSlotId &&
-                e.TeacherAssignment.TeacherId == ta.TeacherId,
-                CancellationToken.None)
+                e.TeacherAssignment.TeacherId == ta.TeacherId)
+            .ToListAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        var blockingForTeacher = blockingForTeacherCandidates
+            .FirstOrDefault(e => TimeSlotsOverlap(e.TimeSlot, timeSlot));
         if (blockingForTeacher != null)
         {
             var o = blockingForTeacher.TeacherAssignment!;
@@ -80,8 +82,9 @@ public class ScheduleService : IScheduleService
 
         // B) Conflicto grupo: mismo grupo no puede tener mismo año + día + bloque (vía otra TeacherAssignment -> mismo GroupId)
         var groupId = ta.SubjectAssignment.GroupId;
-        var blockingForGroup = await _context.ScheduleEntries
+        var blockingForGroupCandidates = await _context.ScheduleEntries
             .AsNoTracking()
+            .Include(e => e.TimeSlot)
             .Include(e => e.TeacherAssignment)
                 .ThenInclude(t => t!.Teacher)
             .Include(e => e.TeacherAssignment)
@@ -90,13 +93,14 @@ public class ScheduleService : IScheduleService
             .Include(e => e.TeacherAssignment)
                 .ThenInclude(t => t!.SubjectAssignment)
                     .ThenInclude(sa => sa!.Group)
-            .FirstOrDefaultAsync(e =>
+            .Where(e =>
                 e.AcademicYearId == academicYearId &&
                 e.DayOfWeek == dayOfWeek &&
-                e.TimeSlotId == timeSlotId &&
-                e.TeacherAssignment.SubjectAssignment.GroupId == groupId,
-                CancellationToken.None)
+                e.TeacherAssignment.SubjectAssignment.GroupId == groupId)
+            .ToListAsync(CancellationToken.None)
             .ConfigureAwait(false);
+        var blockingForGroup = blockingForGroupCandidates
+            .FirstOrDefault(e => TimeSlotsOverlap(e.TimeSlot, timeSlot));
         if (blockingForGroup != null)
         {
             var o = blockingForGroup.TeacherAssignment!;
@@ -250,6 +254,14 @@ public class ScheduleService : IScheduleService
 
     private static string FormatTimeSlotLabel(TimeSlot timeSlot) =>
         $"{timeSlot.Name} ({timeSlot.StartTime:HH:mm} – {timeSlot.EndTime:HH:mm})";
+
+    private static bool TimeSlotsOverlap(TimeSlot? existing, TimeSlot candidate)
+    {
+        if (existing == null)
+            return false;
+
+        return existing.StartTime < candidate.EndTime && candidate.StartTime < existing.EndTime;
+    }
 
     private static string SpanishDayName(byte dayOfWeek) => dayOfWeek switch
     {
