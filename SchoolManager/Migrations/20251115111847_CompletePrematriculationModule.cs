@@ -24,12 +24,47 @@ namespace SchoolManager.Migrations
                 nullable: false,
                 defaultValue: true);
 
-            // shift_id ya existe en student_assignments, no lo agregamos de nuevo
-            // migrationBuilder.AddColumn<Guid>(
-            //     name: "shift_id",
-            //     table: "student_assignments",
-            //     type: "uuid",
-            //     nullable: true);
+            // En BD legacy shifts/shift_id ya existían; en instalación limpia deben crearse aquí.
+            migrationBuilder.Sql(@"
+CREATE TABLE IF NOT EXISTS shifts (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    school_id uuid NOT NULL,
+    name character varying(50) NOT NULL,
+    description text,
+    is_active boolean NOT NULL DEFAULT true,
+    display_order integer NOT NULL DEFAULT 0,
+    created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone,
+    created_by uuid,
+    updated_by uuid,
+    CONSTRAINT shifts_pkey PRIMARY KEY (id)
+);
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'shifts_school_id_fkey') THEN
+        ALTER TABLE shifts ADD CONSTRAINT shifts_school_id_fkey
+            FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS IX_shifts_school_id ON shifts(school_id);
+CREATE INDEX IF NOT EXISTS IX_shifts_is_active ON shifts(is_active);
+
+ALTER TABLE student_assignments ADD COLUMN IF NOT EXISTS shift_id uuid NULL;
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS shift_id uuid NULL;
+
+CREATE INDEX IF NOT EXISTS ""IX_student_assignments_shift_id"" ON student_assignments(shift_id);
+CREATE INDEX IF NOT EXISTS ""IX_groups_shift_id"" ON groups(shift_id);
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'student_assignments_shift_id_fkey') THEN
+        ALTER TABLE student_assignments ADD CONSTRAINT student_assignments_shift_id_fkey
+            FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'groups_shift_id_fkey') THEN
+        ALTER TABLE groups ADD CONSTRAINT groups_shift_id_fkey
+            FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+");
 
             migrationBuilder.AddColumn<Guid>(
                 name: "cancelled_by",
@@ -57,13 +92,6 @@ namespace SchoolManager.Migrations
                 scale: 2,
                 nullable: false,
                 defaultValue: 0m);
-
-            // shift_id ya existe en groups, no lo agregamos de nuevo
-            // migrationBuilder.AddColumn<Guid>(
-            //     name: "shift_id",
-            //     table: "groups",
-            //     type: "uuid",
-            //     nullable: true);
 
             migrationBuilder.CreateTable(
                 name: "prematriculation_histories",
@@ -95,18 +123,6 @@ namespace SchoolManager.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            // La tabla shifts ya existe, no la creamos de nuevo
-            // migrationBuilder.CreateTable(
-            //     name: "shifts",
-            //     ...
-            // );
-
-            // El índice ya existe, no lo creamos de nuevo
-            // migrationBuilder.CreateIndex(
-            //     name: "IX_student_assignments_shift_id",
-            //     table: "student_assignments",
-            //     column: "shift_id");
-
             migrationBuilder.CreateIndex(
                 name: "IX_prematriculations_cancelled_by",
                 table: "prematriculations",
@@ -122,12 +138,6 @@ namespace SchoolManager.Migrations
                 table: "prematriculations",
                 column: "rejected_by");
 
-            // El índice ya existe, no lo creamos de nuevo
-            // migrationBuilder.CreateIndex(
-            //     name: "IX_groups_shift_id",
-            //     table: "groups",
-            //     column: "shift_id");
-
             migrationBuilder.CreateIndex(
                 name: "IX_prematriculation_histories_changed_at",
                 table: "prematriculation_histories",
@@ -142,18 +152,6 @@ namespace SchoolManager.Migrations
                 name: "IX_prematriculation_histories_prematriculation_id",
                 table: "prematriculation_histories",
                 column: "prematriculation_id");
-
-            // Los índices de shifts ya existen, no los creamos de nuevo
-            // migrationBuilder.CreateIndex(...);
-
-            // La foreign key ya existe, no la agregamos de nuevo
-            // migrationBuilder.AddForeignKey(
-            //     name: "groups_shift_id_fkey",
-            //     table: "groups",
-            //     column: "shift_id",
-            //     principalTable: "shifts",
-            //     principalColumn: "id",
-            //     onDelete: ReferentialAction.SetNull);
 
             migrationBuilder.AddForeignKey(
                 name: "prematriculations_cancelled_by_fkey",
@@ -178,15 +176,6 @@ namespace SchoolManager.Migrations
                 principalTable: "users",
                 principalColumn: "id",
                 onDelete: ReferentialAction.SetNull);
-
-            // La foreign key ya existe, no la agregamos de nuevo
-            // migrationBuilder.AddForeignKey(
-            //     name: "student_assignments_shift_id_fkey",
-            //     table: "student_assignments",
-            //     column: "shift_id",
-            //     principalTable: "shifts",
-            //     principalColumn: "id",
-            //     onDelete: ReferentialAction.SetNull);
         }
 
         /// <inheritdoc />

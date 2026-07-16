@@ -388,6 +388,14 @@ using (var scope = app.Services.CreateScope())
     await SchoolManager.Scripts.EnsureIdCardTables.EnsureAsync(db);
     await SchoolManager.Scripts.EnsureUsersRoleCheck.EnsureAsync(db);
     await SchoolManager.Scripts.EnsureStudentPaymentAccessTable.EnsureAsync(db);
+    try
+    {
+        await SchoolManager.Scripts.ApplyShiftsTable.ApplyAsync(db);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "No se pudo asegurar tabla shifts en arranque.");
+    }
     await SchoolManager.Scripts.EnsureScheduleTables.EnsureAsync(db);
     await SchoolManager.Scripts.EnsureSchoolScheduleConfigurationTable.EnsureAsync(db);
     await SchoolManager.Scripts.ApplyEmailJobsAndQueueColumns.RunAsync(db);

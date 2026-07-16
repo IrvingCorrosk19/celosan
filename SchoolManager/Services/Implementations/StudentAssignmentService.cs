@@ -15,7 +15,6 @@ namespace SchoolManager.Services.Implementations
         private readonly SchoolDbContext _context;
         private readonly ICurrentUserService _currentUserService;
         private readonly IAcademicYearService _academicYearService;
-        private readonly INocturnalEnrollmentSettingsService _nocturnalSettings;
         private readonly IModularEnrollmentService _modularEnrollmentService;
 
         public StudentAssignmentService(
@@ -28,31 +27,31 @@ namespace SchoolManager.Services.Implementations
             _context = context;
             _currentUserService = currentUserService;
             _academicYearService = academicYearService;
-            _nocturnalSettings = nocturnalSettings;
+            // nocturnalSettings se mantiene en el ctor por compatibilidad DI;
+            // la sync de SSA ya no depende del flag advanced (matrícula primaria nocturna siempre sincroniza).
+            _ = nocturnalSettings;
             _modularEnrollmentService = modularEnrollmentService;
         }
 
-        private async Task<bool> IsAdvancedForStudentAsync(Guid studentId)
-        {
-            var schoolId = await _context.Users
-                .Where(u => u.Id == studentId)
-                .Select(u => u.SchoolId)
-                .FirstOrDefaultAsync();
-            return _nocturnalSettings.IsAdvancedEnabled(schoolId);
-        }
-
+        /// <summary>
+        /// Materializa inscripciones por materia (SSA) a partir de una matrícula (StudentAssignment).
+        /// En escuelas nocturnas de Panamá: matrícula primaria (Nocturno/Regular) inscribe al estudiante
+        /// en todas las imparticiones activas del grado+grupo. Arrastre (Refuerzo/Libre) no auto-inscribe:
+        /// solo se crea SSA si se indica una materia explícita o vía AddSubjectEnrollmentAsync.
+        /// </summary>
         private async Task SyncStudentSubjectAssignmentsAsync(StudentAssignment assignment, Guid? explicitSubjectId = null)
         {
-            var student = await _context.Users.AsNoTracking()
-                .Where(u => u.Id == assignment.StudentId)
-                .Select(u => new { u.SchoolId })
-                .FirstOrDefaultAsync();
-
-            var advanced = _nocturnalSettings.IsAdvancedEnabled(student?.SchoolId);
-            if (advanced && !explicitSubjectId.HasValue)
+            if (assignment == null)
                 return;
+
+            // Arrastre: no volcar todas las materias del grado; solo materia explícita.
+            if (!explicitSubjectId.HasValue && EnrollmentTypeConstants.IsCarryOver(assignment.EnrollmentType))
+                return;
+
             var subjectAssignmentsQuery = _context.SubjectAssignments
-                .Where(sa => sa.GradeLevelId == assignment.GradeId && sa.GroupId == assignment.GroupId);
+                .Where(sa => sa.GradeLevelId == assignment.GradeId
+                          && sa.GroupId == assignment.GroupId
+                          && (sa.Status == null || sa.Status != "Closed"));
 
             if (explicitSubjectId.HasValue && explicitSubjectId.Value != Guid.Empty)
                 subjectAssignmentsQuery = subjectAssignmentsQuery.Where(sa => sa.SubjectId == explicitSubjectId.Value);
@@ -91,6 +90,33 @@ namespace SchoolManager.Services.Implementations
                 await AuditHelper.SetSchoolIdAsync(enrollment, _currentUserService);
                 _context.StudentSubjectAssignments.Add(enrollment);
             }
+        }
+
+        private async Task DeactivateSubjectEnrollmentsForAssignmentsAsync(IEnumerable<StudentAssignment> assignments)
+        {
+            var assignmentIds = assignments.Select(a => a.Id).Distinct().ToList();
+            if (assignmentIds.Count == 0)
+                return;
+
+            var linked = await _context.StudentSubjectAssignments
+                .Where(ssa => ssa.IsActive
+                    && ssa.StudentAssignmentId.HasValue
+                    && assignmentIds.Contains(ssa.StudentAssignmentId.Value))
+                .ToListAsync();
+
+            if (linked.Count == 0)
+                return;
+
+            var now = DateTime.UtcNow;
+            foreach (var ssa in linked)
+            {
+                ssa.IsActive = false;
+                ssa.Status = "Inactive";
+                ssa.EndDate = now;
+                ssa.UpdatedAt = now;
+            }
+
+            _context.StudentSubjectAssignments.UpdateRange(linked);
         }
         public async Task InsertAsync(StudentAssignment assignment)
         {
@@ -259,6 +285,7 @@ namespace SchoolManager.Services.Implementations
                     }
 
                     _context.StudentAssignments.UpdateRange(existing);
+                    await DeactivateSubjectEnrollmentsForAssignmentsAsync(existing);
                 }
 
                 // MEJORADO: Obtener año académico activo una vez para todas las asignaciones
@@ -341,6 +368,7 @@ namespace SchoolManager.Services.Implementations
                 }
 
                 _context.StudentAssignments.UpdateRange(activeAssignments);
+                await DeactivateSubjectEnrollmentsForAssignmentsAsync(activeAssignments);
                 await _context.SaveChangesAsync();
             }
         }
@@ -512,12 +540,10 @@ namespace SchoolManager.Services.Implementations
                     "Revise duplicados activos o restricciones en student_assignments.");
             }
 
-            var advanced = await IsAdvancedForStudentAsync(studentId);
-            if (!advanced)
-            {
-                await SyncStudentSubjectAssignmentsAsync(assignment);
-                await _context.SaveChangesAsync();
-            }
+            // Matrícula nocturna primaria: materializar SSA (misma regla que InsertAsync).
+            // Arrastre (Refuerzo/Libre) no auto-inscribe materias; Sync saldrá temprano.
+            await SyncStudentSubjectAssignmentsAsync(assignment);
+            await _context.SaveChangesAsync();
 
             return true;
         }
@@ -579,8 +605,6 @@ namespace SchoolManager.Services.Implementations
                 .FirstOrDefaultAsync(sa => sa.Id == subjectAssignmentId);
             if (subjectAssignment == null)
                 return (false, "La asignatura seleccionada no existe.", null);
-
-            var advanced = await IsAdvancedForStudentAsync(studentId);
 
             var baseAssignment = await _context.StudentAssignments
                 .Where(sa => sa.StudentId == studentId && sa.IsActive &&

@@ -19,6 +19,32 @@ namespace SchoolManager.Migrations
                 oldClrType: typeof(Guid),
                 oldType: "uuid");
 
+            // shifts debe existir antes de time_slots (FK shift_id). En BD legacy se creaba por script;
+            // en instalación limpia la tabla puede no existir aún.
+            migrationBuilder.Sql(@"
+CREATE TABLE IF NOT EXISTS shifts (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    school_id uuid NOT NULL,
+    name character varying(50) NOT NULL,
+    description text,
+    is_active boolean NOT NULL DEFAULT true,
+    display_order integer NOT NULL DEFAULT 0,
+    created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp with time zone,
+    created_by uuid,
+    updated_by uuid,
+    CONSTRAINT shifts_pkey PRIMARY KEY (id)
+);
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'shifts_school_id_fkey') THEN
+        ALTER TABLE shifts ADD CONSTRAINT shifts_school_id_fkey
+            FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS IX_shifts_school_id ON shifts(school_id);
+CREATE INDEX IF NOT EXISTS IX_shifts_is_active ON shifts(is_active);
+");
+
             migrationBuilder.CreateTable(
                 name: "time_slots",
                 columns: table => new
