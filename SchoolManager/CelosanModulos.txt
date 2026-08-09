@@ -1,0 +1,311 @@
+Módulo de Prematrícula Eduplaner - CELOSAM
+1. Objetivo del módulo
+Desarrollar un módulo de prematrícula para CELOSAM dentro de Eduplaner, que permita a los estudiantes seleccionar las asignaturas que pueden cursar según su plan de estudio, historial académico, convalidaciones, cupos disponibles y horarios publicados.
+Ejemplo:
+Un estudiante que aprobó Español 7°, pero no aprobó Español 8°, podrá matricular Español 8°, pero no Español 9°.
+2. Roles involucrados
+Administrador Eduplaner
+•	Configura periodos de prematrícula.
+•	Publica horarios.
+•	Define cupos máximos por grupo.
+•	Asigna profesores a materias y grupos.
+•	Habilita modificaciones cuando un estudiante ya finalizó su prematrícula.
+Secretaría / Analista
+•	Registra estudiantes nuevos.
+•	Carga créditos o notas de estudiantes provenientes de otras escuelas.
+•	Realiza convalidaciones masivas.
+•	Actualiza cédula vencida.
+•	Habilita cambios de prematrícula cuando sea necesario.
+Estudiante
+•	Ingresa con usuario y contraseña.
+•	Visualiza materias disponibles.
+•	Selecciona o elimina materias.
+•	Finaliza prematrícula.
+•	Descarga PDF de comprobante.
+Profesor
+•	Visualiza únicamente estudiantes activos en sus materias.
+•	Solicita retiro de estudiantes de una asignatura.
+Director
+•	Aprueba o rechaza solicitudes de retiro realizadas por profesores.
+3. Configuración del periodo de prematrícula
+El administrador debe poder crear un periodo de prematrícula con los siguientes campos:
+•	Nombre del periodo
+•	Año lectivo
+•	Trimestre o periodo académico
+•	Fecha de inicio
+•	Fecha de cierre
+•	Cantidad máxima de materias permitidas
+•	Estado: abierto / cerrado
+La fecha será única para toda la escuela.
+Ejemplo:
+Prematrícula Segundo Trimestre 2026
+Del 1 al 17 de junio
+Máximo de materias: 8
+Estado: abierto
+4. Plan de estudio
+Eduplaner debe contar con un catálogo de asignaturas o plan de estudio.
+Cada asignatura debe tener:
+•	Nombre de asignatura
+•	Nivel o grado
+•	Orden o secuencia académica
+•	Requisito previo, si aplica
+•	Área o plan al que pertenece
+Ejemplo de secuencia:
+Asignatura	Requisito
+Español 7°	Sin requisito
+Español 8°	Español 7° aprobado
+Español 9°	Español 7° y Español 8° aprobados
+
+5. Regla de aprobación
+Para efectos de prematrícula, una asignatura se considera aprobada únicamente cuando la nota final es igual o mayor a 3.0.
+•	Nota final ≥ 3.0 = Aprobada
+•	Nota final < 3.0 = Reprobada
+•	Sin nota = Pendiente
+•	Convalidada = Aprobada
+Ejemplo:
+Si el estudiante obtuvo 2.8 en Matemática 8°, la materia queda reprobada y debe volver a aparecer en la siguiente prematrícula.
+6. Estudiantes nuevos
+Cuando un estudiante nuevo llegue a CELOSAM:
+1.	Secretaría registra al estudiante.
+2.	Se le crea usuario y contraseña.
+3.	Se adjunta o registra su información académica.
+4.	Secretaría o analista selecciona el plan de estudio correspondiente.
+5.	Se realiza una convalidación masiva.
+6.	Se cargan las materias aprobadas con su nota final.
+7.	El sistema calcula automáticamente:
+o	Materias aprobadas
+o	Materias pendientes
+o	Materias disponibles para prematrícula
+o	Porcentaje de avance académico
+Ejemplo:
+Un estudiante llega con créditos de otra escuela. Secretaría registra que aprobó Español 7°, Matemática 7° e Inglés 7°. Entonces el sistema podrá habilitar Español 8°, Matemática 8° e Inglés 8°, siempre que estén abiertas y tengan cupo.
+7. Estudiantes activos
+Para estudiantes existentes, Eduplaner debe utilizar el historial académico acumulado.
+El sistema debe considerar:
+•	Materias aprobadas
+•	Materias reprobadas
+•	Materias retiradas
+•	Materias convalidadas
+•	Materias pendientes
+•	Requisitos previos
+Ejemplo:
+Si un estudiante ya aprobó Ciencias 7° y Ciencias 8°, el sistema podrá mostrar Ciencias 9° como materia disponible.
+8. Materias disponibles para prematrícula
+El estudiante solo debe ver las materias que puede cursar.
+Reglas:
+•	No puede matricular una materia si no aprobó el requisito previo.
+•	Si reprobó una materia, debe aparecer por defecto en la siguiente prematrícula.
+•	Si fue retirado de una materia, debe aparecer por defecto en la siguiente prematrícula.
+•	El estudiante puede eliminar una materia pendiente si no desea cursarla en ese periodo.
+•	Si una materia es requisito para otra, debe aprobar primero la materia anterior.
+Ejemplo:
+Si reprobó Español 7°, no puede matricular Español 8°.
+Pero sí puede matricular Matemática 8° si ya aprobó Matemática 7°.
+9. Selección de materias
+El estudiante podrá:
+•	Ver las materias disponibles.
+•	Agregar materias.
+•	Eliminar materias.
+•	Ver cupos disponibles.
+•	Ver horarios.
+•	Validar choques de horario.
+•	Finalizar prematrícula.
+El sistema debe impedir que seleccione dos materias con choque de horario.
+Ejemplo:
+Si Matemática 8° es lunes de 6:00 p.m. a 8:00 p.m. y Español 8° también es lunes de 6:00 p.m. a 8:00 p.m., el estudiante solo podrá matricular una de las dos.
+10. Límite de materias
+El límite de materias será definido por el administrador en cada periodo de prematrícula.
+Ejemplo:
+Si el administrador define máximo 8 materias, el estudiante no podrá finalizar la prematrícula con 9 materias seleccionadas.
+11. Horarios, grupos y cupos
+El administrador debe publicar los horarios antes de abrir la prematrícula.
+Cada grupo debe tener:
+•	Materia
+•	Grupo
+•	Profesor asignado
+•	Día
+•	Hora
+•	Aula, si aplica
+•	Cupo máximo
+•	Cupos disponibles
+•	Estado: disponible / lleno / cerrado
+Ejemplo:
+Matemática 8° - Grupo A
+Profesor: Juan Pérez
+Lunes y miércoles, 6:00 p.m. a 8:00 p.m.
+Cupo máximo: 40 estudiantes
+Cupos disponibles: 10
+12. Asignación automática de grupos
+El estudiante no selecciona directamente el grupo.
+El sistema asignará automáticamente el grupo tomando en cuenta:
+1.	Que tenga cupo disponible.
+2.	Que no tenga choque de horario con otras materias seleccionadas.
+3.	Si hay varios grupos disponibles, asignar al grupo con menos estudiantes.
+Los cupos solo se ocupan cuando el estudiante presiona Finalizar Prematrícula.
+Ejemplo:
+Si Matemática 8° tiene Grupo A con 38 estudiantes y Grupo B con 20 estudiantes, el sistema asignará al estudiante al Grupo B, siempre que no tenga choque de horario.
+13. Finalizar prematrícula
+El estudiante debe tener un botón:
+Finalizar Prematrícula
+Al presionar este botón:
+•	Se valida que no existan choques de horario.
+•	Se valida el límite máximo de materias.
+•	Se valida disponibilidad de cupos.
+•	Se asignan los grupos.
+•	Se bloquea la prematrícula.
+•	Se genera el comprobante PDF.
+•	El estudiante queda activo en las materias seleccionadas.
+•	Los profesores pueden verlo en sus listas.
+Ejemplo:
+El estudiante selecciona 6 materias y presiona Finalizar Prematrícula. El sistema asigna grupos, descuenta cupos y genera el comprobante PDF. En el cuadro de horario que debe salir en el pdf debe salir el nombre del profesor que dicta la asignatura, sino tiene asignado debe decir por asignar docente.
+14. Modificación posterior
+Después de finalizar, el estudiante no puede modificar su prematrícula.
+Si necesita hacer cambios:
+1.	Debe solicitarlo a Secretaría o Administración.
+2.	Secretaría o Administrador habilita nuevamente la prematrícula.
+3.	El sistema debe registrar:
+o	Quién autorizó el cambio.
+o	Fecha y hora.
+o	Motivo.
+4.	El estudiante realiza los cambios.
+5.	Vuelve a presionar Finalizar Prematrícula.
+6.	Se genera una nueva versión del comprobante.
+Ejemplo:
+El estudiante finalizó con Matemática 8°, pero necesita cambiarla por Ciencias 8°. Secretaría reabre la prematrícula, el estudiante hace el cambio y se genera el comprobante V2.
+15. Comprobante PDF
+El sistema debe generar un comprobante PDF con:
+•	Logo o nombre de CELOSAM
+•	Nombre del estudiante
+•	Cédula
+•	Periodo de prematrícula
+•	Fecha de generación
+•	Número consecutivo único
+•	Número de versión
+•	Materias matriculadas
+•	Grupo asignado
+•	Profesor
+•	Día y hora
+•	Espacio para sello de la escuela
+•	Imagen o copia de la cédula en la parte inferior
+Ejemplo de consecutivo:
+PM-2026-000123 V1
+PM-2026-000123 V2
+16. Documento de identidad
+El estudiante debe adjuntar la cédula solo una vez.
+El sistema debe guardar:
+•	Archivo de cédula
+•	Fecha de vencimiento
+•	Estado del documento
+Si la cédula está vencida, Secretaría o Administración podrá actualizarla.
+Ejemplo:
+Si la cédula vence el 10 de mayo de 2026 y el estudiante imprime su comprobante en junio, Secretaría debe actualizar la cédula antes de sellar el documento.
+17. Vista del profesor
+El profesor solo debe ver estudiantes activos.
+Si un estudiante es retirado de una materia:
+•	Desaparece de la lista del profesor.
+•	Desaparece del registro de calificaciones.
+•	Desaparece de asistencia.
+•	El estudiante puede ver que fue dado de baja.
+•	El registro queda guardado en historial administrativo.
+Ejemplo:
+Un estudiante sigue activo en Matemática 8°, pero fue retirado de Español 8°. El profesor de Matemática lo sigue viendo; el profesor de Español ya no.
+18. Retiro de estudiantes
+El retiro se realiza por asignatura, no por estudiante completo.
+Flujo:
+1.	El profesor solicita el retiro de un estudiante en una materia.
+2.	Debe indicar motivo y observación.
+3.	La solicitud queda pendiente.
+4.	El Director revisa.
+5.	El Director aprueba o rechaza.
+6.	Si aprueba, el estudiante queda en estado retirado en esa asignatura.
+Ejemplo:
+El profesor de Inglés solicita retirar al estudiante por abandono. El Director aprueba. El estudiante queda retirado solo de Inglés, pero puede seguir activo en sus otras materias.
+19. Estados de la prematrícula
+Estados sugeridos:
+•	Borrador
+•	Finalizada
+•	Reabierta para modificación
+•	Anulada
+Ejemplo:
+Antes de presionar Finalizar, la prematrícula está en Borrador. Después de finalizar, cambia a Finalizada.
+20. Estados por asignatura
+Cada materia del estudiante puede tener uno de estos estados:
+•	Activo
+•	Aprobado
+•	Reprobado
+•	Retirado
+•	Convalidado
+•	Pendiente
+Ejemplo:
+Español 7°: Aprobado
+Español 8°: Reprobado
+Español 9°: Pendiente
+21. Avance académico del estudiante
+El estudiante debe poder ver su avance académico:
+•	Total de materias del plan
+•	Materias aprobadas
+•	Materias pendientes
+•	Materias reprobadas
+•	Materias retiradas
+•	Porcentaje de avance
+Ejemplo:
+Plan de estudio: 42 materias
+Aprobadas: 31
+Pendientes: 11
+Avance: 73.8%
+22. Reportes recomendados
+El módulo debe permitir reportar:
+•	Estudiantes prematriculados
+•	Materias con mayor demanda
+•	Cupos disponibles
+•	Grupos llenos
+•	Estudiantes por profesor
+•	Estudiantes con cédula vencida
+•	Materias retiradas
+•	Avance académico por estudiante
+•	Historial de cambios de prematrícula
+Ejemplo:
+Reporte: Matemática 8°
+Cupo máximo: 40
+Prematriculados: 40
+Estado: Grupo lleno
+23. Auditoría
+El sistema debe guardar historial de:
+•	Creación de prematrícula
+•	Finalización de prematrícula
+•	Reapertura de prematrícula
+•	Cambios realizados
+•	Usuario que autorizó cambios
+•	Solicitudes de retiro
+•	Aprobación o rechazo del Director
+•	Actualización de documentos
+Ejemplo:
+El sistema debe registrar:
+“Secretaría Ana Pérez reabrió la prematrícula del estudiante Juan González el 12/06/2026 a las 7:35 p.m. Motivo: cambio de horario laboral”.
+24. Dispositivos
+El módulo debe funcionar desde:
+•	Computadora
+•	Tablet
+•	Celular
+Debe tener diseño responsivo, priorizando uso desde celular.
+Ejemplo:
+El estudiante puede ingresar desde su celular, seleccionar materias, finalizar prematrícula y descargar el PDF.
+25. Resumen del flujo principal
+1.	Administrador configura periodo de prematrícula.
+2.	Administrador publica horarios, grupos, profesores y cupos.
+3.	Secretaría registra estudiantes nuevos.
+4.	Secretaría carga notas o convalidaciones.
+5.	El estudiante ingresa a Eduplaner.
+6.	El sistema muestra solo materias permitidas.
+7.	El estudiante selecciona materias.
+8.	El sistema valida requisitos, cupos y choques.
+9.	El estudiante presiona Finalizar Prematrícula.
+10.	El sistema asigna grupos.
+11.	Se genera PDF con consecutivo.
+12.	El profesor ve al estudiante activo.
+13.	Si el profesor solicita retiro, el Director aprueba.
+14.	Si se aprueba el retiro, el estudiante desaparece de las listas activas.
+15.	El historial académico queda actualizado para el siguiente periodo.
+26. Observación final
+Este módulo debe estar diseñado para simplificar el proceso administrativo de CELOSAM, evitar errores en la selección de materias, controlar cupos por grupo, mantener actualizado el historial académico y permitir que el estudiante conozca claramente su avance hacia la culminación de su plan de estudio.
+

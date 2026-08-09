@@ -1,0 +1,797 @@
+{
+  "summary": {
+    "source_file": "HORARIOS DE DOCENTES 2026 QUENA.docx",
+    "academic_year_id": "f7ccb57f-fa3e-4d9f-973b-552030c9852d",
+    "academic_year_name": "2026",
+    "raw_cells": 345,
+    "unique_slots": 319,
+    "duplicates_in_word": 26,
+    "bd_total": 302,
+    "matched_slots": 292,
+    "missing_slots": 27,
+    "coverage_pct": 91.5,
+    "teacher_assignments": 221,
+    "teachers_complete": 8,
+    "teachers_partial": 5
+  },
+  "teachers": [
+    {
+      "name": "Rey A. Abrego S.",
+      "word_slots": 26,
+      "bd_count": 15,
+      "matched": 15,
+      "missing_count": 11,
+      "coverage_pct": 57.7,
+      "status": "PARCIAL",
+      "missing": [
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "cell": "9°-A-2",
+          "reason": "Conflicto de horario (docente o grupo ya ocupado en ese bloque/día)"
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "cell": "9°-A-2",
+          "reason": "Conflicto de horario (docente o grupo ya ocupado en ese bloque/día)"
+        },
+        {
+          "day": "Miércoles",
+          "block": "1ra 18:10-19:00",
+          "cell": "10 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Miércoles",
+          "block": "2da 19:00-19:50",
+          "cell": "10 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Jueves",
+          "block": "1ra 18:10-19:00",
+          "cell": "10 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Jueves",
+          "block": "2da 19:00-19:50",
+          "cell": "10I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Jueves",
+          "block": "5ta 21:30-22:20",
+          "cell": "12 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Jueves",
+          "block": "6ta 22:20-23:10",
+          "cell": "12 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Viernes",
+          "block": "3ra 19:50-20:40",
+          "cell": "7°-A-2",
+          "reason": "Conflicto de horario (docente o grupo ya ocupado en ese bloque/día)"
+        },
+        {
+          "day": "Viernes",
+          "block": "5ta 21:30-22:20",
+          "cell": "12 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Viernes",
+          "block": "6ta 22:20-23:10",
+          "cell": "12 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        }
+      ],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "INGLÉS",
+          "group": "9-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "6ta 22:20-23:10",
+          "subject": "FRANCÉS",
+          "group": "10-A4",
+          "word_cell": null
+        },
+        {
+          "day": "Martes",
+          "block": "1ra 18:10-19:00",
+          "subject": "ORIENTACIÓN",
+          "group": "9-A",
+          "word_cell": null
+        },
+        {
+          "day": "Martes",
+          "block": "2da 19:00-19:50",
+          "subject": "ORIENTACIÓN",
+          "group": "9-A",
+          "word_cell": null
+        },
+        {
+          "day": "Martes",
+          "block": "4ta 20:40-21:30",
+          "subject": "FRANCÉS",
+          "group": "11-A4",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Max E. Agames J.",
+      "word_slots": 28,
+      "bd_count": 26,
+      "matched": 24,
+      "missing_count": 4,
+      "coverage_pct": 85.7,
+      "status": "PARCIAL",
+      "missing": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "cell": "11 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Miércoles",
+          "block": "1ra 18:10-19:00",
+          "cell": "11 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Miércoles",
+          "block": "3ra 19:50-20:40",
+          "cell": "11 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        },
+        {
+          "day": "Miércoles",
+          "block": "6ta 22:20-23:10",
+          "cell": "10 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        }
+      ],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "BELLAS ARTES",
+          "group": "9-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "SALUD FÍSICA Y MENTAL",
+          "group": "9-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "SALUD FÍSICA Y MENTAL",
+          "group": "7-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "VAL. ÉTICOS / REL. HUMANAS",
+          "group": "7-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "6ta 22:20-23:10",
+          "subject": "ESPAÑOL",
+          "group": "7-A",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Lexibel Asprilla",
+      "word_slots": 27,
+      "bd_count": 27,
+      "matched": 27,
+      "missing_count": 0,
+      "coverage_pct": 100.0,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "TURISMO (INTRODUCCIÓN AL TURISMO Y CULTURA TURÍSTICA)",
+          "group": "12-A4",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "SERVICIOS TURÍSTICOS I Y II",
+          "group": "12-A4",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "SERVICIOS TURÍSTICOS I Y II",
+          "group": "11-A4",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "SERVICIOS TURÍSTICOS I Y II",
+          "group": "12-A4",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "TURISMO (INTRODUCCIÓN AL TURISMO Y CULTURA TURÍSTICA)",
+          "group": "11-A4",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Julio E. Del Cid CH.",
+      "word_slots": 26,
+      "bd_count": 30,
+      "matched": 26,
+      "missing_count": 0,
+      "coverage_pct": 100.0,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "MULTIMEDIA Y DESARROLLO WEB",
+          "group": "12-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "MULTIMEDIA Y DESARROLLO WEB",
+          "group": "12-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "REDES DE COMPUTADORAS",
+          "group": "11-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "REDES DE COMPUTADORAS",
+          "group": "12-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "TALLER DE SISTEMAS ROBÓTICOS",
+          "group": "12-A1",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Jannie M. España W.",
+      "word_slots": 27,
+      "bd_count": 20,
+      "matched": 20,
+      "missing_count": 7,
+      "coverage_pct": 74.1,
+      "status": "PARCIAL",
+      "missing": [
+        {
+          "day": "Martes",
+          "block": "4ta 20:40-21:30",
+          "cell": "12-I-PrácticaProfesional",
+          "reason": "Práctica Profesional — falta teacher_assignment o conflicto de horario"
+        },
+        {
+          "day": "Martes",
+          "block": "3ra 19:50-20:40",
+          "cell": "12-I-PrácticaProfesional",
+          "reason": "Práctica Profesional — falta teacher_assignment o conflicto de horario"
+        },
+        {
+          "day": "Miércoles",
+          "block": "5ta 21:30-22:20",
+          "cell": "11-TMerc. Y Public.",
+          "reason": "Mercadotecnia — falta asignación docente-materia-grupo en BD"
+        },
+        {
+          "day": "Miércoles",
+          "block": "6ta 22:20-23:10",
+          "cell": "12-TPrácticaProfesional",
+          "reason": "Práctica Profesional — falta teacher_assignment o conflicto de horario"
+        },
+        {
+          "day": "Jueves",
+          "block": "3ra 19:50-20:40",
+          "cell": "12-TPrácticaProfesional",
+          "reason": "Práctica Profesional — falta teacher_assignment o conflicto de horario"
+        },
+        {
+          "day": "Jueves",
+          "block": "5ta 21:30-22:20",
+          "cell": "11-TMerc. Y Public.",
+          "reason": "Mercadotecnia — falta asignación docente-materia-grupo en BD"
+        },
+        {
+          "day": "Jueves",
+          "block": "6ta 22:20-23:10",
+          "cell": "11-TMerc. Y Public.",
+          "reason": "Mercadotecnia — falta asignación docente-materia-grupo en BD"
+        }
+      ],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "GESTIÓN EMPRESARIAL",
+          "group": "11-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "GESTIÓN EMPRESARIAL",
+          "group": "11-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "CONTABILIDAD",
+          "group": "12-A4",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "CONTABILIDAD",
+          "group": "10-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "GESTIÓN EMPRESARIAL",
+          "group": "11-A1",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Lino A. Garcia A.",
+      "word_slots": 29,
+      "bd_count": 29,
+      "matched": 29,
+      "missing_count": 0,
+      "coverage_pct": 100.0,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "TALLER II (INSTALACIÓN RESIDENCIAL Y COMERCIAL)",
+          "group": "12-A3",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "TALLER II (INSTALACIÓN RESIDENCIAL Y COMERCIAL)",
+          "group": "12-A3",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "TALLER II (INSTALACIÓN RESIDENCIAL Y COMERCIAL)",
+          "group": "12-A3",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "TALLER II (INSTALACIÓN RESIDENCIAL Y COMERCIAL)",
+          "group": "12-A3",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "TALLER DE PRODUCCIÓN Y DISTRIBUCIÓN",
+          "group": "12-A3",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Zellideth E. Hernández",
+      "word_slots": 25,
+      "bd_count": 25,
+      "matched": 25,
+      "missing_count": 0,
+      "coverage_pct": 100.0,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "PROGRAMACIÓN",
+          "group": "11-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "PROGRAMACIÓN",
+          "group": "11-A1",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "CONFIGURACIÓN Y ADMINISTRACIÓN DE SISTEMAS OPERATIVOS",
+          "group": "10-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "CONFIGURACIÓN Y ADMINISTRACIÓN DE SISTEMAS OPERATIVOS",
+          "group": "10-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "6ta 22:20-23:10",
+          "subject": "CONFIGURACIÓN Y ADMINISTRACIÓN DE SISTEMAS OPERATIVOS",
+          "group": "10-A",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Fabricio Mendoza",
+      "word_slots": 28,
+      "bd_count": 24,
+      "matched": 24,
+      "missing_count": 4,
+      "coverage_pct": 85.7,
+      "status": "PARCIAL",
+      "missing": [
+        {
+          "day": "Martes",
+          "block": "4ta 20:40-21:30",
+          "cell": "8°- A-2CIENCIAS",
+          "reason": "Ciencias sección A-2 — en BD solo existe grupo 7-A/8-A (sin subsección A-2)"
+        },
+        {
+          "day": "Martes",
+          "block": "5ta 21:30-22:20",
+          "cell": "8°- A-2CIENCIAS",
+          "reason": "Ciencias sección A-2 — en BD solo existe grupo 7-A/8-A (sin subsección A-2)"
+        },
+        {
+          "day": "Miércoles",
+          "block": "3ra 19:50-20:40",
+          "cell": "7°- A-2CIENCIAS",
+          "reason": "Ciencias sección A-2 — en BD solo existe grupo 7-A/8-A (sin subsección A-2)"
+        },
+        {
+          "day": "Miércoles",
+          "block": "2da 19:00-19:50",
+          "cell": "7°- A-2CIENCIAS",
+          "reason": "Ciencias sección A-2 — en BD solo existe grupo 7-A/8-A (sin subsección A-2)"
+        }
+      ],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "CIENCIAS NATURALES",
+          "group": "7-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "FÍSICA",
+          "group": "11-A3",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "FÍSICA",
+          "group": "11-A2",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "CIENCIAS NATURALES",
+          "group": "9-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "CIENCIAS NATURALES",
+          "group": "9-A",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Yaribeth Mora",
+      "word_slots": 26,
+      "bd_count": 29,
+      "matched": 25,
+      "missing_count": 1,
+      "coverage_pct": 96.2,
+      "status": "PARCIAL",
+      "missing": [
+        {
+          "day": "Jueves",
+          "block": "3ra 19:50-20:40",
+          "cell": "12 I-T-A-E",
+          "reason": "Código genérico I-T-A-E (año sin grupo/materia específica)"
+        }
+      ],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "TALLER III (TECNOLOGÍA Y TALLER APLICADO)",
+          "group": "12-A2",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "MATEMÁTICA",
+          "group": "7-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "ORIENTACIÓN",
+          "group": "7-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "TALLER II (INSTALACIÓN RESIDENCIAL Y COMERCIAL)",
+          "group": "12-A3",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "TALLER DE PRODUCCIÓN Y DISTRIBUCIÓN",
+          "group": "12-A3",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Zuley E. Reyes G.",
+      "word_slots": 26,
+      "bd_count": 26,
+      "matched": 26,
+      "missing_count": 0,
+      "coverage_pct": 100.0,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "CÍVICA",
+          "group": "12-A3",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "CÍVICA",
+          "group": "12-A2",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "GEOGRAFÍA DE PANAMÁ",
+          "group": "10-A4",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "GEOGRAFÍA DE PANAMÁ",
+          "group": "10-A2",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "HISTORIA",
+          "group": "A",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Elvia D. Robles J.",
+      "word_slots": 26,
+      "bd_count": 26,
+      "matched": 26,
+      "missing_count": 0,
+      "coverage_pct": 100.0,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "ÉTICA Y VALORES",
+          "group": "10-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "ÉTICA Y VALORES",
+          "group": "10-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "EDUCACIÓN FÍSICA",
+          "group": "10-A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "6ta 22:20-23:10",
+          "subject": "EDUCACIÓN FÍSICA",
+          "group": "10-A",
+          "word_cell": null
+        },
+        {
+          "day": "Martes",
+          "block": "1ra 18:10-19:00",
+          "subject": "BELLAS ARTES",
+          "group": "10-A",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Carlos A. Vásquez",
+      "word_slots": 25,
+      "bd_count": 25,
+      "matched": 25,
+      "missing_count": 0,
+      "coverage_pct": 100.0,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "TALLER IV (ANÁLISIS DE CIRCUITO)",
+          "group": "11-A3",
+          "word_cell": null
+        }
+      ]
+    },
+    {
+      "name": "Carlos A. Vásquez",
+      "word_slots": 0,
+      "bd_count": 25,
+      "matched": 0,
+      "missing_count": 0,
+      "coverage_pct": 100,
+      "status": "COMPLETO",
+      "missing": [],
+      "loaded_sample": [
+        {
+          "day": "Lunes",
+          "block": "1ra 18:10-19:00",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "2da 19:00-19:50",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "3ra 19:50-20:40",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "4ta 20:40-21:30",
+          "subject": "MET",
+          "group": "A",
+          "word_cell": null
+        },
+        {
+          "day": "Lunes",
+          "block": "5ta 21:30-22:20",
+          "subject": "TALLER IV (ANÁLISIS DE CIRCUITO)",
+          "group": "11-A3",
+          "word_cell": null
+        }
+      ]
+    }
+  ]
+}
