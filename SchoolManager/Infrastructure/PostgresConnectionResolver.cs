@@ -25,6 +25,75 @@ public static class PostgresConnectionResolver
         return null;
     }
 
+    public static string RequireFromAppSettings()
+    {
+        var root = FindAppSettingsDirectory();
+        var builder = new ConfigurationBuilder()
+            .SetBasePath(root)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: false)
+            .AddEnvironmentVariables();
+        var resolved = Resolve(builder.Build());
+        if (string.IsNullOrWhiteSpace(resolved))
+            throw new InvalidOperationException("Falta ConnectionStrings:DefaultConnection.");
+        return resolved;
+    }
+
+    public static (string Host, string Database, string Username) Describe(string connectionString)
+    {
+        var map = Parse(connectionString);
+        map.TryGetValue("Host", out var host);
+        map.TryGetValue("Database", out var database);
+        if (!map.TryGetValue("Username", out var username))
+            map.TryGetValue("User ID", out username);
+        return (host ?? "", database ?? "", username ?? "");
+    }
+
+    public static Dictionary<string, string> Parse(string connectionString)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var segment in connectionString.Split(';'))
+        {
+            var t = segment.Trim();
+            if (t.Length == 0)
+                continue;
+            var eq = t.IndexOf('=');
+            if (eq < 1)
+                continue;
+            map[t[..eq].Trim()] = t[(eq + 1)..].Trim();
+        }
+        return map;
+    }
+
+    private static string FindAppSettingsDirectory()
+    {
+        var candidates = new[]
+        {
+            Directory.GetCurrentDirectory(),
+            AppContext.BaseDirectory,
+            Path.Combine(Directory.GetCurrentDirectory(), "SchoolManager")
+        };
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate)
+                && File.Exists(Path.Combine(candidate, "appsettings.json")))
+                return candidate;
+        }
+
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "appsettings.json")))
+                return dir.FullName;
+            var nested = Path.Combine(dir.FullName, "SchoolManager", "appsettings.json");
+            if (File.Exists(nested))
+                return Path.Combine(dir.FullName, "SchoolManager");
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("No se encontró appsettings.json para DefaultConnection.");
+    }
+
     public static string ConvertDatabaseUrlToNpgsql(string databaseUrl)
     {
         var uri = new Uri(databaseUrl);

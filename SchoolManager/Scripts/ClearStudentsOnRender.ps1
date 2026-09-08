@@ -22,13 +22,14 @@ if (-not $psqlPath) {
     exit 1
 }
 
-# Datos de conexión a Render (mismos que en TestRenderConnection.ps1 / SchoolDbContext)
-$dbHost = "dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com"
-$port = "5432"
-$database = "schoolmanager_daqf"
-$username = "admin"
-$password = "iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r"
-
+. (Join-Path $PSScriptRoot "Resolve-DefaultConnection.ps1")
+$conn = Get-DefaultConnectionMap
+$dbHost = $conn['Host']
+$port = $conn['Port']
+$database = $conn['Database']
+$username = $conn['Username']
+$password = $conn['Password']
+if ($conn['SSL Mode'] -match 'Require') { $env:PGSSLMODE = 'require' }
 $env:PGPASSWORD = $password
 
 Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan

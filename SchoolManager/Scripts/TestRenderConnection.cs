@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Infrastructure;
 using SchoolManager.Models;
 using Npgsql;
 
@@ -9,9 +10,7 @@ namespace SchoolManager.Scripts;
 /// </summary>
 public static class TestRenderConnection
 {
-    // Cadena de conexión de Render (producción)
-    private const string RenderConnectionString = 
-        "Host=dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com;Database=schoolmanager_daqf;Username=admin;Password=iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r;Port=5432;SSL Mode=Require;Trust Server Certificate=true";
+    private static string ConnectionString => PostgresConnectionResolver.RequireFromAppSettings();
 
     /// <summary>
     /// Verifica la conexión a la base de datos de Render
@@ -20,11 +19,12 @@ public static class TestRenderConnection
     {
         try
         {
-            Console.WriteLine("🔍 Verificando conexión a Render...");
-            Console.WriteLine($"📡 Host: dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com");
-            Console.WriteLine($"🗄️  Database: schoolmanager_daqf");
+            var info = PostgresConnectionResolver.Describe(ConnectionString);
+            Console.WriteLine("🔍 Verificando DefaultConnection...");
+            Console.WriteLine($"📡 Host: {info.Host}");
+            Console.WriteLine($"🗄️  Database: {info.Database}");
             
-            using var connection = new NpgsqlConnection(RenderConnectionString);
+            using var connection = new NpgsqlConnection(ConnectionString);
             await connection.OpenAsync();
             
             Console.WriteLine("✅ Conexión exitosa a la base de datos de Render!");
@@ -78,7 +78,7 @@ public static class TestRenderConnection
         {
             Console.WriteLine("\n🔍 Verificando estado de las migraciones...");
             
-            using var connection = new NpgsqlConnection(RenderConnectionString);
+            using var connection = new NpgsqlConnection(ConnectionString);
             await connection.OpenAsync();
 
             // Verificar tabla academic_years

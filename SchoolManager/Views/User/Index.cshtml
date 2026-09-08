@@ -547,6 +547,19 @@
                     </div>
                 </div> *@
                 
+                <div class="row mb-4" id="curriculumLoadPermissionSection" style="display: none;">
+                    <div class="col-12">
+                        <h5 class="mb-3"><i class="fas fa-clock me-2"></i>Carga Horaria Curricular</h5>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="CanEditCurriculumLoad" id="canEditCurriculumLoadCheck" value="true">
+                            <label class="form-check-label" for="canEditCurriculumLoadCheck">
+                                Permitir editar horas B1/B2
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Solo autoriza la edición de carga horaria. No convierte a la secretaria en administradora.</small>
+                    </div>
+                </div>
+
                 <!-- Nueva sección para especializaciones - Solo visible para rol Teacher -->
                 <div class="row mb-4" id="specializationsSection" style="display: none;">
                     <div class="col-12">
@@ -759,13 +772,21 @@
                 
                 if (selectedRole === 'teacher') {
                     specializationsSection.show();
+                    $('#curriculumLoadPermissionSection').hide();
                     inclusivoSection.hide();
                     inclusionSection.hide();
                     // Limpiar campos cuando se ocultan
                     $('#inclusivoSelect').val('');
                     $('#inclusionSelect').val('');
+                    $('#canEditCurriculumLoadCheck').prop('checked', false);
+                } else if (selectedRole === 'secretaria') {
+                    specializationsSection.hide();
+                    $('#curriculumLoadPermissionSection').show();
+                    inclusivoSection.hide();
+                    inclusionSection.hide();
                 } else if (selectedRole === 'student' || selectedRole === 'estudiante') {
                     specializationsSection.hide();
+                    $('#curriculumLoadPermissionSection').hide();
                     inclusivoSection.show();
                     inclusionSection.show();
                     
@@ -779,8 +800,10 @@
                     $('#inclusionCheck').prop('checked', false);
                 } else {
                     specializationsSection.hide();
+                    $('#curriculumLoadPermissionSection').hide();
                     inclusivoSection.hide();
                     inclusionSection.hide();
+                    $('#canEditCurriculumLoadCheck').prop('checked', false);
                     // Limpiar todos los campos cuando se ocultan las secciones
                     $('#disciplinaCheck').prop('checked', false);
                     $('#orientacionCheck').prop('checked', false);
@@ -795,6 +818,12 @@
             
             if (initialRole === 'teacher') {
                 $('#specializationsSection').show();
+                $('#curriculumLoadPermissionSection').hide();
+                $('#inclusivoSection').hide();
+                $('#inclusionSection').hide();
+            } else if (initialRole === 'secretaria') {
+                $('#specializationsSection').hide();
+                $('#curriculumLoadPermissionSection').show();
                 $('#inclusivoSection').hide();
                 $('#inclusionSection').hide();
             } else if (initialRole === 'student' || initialRole === 'estudiante') {
@@ -807,6 +836,7 @@
                 
             } else {
                 $('#specializationsSection').hide();
+                $('#curriculumLoadPermissionSection').hide();
                 $('#inclusivoSection').hide();
                 $('#inclusionSection').hide();
             }
@@ -1216,6 +1246,7 @@
                     $('#disciplinaCheck').prop('checked', user.disciplina === true);
                     $('#orientacionCheck').prop('checked', user.orientacion === true);
                     $('#inclusionCheck').prop('checked', user.inclusion === "si");
+                    $('#canEditCurriculumLoadCheck').prop('checked', user.canEditCurriculumLoad === true);
                     
                     
                     // Manejar campo Inclusivo para estudiantes
@@ -1235,11 +1266,18 @@
                     
                     if (userRole === 'teacher') {
                         $('#specializationsSection').show();
+                        $('#curriculumLoadPermissionSection').hide();
+                        $('#inclusivoSection').hide();
+                        $('#inclusionSection').hide();
+                    } else if (userRole === 'secretaria') {
+                        $('#specializationsSection').hide();
+                        $('#curriculumLoadPermissionSection').show();
                         $('#inclusivoSection').hide();
                         $('#inclusionSection').hide();
                     } else if (userRole === 'student' || userRole === 'estudiante') {
                         
                         $('#specializationsSection').hide();
+                        $('#curriculumLoadPermissionSection').hide();
                         $('#inclusivoSection').show();
                         $('#inclusionSection').show();
                         
@@ -1248,6 +1286,7 @@
                         
                     } else {
                         $('#specializationsSection').hide();
+                        $('#curriculumLoadPermissionSection').hide();
                         $('#inclusivoSection').hide();
                         $('#inclusionSection').hide();
                     }
@@ -1258,10 +1297,17 @@
                     
                     if (normalizedRole === 'teacher') {
                         $('#specializationsSection').show();
+                        $('#curriculumLoadPermissionSection').hide();
+                        $('#inclusivoSection').hide();
+                        $('#inclusionSection').hide();
+                    } else if (normalizedRole === 'secretaria') {
+                        $('#specializationsSection').hide();
+                        $('#curriculumLoadPermissionSection').show();
                         $('#inclusivoSection').hide();
                         $('#inclusionSection').hide();
                     } else if (normalizedRole === 'student' || normalizedRole === 'estudiante') {
                         $('#specializationsSection').hide();
+                        $('#curriculumLoadPermissionSection').hide();
                         $('#inclusivoSection').show();
                         $('#inclusionSection').show();
                         
@@ -1270,6 +1316,7 @@
                         
                     } else {
                         $('#specializationsSection').hide();
+                        $('#curriculumLoadPermissionSection').hide();
                         $('#inclusivoSection').hide();
                         $('#inclusionSection').hide();
                     }
@@ -1487,7 +1534,8 @@
                     Disciplina: selectedRole === 'teacher' ? $('#disciplinaCheck').is(':checked') : false,
                     Inclusion: selectedRole === 'teacher' ? ($('#inclusionCheck').is(':checked') ? 'si' : 'no') : null,
                     Orientacion: selectedRole === 'teacher' ? $('#orientacionCheck').is(':checked') : false,
-                    Inclusivo: (selectedRole === 'student' || selectedRole === 'estudiante') ? ($('#inclusionSelect').val() === 'si' ? true : $('#inclusionSelect').val() === 'no' ? false : null) : ($('#inclusivoSelect').val() === 'true' ? true : $('#inclusivoSelect').val() === 'false' ? false : null)
+                    Inclusivo: (selectedRole === 'student' || selectedRole === 'estudiante') ? ($('#inclusionSelect').val() === 'si' ? true : $('#inclusionSelect').val() === 'no' ? false : null) : ($('#inclusivoSelect').val() === 'true' ? true : $('#inclusivoSelect').val() === 'false' ? false : null),
+                    CanEditCurriculumLoad: selectedRole === 'secretaria' ? $('#canEditCurriculumLoadCheck').is(':checked') : false
                 };
                 
                 // LOGS PARA DEBUGGING DE CELULARES - CREATE
@@ -1592,7 +1640,8 @@
                     Disciplina: selectedRole === 'teacher' ? $('#disciplinaCheck').is(':checked') : false,
                     Inclusion: selectedRole === 'teacher' ? ($('#inclusionCheck').is(':checked') ? 'si' : 'no') : null,
                     Orientacion: selectedRole === 'teacher' ? $('#orientacionCheck').is(':checked') : false,
-                    Inclusivo: (selectedRole === 'student' || selectedRole === 'estudiante') ? ($('#inclusionSelect').val() === 'si' ? true : $('#inclusionSelect').val() === 'no' ? false : null) : ($('#inclusivoSelect').val() === 'true' ? true : $('#inclusivoSelect').val() === 'false' ? false : null)
+                    Inclusivo: (selectedRole === 'student' || selectedRole === 'estudiante') ? ($('#inclusionSelect').val() === 'si' ? true : $('#inclusionSelect').val() === 'no' ? false : null) : ($('#inclusivoSelect').val() === 'true' ? true : $('#inclusivoSelect').val() === 'false' ? false : null),
+                    CanEditCurriculumLoad: selectedRole === 'secretaria' ? $('#canEditCurriculumLoadCheck').is(':checked') : false
                 };
                 
                 // LOGS PARA DEBUGGING DE CELULARES - UPDATE
@@ -1723,8 +1772,10 @@
                 
                 // Ocultar secciones al resetear
                 $('#specializationsSection').hide();
+                $('#curriculumLoadPermissionSection').hide();
                 $('#inclusivoSection').hide();
                 $('#inclusionSection').hide();
+                $('#canEditCurriculumLoadCheck').prop('checked', false);
                 
                 $('#btnUpdateUser').prop('disabled', true);
                 $('#btnCreateUser').prop('disabled', false);

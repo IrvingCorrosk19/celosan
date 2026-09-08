@@ -98,6 +98,7 @@ public class UserController : Controller
             Inclusion = model.Inclusion,
             Orientacion = model.Orientacion ?? false,
             Inclusivo = model.Inclusivo ?? false,
+            CanEditCurriculumLoad = roleLower == "secretaria" && (model.CanEditCurriculumLoad ?? false),
         };
 
         await _userService.CreateAsync(user, model.Subjects, model.Groups);
@@ -337,6 +338,7 @@ public class UserController : Controller
             user.Inclusion,
             user.Orientacion,
             user.Inclusivo,
+            user.CanEditCurriculumLoad,
             user.PhotoUrl,
             Subjects = user.Subjects.Select(s => s.Id),
             Groups = user.Groups.Select(g => g.Id)
@@ -434,6 +436,7 @@ public class UserController : Controller
             existingUser.Inclusion = model.Inclusion;
             existingUser.Orientacion = model.Orientacion ?? false;
             existingUser.Inclusivo = model.Inclusivo ?? false;
+            existingUser.CanEditCurriculumLoad = roleLower == "secretaria" && (model.CanEditCurriculumLoad ?? false);
 
             Console.WriteLine("=== CAMPOS ASIGNADOS ===");
             Console.WriteLine($"existingUser.Disciplina: {existingUser.Disciplina}");

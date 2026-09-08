@@ -235,6 +235,7 @@ builder.Services.AddScoped<IAcademicAssignmentService, AcademicAssignmentService
 builder.Services.AddScoped<IStudentAssignmentService, StudentAssignmentService>();
 builder.Services.AddScoped<ISubjectPromotionService, SubjectPromotionService>();
 builder.Services.AddScoped<ICurriculumService, CurriculumService>();
+builder.Services.AddScoped<ICurriculumLoadService, CurriculumLoadService>();
 builder.Services.AddScoped<IAcademicPrerequisiteService, AcademicPrerequisiteService>();
 builder.Services.AddScoped<IModularEnrollmentService, ModularEnrollmentService>();
 builder.Services.AddScoped<IAcademicCreditService, AcademicCreditService>();

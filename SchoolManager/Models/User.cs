@@ -48,6 +48,9 @@ public partial class User
     public bool? Orientacion { get; set; }
 
     public bool? Inclusivo { get; set; }
+
+    /// <summary>Permite a una secretaria editar horas de carga curricular. No otorga rol admin.</summary>
+    public bool? CanEditCurriculumLoad { get; set; }
     
     public string? Shift { get; set; } // Jornada actual del estudiante: Mañana, Tarde, Noche
 

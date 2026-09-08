@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SchoolManager.Infrastructure;
 using SchoolManager.Models;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -9,17 +10,15 @@ namespace SchoolManager.Scripts;
 /// </summary>
 public static class ApplyRenderMigrations
 {
-    // Cadena de conexión de Render (producción)
-    private const string RenderConnectionString = 
-        "Host=dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com;Database=schoolmanager_daqf;Username=admin;Password=iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r;Port=5432;SSL Mode=Require;Trust Server Certificate=true";
+    private static string ConnectionString => PostgresConnectionResolver.RequireFromAppSettings();
 
     /// <summary>
-    /// Crea un SchoolDbContext con la conexión de Render
+    /// Crea un SchoolDbContext con DefaultConnection.
     /// </summary>
     private static SchoolDbContext CreateRenderDbContext()
     {
         var optionsBuilder = new DbContextOptionsBuilder<SchoolDbContext>();
-        optionsBuilder.UseNpgsql(RenderConnectionString);
+        optionsBuilder.UseNpgsql(ConnectionString);
         
         // Configurar interceptor de DateTime
         optionsBuilder.AddInterceptors(new DateTimeInterceptor());

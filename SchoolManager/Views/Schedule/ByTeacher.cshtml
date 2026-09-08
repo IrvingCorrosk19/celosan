@@ -154,23 +154,23 @@
                 return uniqueIds([primaryId].concat(aliases));
             }
 
-            function dedupeAcademicYears(items) {
+            function uniqueAcademicYearsById(items) {
                 var map = {};
                 (items || []).forEach(function (a) {
-                    var id = getId(a.id || a.Id);
-                    var name = a.name || a.Name || '';
-                    var start = String(a.startDate || a.StartDate || '').substring(0, 10);
-                    var end = String(a.endDate || a.EndDate || '').substring(0, 10);
-                    var key = normalizeText(name) + '|' + start + '|' + end;
-                    if (!key) key = id.toLowerCase();
-                    if (!map[key]) map[key] = a;
+                    var id = getId(a.id || a.Id).toLowerCase();
+                    if (id && !map[id]) map[id] = a;
                 });
-                return Object.keys(map)
-                    .map(function (k) { return map[k]; })
-                    .sort(function (a, b) {
-                        return String(b.startDate || b.StartDate || '').localeCompare(String(a.startDate || a.StartDate || '')) ||
-                            String(a.name || a.Name || '').localeCompare(String(b.name || b.Name || ''));
-                    });
+                return Object.keys(map).map(function (k) { return map[k]; });
+            }
+
+            function formatAcademicYearLabel(a) {
+                if (a.label || a.Label) return a.label || a.Label;
+                var name = a.name || a.Name || '(Sin nombre)';
+                var start = String(a.startDate || a.StartDate || '').substring(0, 10);
+                var end = String(a.endDate || a.EndDate || '').substring(0, 10);
+                var active = (a.isActive === true || a.IsActive === true) ? 'activo' : 'inactivo';
+                var count = a.scheduleEntryCount != null ? a.scheduleEntryCount : (a.ScheduleEntryCount != null ? a.ScheduleEntryCount : 0);
+                return name + ' — ' + start + ' a ' + end + ' — ' + active + ' — ' + count + ' horarios';
             }
 
             function dedupePeople(items) {
@@ -241,9 +241,8 @@
                     academicYears.forEach(function (a) {
                         const opt = document.createElement('option');
                         const id = (a.id !== undefined && a.id !== null) ? String(a.id) : (a.Id !== undefined && a.Id !== null) ? String(a.Id) : '';
-                        const name = (a.name !== undefined && a.name !== null) ? a.name : (a.Name !== undefined && a.Name !== null) ? a.Name : '';
                         opt.value = id;
-                        opt.textContent = name || '(Sin nombre)';
+                        opt.textContent = formatAcademicYearLabel(a);
                         if (id && currentAcademicYearId && String(id).toLowerCase() === String(currentAcademicYearId).toLowerCase()) opt.selected = true;
                         aySelect.appendChild(opt);
                     });
@@ -273,7 +272,7 @@
                 return '--:--';
             }
 
-            academicYears = dedupeAcademicYears(academicYears);
+            academicYears = uniqueAcademicYearsById(academicYears);
             timeSlots = dedupeTimeSlots(timeSlots);
             teachers = dedupePeople(teachers);
 

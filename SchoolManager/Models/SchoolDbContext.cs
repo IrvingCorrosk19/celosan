@@ -67,6 +67,12 @@ public partial class SchoolDbContext : DbContext
 
     public virtual DbSet<CurriculumSubjectPrerequisite> CurriculumSubjectPrerequisites { get; set; }
 
+    public virtual DbSet<CurriculumBlock> CurriculumBlocks { get; set; }
+
+    public virtual DbSet<CurriculumLoadSubject> CurriculumLoadSubjects { get; set; }
+
+    public virtual DbSet<CurriculumLoadHours> CurriculumLoadHours { get; set; }
+
     public virtual DbSet<StudentAcademicPeriodEnrollment> StudentAcademicPeriodEnrollments { get; set; }
 
     public virtual DbSet<StudentAcademicCredit> StudentAcademicCredits { get; set; }
@@ -147,7 +153,7 @@ public partial class SchoolDbContext : DbContext
     {
         optionsBuilder.AddInterceptors(new DateTimeInterceptor());
         if (optionsBuilder.IsConfigured) return;
-        optionsBuilder.UseNpgsql("Host=dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com;Database=schoolmanager_daqf;Username=admin;Password=iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r;Port=5432;SSL Mode=Require;Trust Server Certificate=true");
+        optionsBuilder.UseNpgsql(SchoolManager.Infrastructure.PostgresConnectionResolver.RequireFromAppSettings());
     }
 
 
@@ -1551,6 +1557,9 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.Inclusivo)
                 .HasDefaultValue(false)
                 .HasColumnName("inclusivo");
+            entity.Property(e => e.CanEditCurriculumLoad)
+                .HasDefaultValue(false)
+                .HasColumnName("can_edit_curriculum_load");
             
             entity.Property(e => e.Shift)
                 .HasMaxLength(20)
@@ -3588,6 +3597,72 @@ public partial class SchoolDbContext : DbContext
 
             entity.HasOne(d => d.Equivalency).WithMany(p => p.Items).HasForeignKey(d => d.EquivalencyId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("student_subject_equivalency_items_equivalency_id_fkey");
             entity.HasOne(d => d.CurriculumSubject).WithMany().HasForeignKey(d => d.CurriculumSubjectId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("student_subject_equivalency_items_curriculum_subject_id_fkey");
+        });
+
+        modelBuilder.Entity<CurriculumBlock>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("curriculum_blocks_pkey");
+            entity.ToTable("curriculum_blocks");
+            entity.HasIndex(e => e.Code, "uq_curriculum_blocks_code").IsUnique();
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.Code).HasMaxLength(8).HasColumnName("code");
+            entity.Property(e => e.Name).HasMaxLength(40).HasColumnName("name");
+            entity.Property(e => e.SortOrder).HasColumnName("sort_order");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<CurriculumLoadSubject>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("curriculum_load_subjects_pkey");
+            entity.ToTable("curriculum_load_subjects");
+            entity.HasIndex(e => new { e.SchoolId, e.SpecialtyId, e.GradeLevelId, e.AreaId, e.SubjectId }, "uq_curriculum_load_subjects_key").IsUnique();
+            entity.HasIndex(e => new { e.SchoolId, e.SpecialtyId }, "ix_cls_school_specialty");
+            entity.HasIndex(e => e.GradeLevelId, "ix_cls_grade");
+            entity.HasIndex(e => e.SubjectId, "ix_cls_subject");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.SpecialtyId).HasColumnName("specialty_id");
+            entity.Property(e => e.GradeLevelId).HasColumnName("grade_level_id");
+            entity.Property(e => e.AreaId).HasColumnName("area_id");
+            entity.Property(e => e.SubjectId).HasColumnName("subject_id");
+            entity.Property(e => e.IsActive).HasDefaultValue(true).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_load_subjects_school_id_fkey");
+            entity.HasOne(d => d.Specialty).WithMany().HasForeignKey(d => d.SpecialtyId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_load_subjects_specialty_id_fkey");
+            entity.HasOne(d => d.GradeLevel).WithMany().HasForeignKey(d => d.GradeLevelId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_load_subjects_grade_level_id_fkey");
+            entity.HasOne(d => d.Area).WithMany().HasForeignKey(d => d.AreaId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_load_subjects_area_id_fkey");
+            entity.HasOne(d => d.Subject).WithMany().HasForeignKey(d => d.SubjectId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_load_subjects_subject_id_fkey");
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_load_subjects_created_by_fkey");
+            entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_load_subjects_updated_by_fkey");
+        });
+
+        modelBuilder.Entity<CurriculumLoadHours>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("curriculum_load_hours_pkey");
+            entity.ToTable("curriculum_load_hours", table =>
+                table.HasCheckConstraint("ck_curriculum_load_hours_non_negative", "hours >= 0"));
+            entity.HasIndex(e => new { e.CurriculumLoadSubjectId, e.CurriculumBlockId }, "uq_curriculum_load_hours_subject_block").IsUnique();
+            entity.HasIndex(e => e.CurriculumBlockId, "ix_clh_block");
+
+            entity.Property(e => e.Id).HasDefaultValueSql("gen_random_uuid()").HasColumnName("id");
+            entity.Property(e => e.CurriculumLoadSubjectId).HasColumnName("curriculum_load_subject_id");
+            entity.Property(e => e.CurriculumBlockId).HasColumnName("curriculum_block_id");
+            entity.Property(e => e.Hours).HasColumnType("numeric(5,2)").HasColumnName("hours");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp with time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp with time zone").HasColumnName("updated_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.CurriculumLoadSubject).WithMany(p => p.Hours).HasForeignKey(d => d.CurriculumLoadSubjectId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("curriculum_load_hours_subject_id_fkey");
+            entity.HasOne(d => d.CurriculumBlock).WithMany(p => p.Hours).HasForeignKey(d => d.CurriculumBlockId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("curriculum_load_hours_block_id_fkey");
+            entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_load_hours_created_by_fkey");
+            entity.HasOne(d => d.UpdatedByUser).WithMany().HasForeignKey(d => d.UpdatedBy).OnDelete(DeleteBehavior.SetNull).HasConstraintName("curriculum_load_hours_updated_by_fkey");
         });
     }
 

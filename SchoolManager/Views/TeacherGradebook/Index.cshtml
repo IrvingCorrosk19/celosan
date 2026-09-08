@@ -537,7 +537,7 @@
         font-weight: 600;
     }
 
-    .info-alert p {image.png
+    .info-alert p {
         color: var(--secondary-color);
         margin: 0;
     }
@@ -752,6 +752,11 @@
                 <i class="bi bi-people-fill"></i> Consejería
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link d-flex align-items-center gap-2" id="cargaHoraria-tab" data-bs-toggle="tab" data-bs-target="#cargaHorariaTab" type="button" role="tab">
+                <i class="bi bi-clock-history"></i> Carga Horaria
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content" id="mainTabContent">
@@ -880,6 +885,9 @@
                             <tbody id="bodyRows"></tbody>
                         </table>
                     </div>
+                    <table class="d-none" aria-hidden="true">
+                        <tbody id="notasResumenBody"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -919,7 +927,7 @@
                                     <th>Estado</th>
                                 </tr>
                             </thead>
-                            <tbody id="resumenBody">
+                            <tbody id="promediosFinalesBody">
                                 <!-- Aquí se llenará dinámicamente con JS -->
                             </tbody>
                         </table>
@@ -1523,7 +1531,7 @@
                             </thead>
                             <tbody id="bodyPromediosConsejeria">
                                 <tr>
-                                    <td colspan="100%" class="text-center text-muted">Selecciona un grupo y trimestre para ver los promedios</td>
+                                    <td colspan="1" class="text-center text-muted">Selecciona un grupo y trimestre para ver los promedios</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1565,6 +1573,11 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- TAB: CARGA HORARIA -->
+        <div class="tab-pane fade" id="cargaHorariaTab" role="tabpanel" aria-labelledby="cargaHoraria-tab">
+            @await Html.PartialAsync("_CargaHoraria")
         </div>
     </div>
 </div>
@@ -1732,7 +1745,7 @@
             }
 
             function updateResumenTable() {
-                const resumenBody = $('#resumenBody');
+                const resumenBody = $('#notasResumenBody');
                 resumenBody.empty();
                 
                 if (!students || students.length === 0) {
@@ -1890,7 +1903,7 @@
                         body.append(row);
                     });
                 } else {
-                    body.append('<tr><td colspan="100%" class="text-center text-muted">No hay estudiantes cargados</td></tr>');
+                    body.append('<tr><td colspan="6" class="text-center text-muted">No hay estudiantes cargados</td></tr>');
                 }
 
                 function procesarCeldaNota($cell) {
@@ -2198,8 +2211,9 @@
             }
 
             function loadStudents(groupId, gradeLevelId, subjectId, callback) {
-                $('#hdrRow').html('<th colspan="100%">Cargando estudiantes...</th>');
-                $('#bodyRows').html('<tr><td colspan="100%" class="text-center">Cargando estudiantes...</td></tr>');
+                const gbColsLoad = Math.max(2, $('#gradebook thead th').length);
+                $('#hdrRow').html('<th colspan="' + gbColsLoad + '">Cargando estudiantes...</th>');
+                $('#bodyRows').html('<tr><td colspan="' + gbColsLoad + '" class="text-center">Cargando estudiantes...</td></tr>');
 
                 $.get(`/TeacherGradebook/StudentsByGroupAndGrade?groupId=${groupId}&gradeId=${gradeLevelId}&subjectId=${subjectId}`)
                     .done(data => {
@@ -2220,14 +2234,16 @@
                     })
                     .fail(function(xhr, status, error) {
                         console.error('Error al cargar estudiantes:', error);
-                        $('#hdrRow').html('<th colspan="100%">Error al cargar estudiantes</th>');
-                        $('#bodyRows').html('<tr><td colspan="100%" class="text-center text-danger">Error al cargar los estudiantes</td></tr>');
+                        const gbColsErr = Math.max(2, $('#gradebook thead th').length);
+                        $('#hdrRow').html('<th colspan="' + gbColsErr + '">Error al cargar estudiantes</th>');
+                        $('#bodyRows').html('<tr><td colspan="' + gbColsErr + '" class="text-center text-danger">Error al cargar los estudiantes</td></tr>');
                     });
             }
 
             function loadNotasCargadas(subjectId, groupId, gradeLevelId, trimester) {
-                $('#hdrRow').html('<th colspan="100%">Cargando notas...</th>');
-                $('#bodyRows').html('<tr><td colspan="100%" class="text-center">Cargando notas...</td></tr>');
+                const gbColsNotes = Math.max(2, $('#gradebook thead th').length);
+                $('#hdrRow').html('<th colspan="' + gbColsNotes + '">Cargando notas...</th>');
+                $('#bodyRows').html('<tr><td colspan="' + gbColsNotes + '" class="text-center">Cargando notas...</td></tr>');
 
                 $.ajax({
                     url: '/TeacherGradebook/GetNotasCargadas',
@@ -2286,80 +2302,9 @@
                     error: function(xhr, status, error) {
                         console.error('Error al cargar notas:', error);
                         console.error('Detalles del error:', xhr.responseText);
-                        $('#hdrRow').html('<th colspan="100%">Error al cargar datos</th>');
-                        $('#bodyRows').html('<tr><td colspan="100%" class="text-center text-danger">Error al cargar las notas: ' + error + '</td></tr>');
-                    }
-                });
-            }
-
-            function loadPromediosFinales() {
-                const combo = $('#selGroupResumen').val();
-                if (!combo) return;
-
-                const [subjectId, groupId, gradeLevelId, shiftId] = combo.split('|');
-
-                $.ajax({
-                    url: '/TeacherGradebook/GetPromediosFinales',
-                    method: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({
-                        subjectId: subjectId,
-                        groupId: groupId,
-                        gradeLevelId: gradeLevelId,
-                        teacherId: teacherId
-                    }),
-                    success: function(response) {
-                        const resumenBody = $('#resumenBody');
-                        resumenBody.empty();
-                        // Limpia el mapa de estudiantes para evitar datos corruptos
-                        const map = {};
-                        if (response.success && Array.isArray(response.data) && response.data.length > 0) {
-                            response.data.forEach(item => {
-                                if (!map[item.studentId]) {
-                                    map[item.studentId] = {
-                                        studentFullName: item.studentFullName && item.studentFullName.trim() ? item.studentFullName : '(Sin nombre)',
-                                        documentId: item.documentId || 'Sin cédula',
-                                        trimestres: { '1T': 0, '2T': 0, '3T': 0 },
-                                        notas: [],
-                                    };
-                                }
-                                map[item.studentId].trimestres[item.trimester] = item.notaFinal ?? 0;
-                                map[item.studentId].notas.push(item.notaFinal ?? 0);
-                            });
-                            Object.values(map).forEach(est => {
-                                const nombre = formatName(est.studentFullName);
-                                const documentId = est.documentId || 'Sin cédula';
-                                const t1 = est.trimestres['1T'] || 0;
-                                const t2 = est.trimestres['2T'] || 0;
-                                const t3 = est.trimestres['3T'] || 0;
-                                const notasValidas = [t1, t2, t3].filter(x => x > 0);
-                                const promedioFinal = notasValidas.length ? (notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length) : 0;
-                                let estado = 'Sin calificar';
-                                if (notasValidas.length) {
-                                    estado = promedioFinal >= 3.0 ? 'Aprobado' : 'Reprobado';
-                                }
-                                const row = `
-                                    <tr>
-                                        <td>
-                                            <div>${nombre}</div>
-                                            <small class="text-muted">${documentId}</small>
-                                        </td>
-                                        <td>${t1.toFixed(1)}</td>
-                                        <td>${t2.toFixed(1)}</td>
-                                        <td>${t3.toFixed(1)}</td>
-                                        <td><strong>${promedioFinal.toFixed(1)}</strong></td>
-                                        <td class="${estado === 'Aprobado' ? 'text-success' : (estado === 'Reprobado' ? 'text-danger' : 'text-danger')}">${estado}</td>
-                                    </tr>`;
-                                resumenBody.append(row);
-                            });
-                        } else {
-                            resumenBody.append('<tr><td colspan="6" class="text-center text-muted">No hay datos para mostrar.</td></tr>');
-                        }
-                    },
-                    error: function() {
-                        const resumenBody = $('#resumenBody');
-                        resumenBody.empty();
-                        resumenBody.append('<tr><td colspan="6" class="text-center text-danger">Error al cargar los promedios finales.</td></tr>');
+                        const gbColsData = Math.max(2, $('#gradebook thead th').length);
+                        $('#hdrRow').html('<th colspan="' + gbColsData + '">Error al cargar datos</th>');
+                        $('#bodyRows').html('<tr><td colspan="' + gbColsData + '" class="text-center text-danger">Error al cargar las notas: ' + error + '</td></tr>');
                     }
                 });
             }
@@ -2564,7 +2509,7 @@
                     $row.find('.score-cell').each(function() {
                         const $cell = $(this);
                         const tipo = $cell.data('type');
-                        const actividad = $cell.data('act');
+                        const actividad = String($cell.attr('data-act') ?? '').trim();
                         const nota = $cell.text().trim();
 
                         notasEstudiante.push({
@@ -2654,10 +2599,6 @@
 
             // Agregar el evento click al botón de guardar notas
             $('#btnGuardarNotas').on('click', guardarNotas);
-
-            // Llamar a la función cuando se cambie de grupo o se haga clic en la pestaña
-            $('#selGroup').on('change', loadPromediosFinales);
-            $('#resumen-tab').on('click', loadPromediosFinales);
 
             // Función para cargar el libro de calificaciones
             function loadGradeBook(groupId, trimester, subjectId, gradeLevelId) {
@@ -3199,15 +3140,16 @@
     <script>
         $(document).ready(() => {
             function consultarEstadisticas() {
-                const combo = $('#selGroup').val();
+                const combo = $('#filtroGradoAsistencia').val();
                 const trimestre = $('#trimestreEstadisticas').val();
                 let groupId = null;
                 let gradeId = null;
+                let shiftId = null;
                 if (combo) {
                     const parts = combo.split('|');
                     groupId = parts[1];
                     gradeId = parts[2];
-                    const shiftId = parts.length > 3 && parts[3] ? parts[3] : null;
+                    shiftId = parts.length > 3 && parts[3] ? parts[3] : null;
                 }
                 if (!groupId || !gradeId || !trimestre) {
                     Swal.fire({
@@ -3217,16 +3159,15 @@
                     });
                     return;
                 }
-                // Obtener fechas del option seleccionado y forzar formato ISO
                 const selected = $('#trimestreEstadisticas option:selected');
                 let fechaInicio = selected.data('inicio');
                 let fechaFin = selected.data('fin');
                 fechaInicio = fechaInicio ? fechaInicio + 'T00:00:00' : null;
                 fechaFin = fechaFin ? fechaFin + 'T23:59:59' : null;
-                // Mostrar en consola para depuración
                 console.log('Datos a enviar:', {
                     groupId: groupId,
                     gradeId: gradeId,
+                    shiftId: shiftId,
                     trimestre: trimestre,
                     fechaInicio: fechaInicio,
                     fechaFin: fechaFin
@@ -3244,13 +3185,11 @@
                         fechaFin: fechaFin
                     }),
                     success: function(data) {
-                        // Tarjetas
                         $('.statistics-card .display-4.text-primary').text(data.porcentajeAsistencia + '%');
                         $('.statistics-card .display-4.text-danger').text(data.porcentajeAusencias + '%');
                         $('.statistics-card .display-4.text-warning').text(data.porcentajeTardanzas + '%');
-                        // Tabla por estudiante
                         let html = '';
-                        data.porEstudiante.forEach(e => {
+                        (data.porEstudiante || []).forEach(e => {
                             html += `<tr>
                                 <td>
                                     <div>${e.estudiante}</div>
@@ -3274,13 +3213,7 @@
                 });
             }
 
-            // Al hacer click en el botón
             $('#btnConsultarEstadisticas').on('click', consultarEstadisticas);
-            // También al cambiar de grupo o trimestre principal, recargar el select de trimestre
-            $('#selGroup').on('change', function() {
-                // Opcional: podrías resetear el select de trimestre si lo deseas
-                // $('#trimestreEstadisticas').val($('#trimestreEstadisticas option:first').val());
-            });
         });
     </script>
 
@@ -4217,6 +4150,10 @@
             loadPromediosFinalesResumen();
         });
 
+        function formatPromedioCelda(valor) {
+            return (typeof valor === 'number' && !isNaN(valor)) ? valor.toFixed(1) : '—';
+        }
+
         function loadPromediosFinalesResumen() {
             const combo = $('#selGroupResumen').val();
             console.log("Combo seleccionado:", combo);
@@ -4236,10 +4173,9 @@
                 }),
                 success: function(response) {
                     console.log("Respuesta del backend:", response);
-                    const resumenBody = $('#resumenBody');
-                    resumenBody.empty();
+                    const promediosBody = $('#promediosFinalesBody');
+                    promediosBody.empty();
                     if (response.success && response.data && response.data.length > 0) {
-                        // Agrupar por estudiante usando propiedades con mayúscula
                         const estudiantes = {};
                         response.data.forEach(item => {
                             if (!estudiantes[item.studentId]) {
@@ -4258,38 +4194,35 @@
                             if (item.trimester === '2T') estudiantes[item.studentId].t2 = item.notaFinal;
                             if (item.trimester === '3T') estudiantes[item.studentId].t3 = item.notaFinal;
                         });
-                        // Calcular promedio final y estado
                         Object.values(estudiantes).forEach(est => {
                             const notas = [est.t1, est.t2, est.t3].filter(x => typeof x === 'number' && !isNaN(x));
                             est.promedioFinal = notas.length > 0 ? (notas.reduce((a, b) => a + b, 0) / notas.length) : null;
                             est.estado = est.promedioFinal !== null ? (est.promedioFinal >= 3.0 ? 'Aprobado' : 'Reprobado') : 'Sin calificar';
                         });
-                        // Renderizar filas
                         Object.values(estudiantes).forEach(est => {
-                            // Si el nombre es vacío, null o undefined, mostrar "(Sin nombre)"
                             let nombre = est.nombre;
                             if (!nombre || nombre.trim() === "" || nombre === "undefined") nombre = "(Sin nombre)";
                             const documentId = est.documentId || 'Sin cédula';
-                            resumenBody.append(`
+                            promediosBody.append(`
                                 <tr>
                                     <td>
                                         <div>${nombre}</div>
                                         <small class="text-muted">${documentId}</small>
                                     </td>
-                                    <td>${typeof est.t1 === 'number' && !isNaN(est.t1) ? est.t1.toFixed(1) : '0.0'}</td>
-                                    <td>${typeof est.t2 === 'number' && !isNaN(est.t2) ? est.t2.toFixed(1) : '0.0'}</td>
-                                    <td>${typeof est.t3 === 'number' && !isNaN(est.t3) ? est.t3.toFixed(1) : '0.0'}</td>
-                                    <td><strong>${typeof est.promedioFinal === 'number' && !isNaN(est.promedioFinal) ? est.promedioFinal.toFixed(1) : '0.0'}</strong></td>
+                                    <td>${formatPromedioCelda(est.t1)}</td>
+                                    <td>${formatPromedioCelda(est.t2)}</td>
+                                    <td>${formatPromedioCelda(est.t3)}</td>
+                                    <td><strong>${formatPromedioCelda(est.promedioFinal)}</strong></td>
                                     <td class="${est.estado === 'Aprobado' ? 'text-success' : 'text-danger'} fw-semibold">${est.estado}</td>
                                 </tr>
                             `);
                         });
                     } else {
-                        resumenBody.append('<tr><td colspan="6" class="text-center text-muted">No hay datos para mostrar.</td></tr>');
+                        promediosBody.append('<tr><td colspan="6" class="text-center text-muted">No hay datos para mostrar.</td></tr>');
                     }
                 },
                 error: function() {
-                    $('#resumenBody').html('<tr><td colspan="6" class="text-center text-danger">Error al cargar los promedios finales.</td></tr>');
+                    $('#promediosFinalesBody').html('<tr><td colspan="6" class="text-center text-danger">Error al cargar los promedios finales.</td></tr>');
                 }
             });
         }
@@ -4329,7 +4262,8 @@
             const trimester = $('#selTrimesterConsejeria').val();
             
             if (!selectedGroup || !trimester) {
-                $('#bodyPromediosConsejeria').html('<tr><td colspan="100%" class="text-center text-muted">Selecciona un grupo y trimestre para ver los promedios</td></tr>');
+                const consColsEmpty = Math.max(1, $('#headerMateriasConsejeria th').length);
+                $('#bodyPromediosConsejeria').html('<tr><td colspan="' + consColsEmpty + '" class="text-center text-muted">Selecciona un grupo y trimestre para ver los promedios</td></tr>');
                 updateCounselorStatistics(0, 0, 0, 0);
                 return;
             }
@@ -4337,7 +4271,8 @@
             const [gradeId, groupId] = selectedGroup.split('|');
             
             // Mostrar indicador de carga
-            $('#bodyPromediosConsejeria').html('<tr><td colspan="100%" class="text-center">Cargando promedios...</td></tr>');
+            const consColsLoad = Math.max(1, $('#headerMateriasConsejeria th').length);
+            $('#bodyPromediosConsejeria').html('<tr><td colspan="' + consColsLoad + '" class="text-center">Cargando promedios...</td></tr>');
             
             $.ajax({
                 url: '/TeacherGradebook/GetCounselorGroupAverages',
@@ -4358,13 +4293,15 @@
                             response.data.approvalPercentage
                         );
                     } else {
-                        $('#bodyPromediosConsejeria').html('<tr><td colspan="100%" class="text-center text-muted">No hay datos disponibles</td></tr>');
+                        const consColsNone = Math.max(1, $('#headerMateriasConsejeria th').length);
+                        $('#bodyPromediosConsejeria').html('<tr><td colspan="' + consColsNone + '" class="text-center text-muted">No hay datos disponibles</td></tr>');
                         updateCounselorStatistics(0, 0, 0, 0);
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('Error al cargar promedios:', error);
-                    $('#bodyPromediosConsejeria').html('<tr><td colspan="100%" class="text-center text-danger">Error al cargar los promedios</td></tr>');
+                    const consColsErr = Math.max(1, $('#headerMateriasConsejeria th').length);
+                    $('#bodyPromediosConsejeria').html('<tr><td colspan="' + consColsErr + '" class="text-center text-danger">Error al cargar los promedios</td></tr>');
                     updateCounselorStatistics(0, 0, 0, 0);
                 }
             });
@@ -4436,7 +4373,8 @@
                     bodyContainer.append(row);
                 });
             } else {
-                bodyContainer.append('<tr><td colspan="100%" class="text-center text-muted">No hay estudiantes en este grupo</td></tr>');
+                const consColsNoStud = Math.max(1, $('#headerMateriasConsejeria th').length);
+                bodyContainer.append('<tr><td colspan="' + consColsNoStud + '" class="text-center text-muted">No hay estudiantes en este grupo</td></tr>');
             }
         }
 
@@ -4457,8 +4395,13 @@
             loadCounselorGroupAverages();
         });
 
-        // ... existing code ...
+        window.chCargaHoraria = {
+            programsUrl: '/TeacherGradebook/GetAcademicPrograms',
+            reportUrl: '/TeacherGradebook/GetCargaHoraria',
+            canEdit: false
+        };
     </script>
+    <script src="~/js/curriculum-load-report.js" asp-append-version="true"></script>
 
 }
 

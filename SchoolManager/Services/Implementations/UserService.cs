@@ -69,6 +69,7 @@ public class UserService : IUserService
                 existingUser.Inclusion = user.Inclusion;
                 existingUser.Orientacion = user.Orientacion;
                 existingUser.Inclusivo = user.Inclusivo;
+                existingUser.CanEditCurriculumLoad = user.CanEditCurriculumLoad;
                 existingUser.PasswordHash = user.PasswordHash;
                 existingUser.UpdatedAt = DateTime.UtcNow;
                 

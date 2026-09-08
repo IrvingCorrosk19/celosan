@@ -1,4 +1,5 @@
 using Npgsql;
+using SchoolManager.Infrastructure;
 
 namespace SchoolManager.Scripts;
 
@@ -8,8 +9,7 @@ namespace SchoolManager.Scripts;
 /// </summary>
 public static class CompareDbSchemas
 {
-    private const string RenderConnectionString =
-        "Host=dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com;Database=schoolmanager_daqf;Username=admin;Password=iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r;Port=5432;SSL Mode=Require;Trust Server Certificate=true";
+    private static string ConnectionString => PostgresConnectionResolver.RequireFromAppSettings();
 
     public static async Task RunAsync()
     {
@@ -19,7 +19,7 @@ public static class CompareDbSchemas
 
         try
         {
-            var renderTables = await GetTablesAndColumnsAsync(RenderConnectionString, "RENDER");
+            var renderTables = await GetTablesAndColumnsAsync(ConnectionString, "DefaultConnection");
 
             // Tablas en RENDER
             var tablesInRender = renderTables.Keys.OrderBy(t => t).ToList();

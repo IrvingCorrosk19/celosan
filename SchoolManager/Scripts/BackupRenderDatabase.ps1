@@ -4,19 +4,20 @@
 $psqlPath = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
 $pgDumpPath = "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe"
 
-# Datos de conexion a Render (PRODUCCION)
-$renderHost = "dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com"
-$renderPort = "5432"
-$renderDatabase = "schoolmanager_daqf"
-$renderUsername = "admin"
-$renderPassword = "iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r"
+. (Join-Path $PSScriptRoot "Resolve-DefaultConnection.ps1")
+$defaultConn = Get-DefaultConnectionMap
+$renderHost = $defaultConn['Host']
+$renderPort = $defaultConn['Port']
+$renderDatabase = $defaultConn['Database']
+$renderUsername = $defaultConn['Username']
+$renderPassword = $defaultConn['Password']
+if ($defaultConn['SSL Mode'] -match 'Require') { $env:PGSSLMODE = 'require' }
 
-# Datos de conexion LOCAL
-$localHost = "localhost"
-$localPort = "5432"
-$localDatabase = "schoolmanagement"
-$localUsername = "postgres"
-$localPassword = "Panama2020$"
+$localHost = $defaultConn['Host']
+$localPort = $defaultConn['Port']
+$localDatabase = $defaultConn['Database']
+$localUsername = $defaultConn['Username']
+$localPassword = $defaultConn['Password']
 
 # Ruta para guardar el backup
 $backupDir = ".\Backups"
@@ -116,6 +117,11 @@ Write-Host "   ADVERTENCIA: Esto eliminara todos los datos actuales en '$localDa
 $restore = Read-Host "   Restaurar? (S/N)"
 
 if ($restore -eq "S" -or $restore -eq "s" -or $restore -eq "SI" -or $restore -eq "si") {
+    if ($localHost -notmatch '^(localhost|127\.0\.0\.1)$') {
+        Write-Host "   BLOQUEADO: DefaultConnection no es localhost. No se restaura ni se hace DROP sobre Render." -ForegroundColor Red
+        Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+        exit 1
+    }
     Write-Host ""
     Write-Host "Paso 4: Restaurando backup en base de datos local..." -ForegroundColor Yellow
     

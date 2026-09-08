@@ -348,7 +348,7 @@
                             </a>
                         </li>
                         }
-                        @if (userRole == "admin" || userRole == "director" || userRole == "teacher") {
+                        @if (userRole == "admin" || userRole == "director" || userRole == "teacher" || userRole == "superadmin") {
                         <li class="nav-item has-treeview">
                             <a href="#" class="nav-link">
                                 <i class="nav-icon fas fa-file-alt"></i>
@@ -358,6 +358,7 @@
                                 </p>
                             </a>
                             <ul class="nav nav-treeview">
+                                @if (userRole == "admin" || userRole == "director" || userRole == "teacher") {
                                 <li class="nav-item">
                                     <a href="@Url.Action("Index", "AprobadosReprobados")" class="nav-link">
                                         <i class="fas fa-chart-bar nav-icon"></i>
@@ -394,6 +395,15 @@
                                         <p>Reportes CELOSAM</p>
                                     </a>
                                 </li>
+                                }
+                                @if (userRole == "admin" || userRole == "superadmin") {
+                                <li class="nav-item">
+                                    <a href="@Url.Action("Index", "CurriculumLoad")" class="nav-link">
+                                        <i class="fas fa-clock nav-icon"></i>
+                                        <p>Carga Horaria Curricular</p>
+                                    </a>
+                                </li>
+                                }
                             </ul>
                         </li>
                         }

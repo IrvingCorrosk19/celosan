@@ -185,5 +185,13 @@ public partial class SchoolDbContext
         modelBuilder.Entity<CelosanBulkImportLog>().HasQueryFilter(l =>
             _tenantContext.BypassTenantFilter ||
             l.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<CurriculumLoadSubject>().HasQueryFilter(s =>
+            _tenantContext.BypassTenantFilter ||
+            s.SchoolId == _tenantContext.SchoolId);
+
+        modelBuilder.Entity<CurriculumLoadHours>().HasQueryFilter(h =>
+            _tenantContext.BypassTenantFilter ||
+            h.CurriculumLoadSubject.SchoolId == _tenantContext.SchoolId);
     }
 }

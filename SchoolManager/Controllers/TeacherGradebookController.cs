@@ -29,6 +29,7 @@ namespace SchoolManager.Controllers
         private readonly ICounselorAssignmentService _counselorAssignmentService;
         private readonly ISubjectAssignmentService _subjectAssignmentService;
         private readonly IDocumentStorageService _documentStorage;
+        private readonly ICurriculumLoadService _curriculumLoadService;
         private readonly SchoolDbContext _context;
 
 
@@ -44,6 +45,7 @@ namespace SchoolManager.Controllers
             ICounselorAssignmentService counselorAssignmentService,
             ISubjectAssignmentService subjectAssignmentService,
             IDocumentStorageService documentStorage,
+            ICurriculumLoadService curriculumLoadService,
             SchoolDbContext context)
             
         {
@@ -58,6 +60,7 @@ namespace SchoolManager.Controllers
             _attendanceService = attendanceService;
             _counselorAssignmentService = counselorAssignmentService;
             _subjectAssignmentService = subjectAssignmentService;
+            _curriculumLoadService = curriculumLoadService;
             _context = context;
             
         }
@@ -886,6 +889,30 @@ namespace SchoolManager.Controllers
                 Console.WriteLine($"StackTrace: {ex.StackTrace}");
                 return StatusCode(500, new { success = false, error = ex.Message });
             }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAcademicPrograms()
+        {
+            var teacherId = GetTeacherId();
+            var programs = await _curriculumLoadService.GetProgramsForTeacherAsync(teacherId);
+            return Json(new { success = true, data = programs });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetCargaHoraria(Guid programId, string? viewMode = null, int? selectedGrade = null)
+        {
+            var report = await _curriculumLoadService.GetReportAsync(
+                programId,
+                viewMode ?? CurriculumLoadLevel.ViewFullProgram,
+                selectedGrade,
+                includeInactive: false);
+
+            if (report == null)
+                return Json(new { success = false, message = "No hay estructura curricular para este programa." });
+
+            report.CanEdit = false;
+            return Json(new { success = true, data = report });
         }
     }
 }

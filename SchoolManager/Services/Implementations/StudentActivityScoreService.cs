@@ -381,6 +381,7 @@ namespace SchoolManager.Services
                         row = new StudentActivityScore
                         {
                             Id = Guid.NewGuid(),
+                            SchoolId = currentUserSchool.Id,
                             StudentId = dto.StudentId,
                             StudentAssignmentId = assignmentId,
                             StudentSubjectAssignmentId = subjectEnrollmentId,
@@ -511,14 +512,15 @@ namespace SchoolManager.Services
                 .GroupBy(a => a.StudentId)
                 .ToDictionary(g => g.Key, g => g.Select(x => x.SubjectEnrollmentId).ToHashSet());
             var studentIdsScoped = assignmentsInScope.Select(a => a.StudentId).Distinct().ToList();
-            var students = await _context.Users
+            var students = (await _context.Users
                 .Where(u => studentIdsScoped.Contains(u.Id))
                 .Select(u => new { u.Id, u.Name, u.LastName, u.DocumentId })
+                .ToListAsync())
                 .GroupBy(s => s.Id)
                 .Select(g => g.First())
                 .OrderBy(s => s.LastName)
                 .ThenBy(s => s.Name)
-                .ToListAsync();
+                .ToList();
 
             // 2. Notas del grupo/materia/docente restringidas a matrículas de este grupo+grado
             var notasPorTrimestre = await _context.StudentActivityScores

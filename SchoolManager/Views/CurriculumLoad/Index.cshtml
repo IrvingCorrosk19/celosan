@@ -1,0 +1,78 @@
+@{
+    ViewData["Title"] = "Carga Horaria Curricular";
+    Layout = "_AdminLayout";
+    var canEdit = ViewBag.CanEdit as bool? == true;
+}
+
+<style>
+    .ch-wrap .card-header { background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: #fff; }
+    .ch-matrix { width: 100%; border-collapse: collapse; font-size: 0.86rem; background: #fff; }
+    .ch-matrix th, .ch-matrix td { border: 1px solid #d1d5db; padding: 0.4rem 0.45rem; text-align: center; vertical-align: middle; }
+    .ch-matrix thead th { background: #1e3a5f; color: #fff; font-weight: 600; }
+    .ch-matrix .ch-area { background: #e2e8f0; font-weight: 700; text-align: left; }
+    .ch-matrix .ch-subject { text-align: left; }
+    .ch-matrix .ch-subtotal { background: #f1f5f9; font-weight: 600; }
+    .ch-matrix .ch-grand { background: #dbeafe; font-weight: 700; }
+    .ch-empty { color: #94a3b8; font-style: italic; }
+    .ch-title { text-align: center; margin-bottom: 0.25rem; }
+    .ch-subtitle { text-align: center; color: #64748b; margin-bottom: 1rem; }
+    .ch-hour-input { width: 4.2rem; text-align: center; display: inline-block; padding: 0.2rem 0.3rem; }
+</style>
+
+<div class="ch-wrap">
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Carga Horaria Curricular</h5>
+            <div class="text-white-50">Administración de horas B1 / B2 por programa académico</div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold" for="chProgram">Programa Académico</label>
+                    <select id="chProgram" class="form-select">
+                        <option value="">-- Seleccionar --</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Vista</label>
+                    <div class="d-flex gap-3 pt-1">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="chViewMode" id="chViewFull" value="FullProgram" checked>
+                            <label class="form-check-label" for="chViewFull">Programa completo</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="chViewMode" id="chViewGrade" value="ByGrade">
+                            <label class="form-check-label" for="chViewGrade">Por grado</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3" id="chGradeWrap" style="display:none;">
+                    <label class="form-label fw-semibold" for="chGrade">Grado</label>
+                    <select id="chGrade" class="form-select"></select>
+                </div>
+            </div>
+            @if (!canEdit)
+            {
+                <p class="text-muted small mt-3 mb-0">Consulta únicamente. No tiene permiso para editar horas.</p>
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body" id="chReport">
+            <p class="text-muted mb-0">Seleccione un programa académico.</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    window.chCargaHoraria = {
+        programsUrl: '/CurriculumLoad/GetAcademicPrograms',
+        reportUrl: '/CurriculumLoad/GetCargaHoraria',
+        saveUrl: '/CurriculumLoad/SaveHours',
+        canEdit: @(canEdit ? "true" : "false")
+    };
+</script>
+<script src="~/js/curriculum-load-report.js" asp-append-version="true"></script>
+}

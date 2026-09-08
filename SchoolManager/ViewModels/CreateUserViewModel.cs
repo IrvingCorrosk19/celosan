@@ -50,6 +50,9 @@ namespace SchoolManager.ViewModels
         [Display(Name = "Inclusivo")]
         public bool? Inclusivo { get; set; }
 
+        [Display(Name = "Editar carga horaria")]
+        public bool? CanEditCurriculumLoad { get; set; }
+
         public List<Guid> Subjects { get; set; } = new();
         public List<Guid> Groups { get; set; } = new();
     }

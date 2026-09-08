@@ -11,31 +11,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-# PSScriptRoot = ...\SchoolManager\Scripts
-$schoolDir = Split-Path $PSScriptRoot -Parent
-$devJson = Join-Path $schoolDir "appsettings.Development.json"
-$mainJson = Join-Path $schoolDir "appsettings.json"
-
-$configPath = if (Test-Path $devJson) { $devJson } elseif (Test-Path $mainJson) { $mainJson } else {
-    throw "No se encontró appsettings en $schoolDir"
-}
-
-$json = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$cs = $json.ConnectionStrings.DefaultConnection
-if ([string]::IsNullOrWhiteSpace($cs)) {
-    throw "ConnectionStrings:DefaultConnection está vacío en $configPath. Copia appsettings.Development.template.json a appsettings.Development.json y completa la cadena, o define la variable de entorno ConnectionStrings__DefaultConnection."
-}
-
-$map = @{}
-foreach ($segment in ($cs -split ';')) {
-    $t = $segment.Trim()
-    if (-not $t) { continue }
-    $eq = $t.IndexOf('=')
-    if ($eq -lt 1) { continue }
-    $k = $t.Substring(0, $eq).Trim()
-    $v = $t.Substring($eq + 1).Trim()
-    $map[$k] = $v
-}
+. (Join-Path $PSScriptRoot "Resolve-DefaultConnection.ps1")
+$map = Get-DefaultConnectionMap
 
 $hostName = $map['Host']
 $db = $map['Database']

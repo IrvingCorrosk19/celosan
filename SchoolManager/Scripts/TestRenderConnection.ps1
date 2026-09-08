@@ -1,19 +1,17 @@
-# Script PowerShell para probar la conexión a Render usando psql
-# Ruta del cliente PostgreSQL
+# Script PowerShell para probar ConnectionStrings:DefaultConnection usando psql
 $psqlPath = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
-
-# Datos de conexión a Render
-$host = "dpg-d7erln5ckfvc73en9obg-a.oregon-postgres.render.com"
-$port = "5432"
-$database = "schoolmanager_daqf"
-$username = "admin"
-$password = "iztY1ZL7WHbu2A5gtMSb1DFMhrK3Lo3r"
-
-# Variable de entorno para la contraseña (psql la puede leer desde PGPASSWORD)
+. (Join-Path $PSScriptRoot "Resolve-DefaultConnection.ps1")
+$conn = Get-DefaultConnectionMap
+$host = $conn['Host']
+$port = $conn['Port']
+$database = $conn['Database']
+$username = $conn['Username']
+$password = $conn['Password']
+if ($conn['SSL Mode'] -match 'Require') { $env:PGSSLMODE = 'require' }
 $env:PGPASSWORD = $password
 
 Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "   VERIFICACIÓN DE CONEXIÓN A RENDER (PRODUCCIÓN)" -ForegroundColor Cyan
+Write-Host "   VERIFICACIÓN DE DefaultConnection" -ForegroundColor Cyan
 Write-Host "═══════════════════════════════════════════════════" -ForegroundColor Cyan
 Write-Host ""
 
@@ -30,7 +28,7 @@ Write-Host ""
 # Construir cadena de conexión
 $connectionString = "-h $host -p $port -U $username -d $database -c"
 
-Write-Host "🔍 Intentando conectar a Render..." -ForegroundColor Yellow
+Write-Host "🔍 Intentando conectar con DefaultConnection..." -ForegroundColor Yellow
 Write-Host "   Host: $host" -ForegroundColor Gray
 Write-Host "   Database: $database" -ForegroundColor Gray
 Write-Host "   User: $username" -ForegroundColor Gray

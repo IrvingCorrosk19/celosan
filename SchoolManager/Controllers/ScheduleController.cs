@@ -105,20 +105,38 @@ public class ScheduleController : Controller
             .ToList();
 
         var rawAcademicYears = await _academicYearService.GetAllBySchoolAsync(user.SchoolId.Value);
+        var yearIds = rawAcademicYears.Select(a => a.Id).ToList();
+        var entryCounts = yearIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await _context.ScheduleEntries
+                .AsNoTracking()
+                .Where(e => yearIds.Contains(e.AcademicYearId))
+                .GroupBy(e => e.AcademicYearId)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.Key, x => x.Count);
         var academicYears = rawAcademicYears
-            .GroupBy(a => new
+            .Select(a =>
             {
-                Name = NormalizeScheduleLabel(a.Name),
-                StartDate = a.StartDate.Date,
-                EndDate = a.EndDate.Date
+                entryCounts.TryGetValue(a.Id, out var count);
+                var start = a.StartDate.ToString("yyyy-MM-dd");
+                var end = a.EndDate.ToString("yyyy-MM-dd");
+                var state = a.IsActive ? "activo" : "inactivo";
+                return new
+                {
+                    a.Id,
+                    a.Name,
+                    a.StartDate,
+                    a.EndDate,
+                    a.IsActive,
+                    a.CreatedAt,
+                    ScheduleEntryCount = count,
+                    Label = $"{a.Name} — {start} a {end} — {state} — {count} horarios"
+                };
             })
-            .Select(g => g
-                .OrderByDescending(a => a.IsActive)
-                .ThenByDescending(a => a.CreatedAt)
-                .ThenBy(a => a.Id)
-                .First())
-            .OrderByDescending(a => a.StartDate)
-            .ThenBy(a => a.Name)
+            .OrderByDescending(a => a.ScheduleEntryCount)
+            .ThenByDescending(a => a.IsActive)
+            .ThenByDescending(a => a.CreatedAt)
+            .ThenBy(a => a.Id)
             .ToList();
         _logger.LogInformation("[Schedule/ByTeacher] SchoolId={SchoolId}, AcademicYearsCount={Count}. Si el desplegable no muestra años, verifique que existan registros en academic_years para esta escuela.", user.SchoolId, academicYears.Count);
 
@@ -147,7 +165,16 @@ public class ScheduleController : Controller
 
         var jsonOptions = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
         ViewBag.TimeSlotsJson = System.Text.Json.JsonSerializer.Serialize(timeSlots, jsonOptions);
-        ViewBag.AcademicYearsJson = System.Text.Json.JsonSerializer.Serialize(academicYears.Select(a => new { a.Id, a.Name, a.StartDate, a.EndDate, a.IsActive }), jsonOptions);
+        ViewBag.AcademicYearsJson = System.Text.Json.JsonSerializer.Serialize(academicYears.Select(a => new
+        {
+            a.Id,
+            a.Name,
+            a.StartDate,
+            a.EndDate,
+            a.IsActive,
+            a.ScheduleEntryCount,
+            a.Label
+        }), jsonOptions);
         ViewBag.TeachersJson = System.Text.Json.JsonSerializer.Serialize(teachers, jsonOptions);
         ViewBag.TeacherId = effectiveTeacherId;
         ViewBag.AcademicYearId = academicYearId ?? Guid.Empty;
