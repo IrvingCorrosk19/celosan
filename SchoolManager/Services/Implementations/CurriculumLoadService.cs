@@ -315,7 +315,7 @@ public class CurriculumLoadService : ICurriculumLoadService
         }
 
         return result
-            .Where(s => s.GradeLoads.Any(g => (g.B1 ?? 0) > 0 || (g.B2 ?? 0) > 0))
+            .Where(s => s.GradeLoads.Any(HasCurriculumCell))
             .OrderBy(s => CurriculumLoadDisplayOrder.SubjectRank(programName, areaName, s.Subject))
             .ThenBy(s => s.Subject, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -354,7 +354,7 @@ public class CurriculumLoadService : ICurriculumLoadService
             if (pair.B1 != null)
             {
                 var hour = pair.B1.Hours.FirstOrDefault(h => h.Code == CurriculumLoadLevel.BlockB1);
-                load.B1 = hour?.Hours;
+                load.B1 = hour?.Hours ?? 0;
                 load.B1CurriculumLoadSubjectId = pair.B1.Id;
                 load.CurriculumLoadSubjectId = pair.B1.Id;
                 load.IsActive = pair.B1.IsActive;
@@ -362,7 +362,7 @@ public class CurriculumLoadService : ICurriculumLoadService
             if (pair.B2 != null)
             {
                 var hour = pair.B2.Hours.FirstOrDefault(h => h.Code == CurriculumLoadLevel.BlockB2);
-                load.B2 = hour?.Hours;
+                load.B2 = hour?.Hours ?? 0;
                 load.B2CurriculumLoadSubjectId = pair.B2.Id;
                 load.CurriculumLoadSubjectId ??= pair.B2.Id;
                 load.IsActive = load.IsActive && pair.B2.IsActive;
@@ -403,8 +403,8 @@ public class CurriculumLoadService : ICurriculumLoadService
                 load.B1CurriculumLoadSubjectId = cell.Id;
                 load.B2CurriculumLoadSubjectId = cell.Id;
                 load.IsActive = cell.IsActive;
-                load.B1 = cell.Hours.FirstOrDefault(h => h.Code == CurriculumLoadLevel.BlockB1)?.Hours;
-                load.B2 = cell.Hours.FirstOrDefault(h => h.Code == CurriculumLoadLevel.BlockB2)?.Hours;
+                load.B1 = cell.Hours.FirstOrDefault(h => h.Code == CurriculumLoadLevel.BlockB1)?.Hours ?? 0;
+                load.B2 = cell.Hours.FirstOrDefault(h => h.Code == CurriculumLoadLevel.BlockB2)?.Hours ?? 0;
                 load.Total = SumNullable(load.B1, load.B2);
             }
 
@@ -469,6 +469,11 @@ public class CurriculumLoadService : ICurriculumLoadService
             await AuditHelper.SetAuditFieldsForUpdateAsync(existing, _currentUserService);
         }
     }
+
+    private static bool HasCurriculumCell(CurriculumLoadGradeHoursDto load) =>
+        load.CurriculumLoadSubjectId.HasValue
+        || load.B1CurriculumLoadSubjectId.HasValue
+        || load.B2CurriculumLoadSubjectId.HasValue;
 
     private static decimal? SumNullable(decimal? a, decimal? b)
     {
