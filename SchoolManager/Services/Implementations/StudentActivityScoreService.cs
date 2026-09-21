@@ -75,6 +75,61 @@ namespace SchoolManager.Services
                 .FirstOrDefaultAsync();
         }
 
+        private async Task<Guid> ResolveRequiredScoreSchoolIdAsync(
+            Guid studentId,
+            Guid assignmentId,
+            Guid? subjectEnrollmentId,
+            Activity? activity)
+        {
+            var currentUserSchool = await _currentUserService.GetCurrentUserSchoolAsync();
+
+            var studentSchool = await _context.Users.AsNoTracking()
+                .IgnoreQueryFilters()
+                .Where(u => u.Id == studentId)
+                .Select(u => u.SchoolId)
+                .FirstOrDefaultAsync();
+
+            Guid? ssaSchool = null;
+            if (subjectEnrollmentId.HasValue && subjectEnrollmentId.Value != Guid.Empty)
+            {
+                ssaSchool = await _context.StudentSubjectAssignments.AsNoTracking()
+                    .IgnoreQueryFilters()
+                    .Where(s => s.Id == subjectEnrollmentId.Value)
+                    .Select(s => s.SchoolId)
+                    .FirstOrDefaultAsync();
+            }
+
+            var assignmentSchools = await (
+                from sa in _context.StudentAssignments.AsNoTracking().IgnoreQueryFilters()
+                where sa.Id == assignmentId
+                join g in _context.Groups.AsNoTracking().IgnoreQueryFilters() on sa.GroupId equals g.Id
+                join gl in _context.GradeLevels.AsNoTracking().IgnoreQueryFilters() on sa.GradeId equals gl.Id
+                select new { GroupSchool = g.SchoolId, GradeSchool = gl.SchoolId }
+            ).FirstOrDefaultAsync();
+
+            var distinct = new Guid?[]
+                {
+                    currentUserSchool?.Id,
+                    studentSchool,
+                    activity?.SchoolId,
+                    ssaSchool,
+                    assignmentSchools?.GroupSchool,
+                    assignmentSchools?.GradeSchool
+                }
+                .Where(id => id.HasValue && id.Value != Guid.Empty)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            if (distinct.Count == 1)
+                return distinct[0];
+
+            if (distinct.Count == 0)
+                throw new InvalidOperationException("No se pudo determinar la escuela para la nota.");
+
+            throw new InvalidOperationException("Conflicto al determinar la escuela para la nota.");
+        }
+
         private async Task<Guid> ResolveStudentAssignmentIdForGroupAsync(Guid studentId, Guid groupId, Guid gradeLevelId)
         {
             var id = await _context.StudentAssignments
@@ -119,20 +174,22 @@ namespace SchoolManager.Services
                     throw new InvalidOperationException("Se requiere ActivityId o StudentAssignmentId para guardar la nota.");
 
                 var entity = await _context.StudentActivityScores
+                    .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(s =>
                         s.ActivityId == dto.ActivityId &&
                         s.StudentAssignmentId == assignmentId);
 
+                var schoolId = await ResolveRequiredScoreSchoolIdAsync(
+                    dto.StudentId, assignmentId, subjectEnrollmentId, activity);
+
                 if (entity is null)
                 {
-                    var currentUserSchool = await _currentUserService.GetCurrentUserSchoolAsync();
-                    var activeAcademicYear = currentUserSchool != null
-                        ? await _academicYearService.GetActiveAcademicYearAsync(currentUserSchool.Id)
-                        : null;
+                    var activeAcademicYear = await _academicYearService.GetActiveAcademicYearAsync(schoolId);
 
                     var newScore = new StudentActivityScore
                     {
                         Id = Guid.NewGuid(),
+                        SchoolId = schoolId,
                         StudentId = dto.StudentId,
                         StudentAssignmentId = assignmentId,
                         StudentSubjectAssignmentId = subjectEnrollmentId,
@@ -142,7 +199,6 @@ namespace SchoolManager.Services
                     };
 
                     await AuditHelper.SetAuditFieldsForCreateAsync(newScore, _currentUserService);
-                    await AuditHelper.SetSchoolIdAsync(newScore, _currentUserService);
 
                     _context.StudentActivityScores.Add(newScore);
                 }
@@ -151,6 +207,8 @@ namespace SchoolManager.Services
                     entity.Score = dto.Score;
                     if (subjectEnrollmentId.HasValue)
                         entity.StudentSubjectAssignmentId = subjectEnrollmentId;
+                    if (entity.SchoolId == null)
+                        entity.SchoolId = schoolId;
                     await AuditHelper.SetAuditFieldsForUpdateAsync(entity, _currentUserService);
                 }
             }
@@ -365,6 +423,7 @@ namespace SchoolManager.Services
                     subjectEnrollmentCache[key] = await ResolveStudentSubjectAssignmentIdAsync(key.StudentId, key.SubjectId, key.GroupId, key.GradeLevelId);
 
                 var existingScores = await _context.StudentActivityScores
+                    .IgnoreQueryFilters()
                     .Where(s => activityIds.Contains(s.ActivityId) && studentIds.Contains(s.StudentId))
                     .ToListAsync();
 
@@ -398,6 +457,8 @@ namespace SchoolManager.Services
                     {
                         row.Score = dto.Score;
                         row.StudentSubjectAssignmentId = subjectEnrollmentId;
+                        if (row.SchoolId == null)
+                            row.SchoolId = currentUserSchool.Id;
                     }
                 }
 
