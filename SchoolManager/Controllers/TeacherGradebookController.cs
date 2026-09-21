@@ -612,7 +612,7 @@ namespace SchoolManager.Controllers
             try
             {
                 // Si Trimester es null, no lo uses en el filtro (para promedios finales de todos los trimestres)
-                var promedios = await _scoreSvc.GetPromediosFinalesAsync(notes);
+                var promedios = await _scoreSvc.GetPromediosFinalesResumenAsync(notes);
                 return Json(new { 
                     success = true, 
                     data = promedios 

@@ -13,6 +13,7 @@ namespace SchoolManager.Interfaces
 
         Task<List<StudentNotaDto>> GetNotasPorFiltroAsync(GetNotesDto notes);
         Task<List<PromedioFinalDto>> GetPromediosFinalesAsync(GetNotesDto notes);
+        Task<List<PromedioFinalResumenDto>> GetPromediosFinalesResumenAsync(GetNotesDto notes);
     }
 
    

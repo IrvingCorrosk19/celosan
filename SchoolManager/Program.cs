@@ -230,6 +230,8 @@ builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 
 builder.Services.AddAutoMapper(_ => { }, typeof(AutoMapperProfile).Assembly);
 builder.Services.AddScoped<IStudentReportService, StudentReportService>();
+builder.Services.AddScoped<IStudentBulletinService, StudentBulletinService>();
+builder.Services.AddScoped<IStudentBulletinPdfService, StudentBulletinPdfService>();
 builder.Services.AddScoped<IGradeLevelService, GradeLevelService>();
 builder.Services.AddScoped<IAcademicAssignmentService, AcademicAssignmentService>();
 builder.Services.AddScoped<IStudentAssignmentService, StudentAssignmentService>();

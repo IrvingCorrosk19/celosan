@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 using SchoolManager.Interfaces;
 using SchoolManager.Models;
 using SchoolManager.Services.Interfaces;
@@ -578,23 +579,17 @@ namespace SchoolManager.Services
                     var nombre = $"{(student.LastName ?? "").Trim()}, {(student.Name ?? "").Trim()}".Trim();
                     if (string.IsNullOrWhiteSpace(nombre) || nombre == ",") nombre = "(Sin nombre)";
 
-                    // Calcular promedios por tipo de actividad con los nuevos nombres
-                    var promedioNotasApreciacion = notasEstudianteTrimestre.Where(x => x.ActivityType.ToLower() == "notas de apreciación" && x.Score.HasValue)
-                        .Any() ? notasEstudianteTrimestre.Where(x => x.ActivityType.ToLower() == "notas de apreciación" && x.Score.HasValue).Average(x => x.Score.Value) : (decimal?)null;
-                    
-                    var promedioEjerciciosDiarios = notasEstudianteTrimestre.Where(x => x.ActivityType.ToLower() == "ejercicios diarios" && x.Score.HasValue)
-                        .Any() ? notasEstudianteTrimestre.Where(x => x.ActivityType.ToLower() == "ejercicios diarios" && x.Score.HasValue).Average(x => x.Score.Value) : (decimal?)null;
-                    
-                    var promedioExamenFinal = notasEstudianteTrimestre.Where(x => x.ActivityType.ToLower() == "examen final" && x.Score.HasValue)
-                        .Any() ? notasEstudianteTrimestre.Where(x => x.ActivityType.ToLower() == "examen final" && x.Score.HasValue).Average(x => x.Score.Value) : (decimal?)null;
-
-                    // Calcular nota final como el promedio de los 3 promedios (solo los que tienen valor)
-                    var promediosConValor = new[] { promedioNotasApreciacion, promedioEjerciciosDiarios, promedioExamenFinal }
-                        .Where(p => p.HasValue)
-                        .Select(p => p.Value)
+                    var scorePairs = notasEstudianteTrimestre
+                        .Select(x => ((string?)x.ActivityType, x.Score))
                         .ToList();
-                    
-                    var notaFinal = promediosConValor.Any() ? promediosConValor.Average() : (decimal?)null;
+
+                    var promedioNotasApreciacion = OfficialTrimesterAverageCalculator.AverageByType(
+                        scorePairs, OfficialTrimesterAverageCalculator.TypeApreciacion);
+                    var promedioEjerciciosDiarios = OfficialTrimesterAverageCalculator.AverageByType(
+                        scorePairs, OfficialTrimesterAverageCalculator.TypeEjercicios);
+                    var promedioExamenFinal = OfficialTrimesterAverageCalculator.AverageByType(
+                        scorePairs, OfficialTrimesterAverageCalculator.TypeExamen);
+                    var notaFinal = OfficialTrimesterAverageCalculator.ComputeTrimesterAverage(scorePairs);
 
                     promedios.Add(new PromedioFinalDto
                     {
@@ -612,6 +607,45 @@ namespace SchoolManager.Services
             }
 
             return promedios;
+        }
+
+        public async Task<List<PromedioFinalResumenDto>> GetPromediosFinalesResumenAsync(GetNotesDto notes)
+        {
+            var porTrimestre = await GetPromediosFinalesAsync(notes);
+            var resumen = new List<PromedioFinalResumenDto>();
+
+            foreach (var grupo in porTrimestre.GroupBy(p => p.StudentId))
+            {
+                var first = grupo.First();
+                decimal? t1 = null;
+                decimal? t2 = null;
+                decimal? t3 = null;
+
+                foreach (var row in grupo)
+                {
+                    if (row.Trimester == "1T") t1 = row.NotaFinal;
+                    else if (row.Trimester == "2T") t2 = row.NotaFinal;
+                    else if (row.Trimester == "3T") t3 = row.NotaFinal;
+                }
+
+                var promedioFinal = OfficialTrimesterAverageCalculator.ComputeFinalAverage(t1, t2, t3);
+
+                resumen.Add(new PromedioFinalResumenDto
+                {
+                    StudentId = first.StudentId,
+                    StudentFullName = first.StudentFullName,
+                    DocumentId = first.DocumentId,
+                    T1 = t1,
+                    T2 = t2,
+                    T3 = t3,
+                    PromedioFinal = promedioFinal,
+                    Estado = promedioFinal.HasValue
+                        ? (promedioFinal.Value >= 3.0m ? "Aprobado" : "Reprobado")
+                        : "Sin calificar"
+                });
+            }
+
+            return resumen;
         }
     }
 }

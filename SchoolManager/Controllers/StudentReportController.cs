@@ -20,6 +20,8 @@ using Microsoft.EntityFrameworkCore;
 public class StudentReportController : Controller
 {
     private readonly IStudentReportService _reportService;
+    private readonly IStudentBulletinService _bulletinService;
+    private readonly IStudentBulletinPdfService _bulletinPdfService;
     private readonly ICurrentUserService _currentUserService;
     private readonly ITenantContext _tenantContext;
     private readonly SchoolDbContext _context;
@@ -27,12 +29,16 @@ public class StudentReportController : Controller
 
     public StudentReportController(
         IStudentReportService reportService,
+        IStudentBulletinService bulletinService,
+        IStudentBulletinPdfService bulletinPdfService,
         ICurrentUserService currentUserService,
         ITenantContext tenantContext,
         SchoolDbContext context,
         ILogger<StudentReportController> logger)
     {
         _reportService = reportService;
+        _bulletinService = bulletinService;
+        _bulletinPdfService = bulletinPdfService;
         _currentUserService = currentUserService;
         _tenantContext = tenantContext;
         _context = context;
@@ -137,25 +143,9 @@ public class StudentReportController : Controller
     {
         try
         {
-            var currentUser = await _currentUserService.GetCurrentUserAsync();
-            if (currentUser == null)
-                return Unauthorized();
-
-            var role = currentUser.Role?.ToLowerInvariant() ?? "";
-            if (role is "student" or "estudiante")
-            {
-                if (currentUser.Id != studentId)
-                    return Forbid();
-            }
-            else if (role is "parent" or "acudiente")
-            {
-                if (!await IsParentOfStudentAsync(currentUser.Id, studentId, currentUser.SchoolId))
-                    return Forbid();
-            }
-            else if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
-            {
-                return Forbid();
-            }
+            var access = await AuthorizeStudentAcademicAccessAsync(studentId);
+            if (access != null)
+                return access;
 
             _logger.LogInformation("=== INICIO GetTrimesterData - StudentId: {StudentId}, Trimester: {Trimester} ===", studentId, trimester);
             Console.WriteLine($"=== INICIO GetTrimesterData - StudentId: {studentId}, Trimester: {trimester} ===");
@@ -250,12 +240,23 @@ public class StudentReportController : Controller
                 }).Cast<object>().ToList();
             }
 
+            var subjectAverages = report.SubjectAverages?.Select(a => new
+            {
+                subject = a.Subject,
+                averageApreciacion = a.AverageApreciacion,
+                averageEjercicios = a.AverageEjercicios,
+                averageExamen = a.AverageExamen,
+                subjectAverage = a.SubjectAverage
+            }).Cast<object>().ToList() ?? new List<object>();
+
             var result = new
             {
                 grades = grades,
                 carryOverGrades = carryOverGrades,
                 activeEnrollments = activeEnrollments,
                 trimester = report.Trimester,
+                subjectAverages = subjectAverages,
+                trimesterAverage = report.TrimesterAverage,
                 attendanceByTrimester = attendanceByTrimester,
                 attendanceByMonth = attendanceByMonth,
                 disciplineReports = disciplineReports,
@@ -277,29 +278,76 @@ public class StudentReportController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> GetBulletin(Guid? studentId)
+    {
+        var resolved = await ResolveBulletinStudentAsync(studentId);
+        if (resolved.Error != null)
+            return resolved.Error;
+
+        var bulletin = await _bulletinService.GetByGradeBulletinAsync(resolved.TargetId);
+        if (bulletin == null)
+            return NotFound(new { error = "No se encontró el boletín." });
+
+        return Json(bulletin);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetBulletinHistory(Guid? studentId)
+    {
+        var resolved = await ResolveBulletinStudentAsync(studentId);
+        if (resolved.Error != null)
+            return resolved.Error;
+
+        var history = await _bulletinService.GetProgramHistoryAsync(resolved.TargetId);
+        if (history == null)
+            return NotFound(new { error = "No se encontró el historial del boletín." });
+
+        return Json(history);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportBulletinPdf(string? view, Guid? studentId)
+    {
+        var resolved = await ResolveBulletinStudentAsync(studentId);
+        if (resolved.Error != null)
+            return resolved.Error;
+
+        var school = await _currentUserService.GetCurrentUserSchoolAsync();
+        var schoolName = string.IsNullOrWhiteSpace(school?.Name) ? "CELO San Miguelito" : school.Name!;
+        var isProgram = IsProgramBulletinView(view);
+
+        if (isProgram)
+        {
+            var history = await _bulletinService.GetProgramHistoryAsync(resolved.TargetId);
+            if (history == null)
+                return NotFound(new { error = "No se encontró el historial del boletín." });
+
+            var year = history.Tracks
+                .SelectMany(t => t.Grades ?? new List<ProgramHistoryGradeColumnDto>())
+                .Select(g => g.AcademicYear)
+                .FirstOrDefault(y => !string.IsNullOrWhiteSpace(y) && y != "—");
+            var bytes = _bulletinPdfService.GenerateProgramHistoryPdf(history, schoolName);
+            var fileName = _bulletinPdfService.BuildFileName(history.StudentName, year, isProgramComplete: true);
+            return File(bytes, "application/pdf", fileName);
+        }
+
+        var bulletin = await _bulletinService.GetByGradeBulletinAsync(resolved.TargetId);
+        if (bulletin == null)
+            return NotFound(new { error = "No se encontró el boletín." });
+
+        var pdf = _bulletinPdfService.GenerateByGradePdf(bulletin, schoolName);
+        var gradeFileName = _bulletinPdfService.BuildFileName(bulletin.StudentName, bulletin.AcademicYear, isProgramComplete: false);
+        return File(pdf, "application/pdf", gradeFileName);
+    }
+
+    [HttpGet]
     public async Task<IActionResult> ExportDisciplinePdf(Guid studentId, string studentName, string grade)
     {
         try
         {
-            var currentUser = await _currentUserService.GetCurrentUserAsync();
-            if (currentUser == null)
-                return Unauthorized();
-
-            var role = currentUser.Role?.ToLowerInvariant() ?? "";
-            if (role is "student" or "estudiante")
-            {
-                if (currentUser.Id != studentId)
-                    return Forbid();
-            }
-            else if (role is "parent" or "acudiente")
-            {
-                if (!await IsParentOfStudentAsync(currentUser.Id, studentId, currentUser.SchoolId))
-                    return Forbid();
-            }
-            else if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
-            {
-                return Forbid();
-            }
+            var access = await AuthorizeStudentAcademicAccessAsync(studentId);
+            if (access != null)
+                return access;
 
             _logger.LogInformation("=== INICIO ExportDisciplinePdf - StudentId: {StudentId} ===", studentId);
             Console.WriteLine($"=== INICIO ExportDisciplinePdf - StudentId: {studentId} ===");
@@ -447,6 +495,65 @@ public class StudentReportController : Controller
         {
             return "—";
         }
+    }
+
+    private async Task<(Guid TargetId, IActionResult? Error)> ResolveBulletinStudentAsync(Guid? studentId)
+    {
+        var currentUser = await _currentUserService.GetCurrentUserAsync();
+        if (currentUser == null)
+            return (Guid.Empty, Unauthorized());
+
+        var role = currentUser.Role?.ToLowerInvariant() ?? "";
+        Guid targetId;
+        if (role is "student" or "estudiante")
+        {
+            targetId = currentUser.Id;
+        }
+        else if (studentId.HasValue && studentId.Value != Guid.Empty)
+        {
+            targetId = studentId.Value;
+        }
+        else
+        {
+            return (Guid.Empty, BadRequest(new { error = "Debe indicar el estudiante." }));
+        }
+
+        var access = await AuthorizeStudentAcademicAccessAsync(targetId);
+        if (access != null)
+            return (Guid.Empty, access);
+
+        return (targetId, null);
+    }
+
+    private static bool IsProgramBulletinView(string? view)
+    {
+        var value = (view ?? string.Empty).Trim();
+        return value.Equals("program", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("history", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("programa", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<IActionResult?> AuthorizeStudentAcademicAccessAsync(Guid studentId)
+    {
+        var currentUser = await _currentUserService.GetCurrentUserAsync();
+        if (currentUser == null)
+            return Unauthorized();
+
+        var role = currentUser.Role?.ToLowerInvariant() ?? "";
+        if (role is "student" or "estudiante")
+            return currentUser.Id != studentId ? Forbid() : null;
+
+        if (role is "parent" or "acudiente")
+        {
+            if (!await IsParentOfStudentAsync(currentUser.Id, studentId, currentUser.SchoolId))
+                return Forbid();
+            return null;
+        }
+
+        if (!await SchoolTenantHelper.StudentBelongsToTenantAsync(_context, _tenantContext, studentId))
+            return Forbid();
+
+        return null;
     }
 
     private async Task<bool> IsParentOfStudentAsync(Guid parentId, Guid studentId, Guid? schoolId)

@@ -4176,44 +4176,23 @@
                     const promediosBody = $('#promediosFinalesBody');
                     promediosBody.empty();
                     if (response.success && response.data && response.data.length > 0) {
-                        const estudiantes = {};
                         response.data.forEach(item => {
-                            if (!estudiantes[item.studentId]) {
-                                console.log('Procesando estudiante:', item.studentFullName, '->', formatName(item.studentFullName));
-                                estudiantes[item.studentId] = {
-                                    nombre: formatName(item.studentFullName),
-                                    documentId: item.documentId || 'Sin cédula',
-                                    t1: null,
-                                    t2: null,
-                                    t3: null,
-                                    estado: 'Sin calificar',
-                                    promedioFinal: null
-                                };
-                            }
-                            if (item.trimester === '1T') estudiantes[item.studentId].t1 = item.notaFinal;
-                            if (item.trimester === '2T') estudiantes[item.studentId].t2 = item.notaFinal;
-                            if (item.trimester === '3T') estudiantes[item.studentId].t3 = item.notaFinal;
-                        });
-                        Object.values(estudiantes).forEach(est => {
-                            const notas = [est.t1, est.t2, est.t3].filter(x => typeof x === 'number' && !isNaN(x));
-                            est.promedioFinal = notas.length > 0 ? (notas.reduce((a, b) => a + b, 0) / notas.length) : null;
-                            est.estado = est.promedioFinal !== null ? (est.promedioFinal >= 3.0 ? 'Aprobado' : 'Reprobado') : 'Sin calificar';
-                        });
-                        Object.values(estudiantes).forEach(est => {
-                            let nombre = est.nombre;
+                            console.log('Procesando estudiante:', item.studentFullName, '->', formatName(item.studentFullName));
+                            let nombre = formatName(item.studentFullName);
                             if (!nombre || nombre.trim() === "" || nombre === "undefined") nombre = "(Sin nombre)";
-                            const documentId = est.documentId || 'Sin cédula';
+                            const documentId = item.documentId || 'Sin cédula';
+                            const estado = item.estado || 'Sin calificar';
                             promediosBody.append(`
                                 <tr>
                                     <td>
                                         <div>${nombre}</div>
                                         <small class="text-muted">${documentId}</small>
                                     </td>
-                                    <td>${formatPromedioCelda(est.t1)}</td>
-                                    <td>${formatPromedioCelda(est.t2)}</td>
-                                    <td>${formatPromedioCelda(est.t3)}</td>
-                                    <td><strong>${formatPromedioCelda(est.promedioFinal)}</strong></td>
-                                    <td class="${est.estado === 'Aprobado' ? 'text-success' : 'text-danger'} fw-semibold">${est.estado}</td>
+                                    <td>${formatPromedioCelda(item.t1)}</td>
+                                    <td>${formatPromedioCelda(item.t2)}</td>
+                                    <td>${formatPromedioCelda(item.t3)}</td>
+                                    <td><strong>${formatPromedioCelda(item.promedioFinal)}</strong></td>
+                                    <td class="${estado === 'Aprobado' ? 'text-success' : 'text-danger'} fw-semibold">${estado}</td>
                                 </tr>
                             `);
                         });

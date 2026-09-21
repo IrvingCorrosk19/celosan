@@ -1418,6 +1418,8 @@ public partial class SchoolDbContext : DbContext
             entity.HasIndex(e => e.SchoolId, "IX_academic_years_school_id");
             entity.HasIndex(e => e.IsActive, "IX_academic_years_is_active");
             entity.HasIndex(e => new { e.SchoolId, e.IsActive }, "IX_academic_years_school_active");
+            entity.HasIndex(e => new { e.SchoolId, e.Name }, "uq_academic_years_school_id_name")
+                .IsUnique();
 
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("gen_random_uuid()")

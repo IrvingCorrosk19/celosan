@@ -58,6 +58,23 @@
         color: #2563eb;
         font-weight: 500;
     }
+    .academic-year-label {
+        font-size: 0.8rem !important;
+    }
+    .academic-year-display {
+        border: 2px solid #2563eb;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        background: #fff;
+        color: #1e293b;
+        font-size: 0.9rem;
+        padding: 0.45rem 0.65rem;
+        min-height: calc(1.5em + 0.75rem + 4px);
+        display: flex;
+        align-items: center;
+        width: 100%;
+        box-shadow: none;
+    }
     .card {
         border-radius: 1rem;
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08);
@@ -155,7 +172,7 @@
                     <p class="mb-0" style="color: #475569;">@Model.StudentName</p>
                 </div>
             </div>
-            <div class="col-lg-3 col-md-6">
+            <div class="col-lg-2 col-md-6">
                 <div class="info-item">
                     <label class="form-label fw-bold mb-1" style="color: #1e293b;">Grado</label>
                     <p class="mb-0" style="color: #475569;">@Model.Grade</p>
@@ -170,7 +187,13 @@
                     <small class="trimester-helper d-block mt-1">Selecciona el trimestre</small>
                 </div>
             </div>
-            <div class="col-lg-3 col-md-6">
+            <div class="col-lg-2 col-md-4 col-sm-6">
+                <div class="info-item">
+                    <label class="form-label fw-bold mb-2 academic-year-label" style="color: #1e293b;">Año Académico</label>
+                    <div class="academic-year-display" id="academic-year-display">@(string.IsNullOrWhiteSpace(Model.AcademicYear) ? "—" : Model.AcademicYear)</div>
+                </div>
+            </div>
+            <div class="col-lg-2 col-md-6">
                 <div class="info-item">
                     <label for="subject-filter" class="form-label fw-bold mb-2" style="color: #1e293b;">Filtrar por Materia</label>
                     <select class="form-select trimester-highlight" id="subject-filter">
@@ -243,6 +266,11 @@
                 }
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="bulletin-tab" data-bs-toggle="tab" data-bs-target="#bulletin-panel" type="button" role="tab">
+                <i class="bi bi-file-earmark-text me-2"></i>Boletín
+            </button>
+        </li>
     </ul>
 
     <!-- CONTENIDO DE LAS PESTAÑAS -->
@@ -273,12 +301,10 @@
                                     .GroupBy(g => g.Subject)
                                     .OrderBy(g => g.Key);
 
-                                decimal totalPromedios = 0;
-                                int materiaCount = 0;
-
                                 foreach (var subjectGroup in gradesBySubject)
                                 {
                                     var materia = subjectGroup.Key;
+                                    var subjectAvg = Model.SubjectAverages?.FirstOrDefault(a => a.Subject == materia);
                                     
                                     // Agrupar por tipo de actividad
                                     var tiposActividad = new[] { 
@@ -289,9 +315,7 @@
 
                                     bool firstRowForSubject = true;
                                     int totalRowsForSubject = 0;
-                                    List<decimal> promediosTipos = new List<decimal>();
 
-                                    // Primero contar filas y calcular promedios POR TIPO
                                     foreach (var tipoActividad in tiposActividad)
                                     {
                                         var actividadesTipo = subjectGroup
@@ -302,9 +326,6 @@
                                         if (actividadesTipo.Any())
                                         {
                                             totalRowsForSubject += actividadesTipo.Count;
-                                            // Calcular el promedio de este TIPO de actividad
-                                            var promedio = actividadesTipo.Average(g => g.Value.Value);
-                                            promediosTipos.Add(promedio);
                                         }
                                     }
 
@@ -319,14 +340,7 @@
                                         continue;
                                     }
 
-                                    // Calcular promedio final (promedio de los promedios de cada tipo)
-                                    decimal? promedioFinal = promediosTipos.Any() ? (decimal?)promediosTipos.Average() : null;
-                                    
-                                    if (promedioFinal.HasValue)
-                                    {
-                                        totalPromedios += promedioFinal.Value;
-                                        materiaCount++;
-                                    }
+                                    decimal? promedioFinal = subjectAvg?.SubjectAverage;
 
                                     // Ahora renderizar todas las filas
                                     int rowIndexForSubject = 0;
@@ -341,7 +355,11 @@
                                         if (!actividadesTipo.Any()) continue;
 
                                         bool firstRowForType = true;
-                                        decimal promedioTipo = actividadesTipo.Average(g => g.Value.Value);
+                                        decimal? promedioTipo = tipoActividad.Nombre == "Notas de Apreciación"
+                                            ? subjectAvg?.AverageApreciacion
+                                            : tipoActividad.Nombre == "Ejercicios Diarios"
+                                                ? subjectAvg?.AverageEjercicios
+                                                : subjectAvg?.AverageExamen;
 
                                         foreach (var actividad in actividadesTipo)
                                         {
@@ -373,9 +391,16 @@
                                                 {
                                                     <!-- Última fila del tipo: mostrar promedio del tipo -->
                                                     <td style="vertical-align: middle; background-color: #e3f2fd;" class="text-center fw-bold">
-                                                        <span class="@(promedioTipo >= 3.0m ? "text-success" : "text-danger")">
-                                                            ⌀ @promedioTipo.ToString("0.0")
-                                                        </span>
+                                                        @if (promedioTipo.HasValue)
+                                                        {
+                                                            <span class="@(promedioTipo.Value >= 3.0m ? "text-success" : "text-danger")">
+                                                                ⌀ @promedioTipo.Value.ToString("0.0")
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>—</span>
+                                                        }
                                                     </td>
                                                 }
                                                 else
@@ -392,9 +417,16 @@
                                     <tr style="background-color: #fff3cd; border-top: 2px solid #2563eb;">
                                         <td colspan="3" class="text-end fw-bold" style="font-size: 1.05rem;">PROMEDIO FINAL DE @materia.ToUpper():</td>
                                         <td class="text-center fw-bold" style="font-size: 1.2rem;">
-                                            <span class="@(promedioFinal >= 3.0m ? "text-success" : "text-danger")">
-                                                @promedioFinal.Value.ToString("0.0")
-                                            </span>
+                                            @if (promedioFinal.HasValue)
+                                            {
+                                                <span class="@(promedioFinal.Value >= 3.0m ? "text-success" : "text-danger")">
+                                                    @promedioFinal.Value.ToString("0.0")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span>—</span>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -404,10 +436,14 @@
                             <tr>
                                 <td colspan="4" class="text-end" style="font-size: 1.1rem;"><strong>PROMEDIO GENERAL DEL TRIMESTRE:</strong></td>
                                 <td id="grades-average" class="text-center fw-bold" style="font-size: 1.2rem;">
-                                    @{
-                                        var promedioGeneral = materiaCount > 0 ? (totalPromedios / materiaCount).ToString("0.0") : "0.0";
+                                    @if (Model.TrimesterAverage.HasValue)
+                                    {
+                                        <span class="@(Model.TrimesterAverage.Value >= 3.0m ? "text-success" : "text-danger")">@Model.TrimesterAverage.Value.ToString("0.0")</span>
                                     }
-                                    <span class="@(materiaCount > 0 && (totalPromedios / materiaCount) >= 3.0m ? "text-success" : "text-danger")">@promedioGeneral</span>
+                                    else
+                                    {
+                                        <span>—</span>
+                                    }
                                 </td>
                             </tr>
                         </tfoot>
@@ -626,6 +662,74 @@
                 </div>
             </div>
         </div>
+
+        <div class="tab-pane fade" id="bulletin-panel" role="tabpanel">
+            <div class="card card-outline card-primary mb-4">
+                <div class="card-header">
+                    <i class="bi bi-file-earmark-text me-2"></i> BOLETÍN ACADÉMICO
+                </div>
+                <div class="card-body">
+                    <div class="info-block mb-4" id="bulletin-header">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold mb-1" style="color: #1e293b;">Nombre</label>
+                                <p class="mb-0" id="bulletin-name" style="color: #475569;">—</p>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold mb-1" style="color: #1e293b;">Grado</label>
+                                <p class="mb-0" id="bulletin-grade" style="color: #475569;">—</p>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold mb-1" style="color: #1e293b;">Grupo</label>
+                                <p class="mb-0" id="bulletin-group" style="color: #475569;">—</p>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold mb-1" style="color: #1e293b;">Programa / Bachiller</label>
+                                <p class="mb-0" id="bulletin-specialty" style="color: #475569;">—</p>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold mb-1" style="color: #1e293b;">Año académico</label>
+                                <p class="mb-0" id="bulletin-year" style="color: #475569;">—</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                        <span class="fw-semibold" style="color: #1e293b;">Vista:</span>
+                        <div class="btn-group" role="group" aria-label="Vista del boletín">
+                            <button type="button" class="btn btn-primary" id="bulletin-view-grade">Por grado</button>
+                            <button type="button" class="btn btn-outline-primary" id="bulletin-view-history">Programa completo</button>
+                            <button type="button" class="btn btn-outline-primary" id="bulletin-export-pdf">
+                                <i class="bi bi-download me-1"></i>Descargar PDF
+                            </button>
+                        </div>
+                    </div>
+                    <div id="bulletin-grade-view">
+                    <table class="table table-hover table-bordered align-middle" id="bulletin-table">
+                        <thead style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white;">
+                            <tr>
+                                <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Área</th>
+                                <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Asignatura</th>
+                                <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T1</th>
+                                <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T2</th>
+                                <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T3</th>
+                                <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Promedio Final</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulletin-table-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Seleccione la pestaña Boletín para cargar el reporte.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                    <div id="bulletin-history-view" style="display: none;">
+                        <div id="bulletin-history-container">
+                            <p class="text-muted mb-0">Seleccione Programa completo para cargar el historial.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -643,6 +747,25 @@
         // Variable global para almacenar todas las calificaciones
         let allGrades = @Html.Raw(Json.Serialize(Model.Grades));
         let allCarryOverGrades = @Html.Raw(Json.Serialize(Model.CarryOverGrades ?? new List<SchoolManager.Dtos.GradeDto>()));
+        let officialSubjectAverages = @Html.Raw(Json.Serialize(Model.SubjectAverages ?? new List<SchoolManager.Dtos.SubjectTrimesterAverageDto>()));
+        let officialTrimesterAverage = @Html.Raw(Json.Serialize(Model.TrimesterAverage));
+
+        function findOfficialSubjectAverage(subject) {
+            if (!officialSubjectAverages || !subject) return null;
+            return officialSubjectAverages.find(a => a.subject === subject) || null;
+        }
+
+        function officialCategoryAverage(avg, tipoNombre) {
+            if (!avg) return null;
+            if (tipoNombre === 'Notas de Apreciación') return avg.averageApreciacion;
+            if (tipoNombre === 'Ejercicios Diarios') return avg.averageEjercicios;
+            if (tipoNombre === 'Examen Final') return avg.averageExamen;
+            return null;
+        }
+
+        function formatOfficialAverage(valor) {
+            return (typeof valor === 'number' && !isNaN(valor)) ? Number(valor).toFixed(1) : '—';
+        }
 
         function renderCarryOverTable(grades) {
             const tbody = $('#carryover-table-body');
@@ -673,7 +796,7 @@
             
             if (!grades || grades.length === 0) {
                 gradesTbody.append('<tr><td colspan="5" class="text-center text-muted">No hay calificaciones para mostrar con los filtros seleccionados.</td></tr>');
-                $('#grades-average').html('<span class="text-danger">0.0</span>');
+                $('#grades-average').html('<span>—</span>');
                 $('#grades-tab .badge').text('0');
                 return;
             }
@@ -687,12 +810,10 @@
                 groupedBySubject[g.subject].push(g);
             });
             
-            let totalPromediosMaterias = 0;
-            let materiaCount = 0;
-            
             // Procesar cada materia
             Object.keys(groupedBySubject).forEach(subject => {
                 const subjectGrades = groupedBySubject[subject];
+                const subjectAvg = findOfficialSubjectAverage(subject);
                 
                 // Definir tipos de actividad
                 const tiposActividad = [
@@ -716,15 +837,11 @@
                 
                 let firstRowForSubject = true;
                 let totalRowsForSubject = 0;
-                let promediosTipos = [];
                 
-                // Contar filas y calcular promedios por tipo
                 tiposActividad.forEach(tipo => {
                     const actividadesTipo = subjectGrades.filter(tipo.filtro).sort((a, b) => a.activityName.localeCompare(b.activityName));
                     if (actividadesTipo.length > 0) {
                         totalRowsForSubject += actividadesTipo.length;
-                        const promedio = actividadesTipo.reduce((sum, g) => sum + g.value, 0) / actividadesTipo.length;
-                        promediosTipos.push(promedio);
                     }
                 });
                 
@@ -739,14 +856,7 @@
                     return;
                 }
                 
-                // Calcular promedio final
-                const promedioFinal = promediosTipos.length > 0 ? 
-                    promediosTipos.reduce((a, b) => a + b, 0) / promediosTipos.length : null;
-                
-                if (promedioFinal !== null) {
-                    totalPromediosMaterias += promedioFinal;
-                    materiaCount++;
-                }
+                const promedioFinal = subjectAvg ? subjectAvg.subjectAverage : null;
                 
                 // Renderizar filas
                 let rowIndexForSubject = 0;
@@ -757,7 +867,7 @@
                     if (actividadesTipo.length === 0) return;
                     
                     let firstRowForType = true;
-                    const promedioTipo = actividadesTipo.reduce((sum, g) => sum + g.value, 0) / actividadesTipo.length;
+                    const promedioTipo = officialCategoryAverage(subjectAvg, tipo.nombre);
                     
                     actividadesTipo.forEach((actividad, index) => {
                         const isLastActivityOfType = index === actividadesTipo.length - 1;
@@ -787,10 +897,9 @@
                         
                         // Promedio
                         if (isLastActivityOfType) {
-                            // Última fila del tipo: mostrar promedio del tipo
-                            const tipoClass = promedioTipo >= 3.0 ? 'text-success' : 'text-danger';
+                            const tipoClass = (typeof promedioTipo === 'number' && promedioTipo >= 3.0) ? 'text-success' : 'text-danger';
                             rowHtml += `<td style="vertical-align: middle; background-color: #e3f2fd;" class="text-center fw-bold">
-                                <span class="${tipoClass}">⌀ ${promedioTipo.toFixed(1)}</span>
+                                <span class="${tipoClass}">⌀ ${formatOfficialAverage(promedioTipo)}</span>
                             </td>`;
                         } else {
                             // Celda vacía
@@ -804,21 +913,26 @@
                 });
                 
                 // Fila final para mostrar el promedio de la materia
-                const finalClass = promedioFinal >= 3.0 ? 'text-success' : 'text-danger';
+                const finalClass = (typeof promedioFinal === 'number' && promedioFinal >= 3.0) ? 'text-success' : 'text-danger';
                 const finalRowHtml = `
                     <tr style="background-color: #fff3cd; border-top: 2px solid #2563eb;">
                         <td colspan="3" class="text-end fw-bold" style="font-size: 1.05rem;">PROMEDIO FINAL DE ${subject.toUpperCase()}:</td>
                         <td class="text-center fw-bold" style="font-size: 1.2rem;">
-                            <span class="${finalClass}">${promedioFinal.toFixed(1)}</span>
+                            <span class="${finalClass}">${formatOfficialAverage(promedioFinal)}</span>
                         </td>
                     </tr>
                 `;
                 gradesTbody.append(finalRowHtml);
             });
             
-            const promedioGeneral = materiaCount > 0 ? totalPromediosMaterias / materiaCount : 0;
-            const avgClass = promedioGeneral >= 3.0 ? 'text-success' : 'text-danger';
-            $('#grades-average').html(`<span class="${avgClass}" style="font-size: 1.2rem;">${promedioGeneral.toFixed(1)}</span>`);
+            const selectedSubject = $('#subject-filter').val();
+            let promedioGeneral = officialTrimesterAverage;
+            if (selectedSubject) {
+                const filteredAvg = findOfficialSubjectAverage(selectedSubject);
+                promedioGeneral = filteredAvg ? filteredAvg.subjectAverage : null;
+            }
+            const avgClass = (typeof promedioGeneral === 'number' && promedioGeneral >= 3.0) ? 'text-success' : 'text-danger';
+            $('#grades-average').html(`<span class="${avgClass}" style="font-size: 1.2rem;">${formatOfficialAverage(promedioGeneral)}</span>`);
             $('#grades-tab .badge').text(grades.length);
         }
 
@@ -863,6 +977,8 @@
                         // Actualizar variable global con las nuevas calificaciones
                         allGrades = data.grades || [];
                         allCarryOverGrades = data.carryOverGrades || [];
+                        officialSubjectAverages = data.subjectAverages || [];
+                        officialTrimesterAverage = data.trimesterAverage ?? null;
                         renderCarryOverTable(allCarryOverGrades);
                         
                         // Actualizar opciones del filtro de materias
@@ -993,6 +1109,186 @@
                         alert("Error al obtener datos del servidor.");
                     }
                 });
+            });
+
+            function formatBulletinScore(value) {
+                return (typeof value === 'number' && !isNaN(value)) ? Number(value).toFixed(1) : '—';
+            }
+
+            function renderBulletin(data) {
+                $('#bulletin-name').text(data.studentName || '—');
+                $('#bulletin-grade').text(data.grade || '—');
+                $('#bulletin-group').text(data.group || '—');
+                $('#bulletin-specialty').text(data.specialty || '—');
+                $('#bulletin-year').text(data.academicYear || '—');
+
+                const tbody = $('#bulletin-table-body');
+                tbody.empty();
+                const areas = data.areas || [];
+                if (areas.length === 0) {
+                    tbody.append('<tr><td colspan="6" class="text-center text-muted">No hay asignaturas para mostrar en el boletín.</td></tr>');
+                    return;
+                }
+
+                areas.forEach(area => {
+                    const subjects = area.subjects || [];
+                    subjects.forEach((subject, index) => {
+                        const finalClass = typeof subject.finalAverage === 'number'
+                            ? (subject.finalAverage >= 3.0 ? 'text-success' : 'text-danger')
+                            : 'text-muted';
+                        tbody.append(`
+                            <tr>
+                                ${index === 0 ? `<td rowspan="${subjects.length}" style="vertical-align: middle; background-color: #e3f2fd;" class="fw-bold">${area.areaName || 'Sin área'}</td>` : ''}
+                                <td>${subject.subjectName || ''}</td>
+                                <td class="text-center">${formatBulletinScore(subject.t1)}</td>
+                                <td class="text-center">${formatBulletinScore(subject.t2)}</td>
+                                <td class="text-center">${formatBulletinScore(subject.t3)}</td>
+                                <td class="text-center fw-bold ${finalClass}">${formatBulletinScore(subject.finalAverage)}</td>
+                            </tr>
+                        `);
+                    });
+                });
+            }
+
+            let bulletinLoaded = false;
+            let bulletinHistoryLoaded = false;
+            let bulletinView = 'grade';
+
+            function setBulletinView(view) {
+                bulletinView = view;
+                if (view === 'history') {
+                    $('#bulletin-view-history').removeClass('btn-outline-primary').addClass('btn-primary');
+                    $('#bulletin-view-grade').removeClass('btn-primary').addClass('btn-outline-primary');
+                    $('#bulletin-grade-view').hide();
+                    $('#bulletin-history-view').show();
+                    if (!bulletinHistoryLoaded) loadBulletinHistory();
+                } else {
+                    $('#bulletin-view-grade').removeClass('btn-outline-primary').addClass('btn-primary');
+                    $('#bulletin-view-history').removeClass('btn-primary').addClass('btn-outline-primary');
+                    $('#bulletin-history-view').hide();
+                    $('#bulletin-grade-view').show();
+                    if (!bulletinLoaded) loadBulletin();
+                }
+            }
+
+            function renderBulletinHistory(data) {
+                const container = $('#bulletin-history-container');
+                container.empty();
+                const tracks = data.tracks || [];
+                if (tracks.length === 0) {
+                    container.append('<p class="text-muted mb-0">No hay historial académico para mostrar.</p>');
+                    return;
+                }
+
+                tracks.forEach(track => {
+                    const grades = track.grades || [];
+                    const colCount = 2 + grades.length;
+                    let yearRow = '';
+                    if (grades.some(g => g.academicYear && g.academicYear !== '—')) {
+                        yearRow = `<tr class="table-light"><td colspan="2" class="text-muted">Año</td>${grades.map(g => `<td class="text-center text-muted">${g.academicYear || '—'}</td>`).join('')}</tr>`;
+                    }
+                    let body = '';
+                    (track.areas || []).forEach(area => {
+                        const subjects = area.subjects || [];
+                        subjects.forEach((subject, index) => {
+                            const results = subject.gradeResults || [];
+                            const cells = grades.map(col => {
+                                const result = results.find(r => r.gradeNumber === col.gradeNumber) || {};
+                                const value = result.finalAverage;
+                                const cls = typeof value === 'number'
+                                    ? (value >= 3.0 ? 'text-success' : 'text-danger')
+                                    : 'text-muted';
+                                return `<td class="text-center fw-bold ${cls}">${formatBulletinScore(value)}</td>`;
+                            }).join('');
+                            body += `
+                                <tr>
+                                    ${index === 0 ? `<td rowspan="${subjects.length}" style="vertical-align: middle; background-color: #e3f2fd;" class="fw-bold">${area.areaName || 'Sin área'}</td>` : ''}
+                                    <td>${subject.subjectName || ''}</td>
+                                    ${cells}
+                                </tr>`;
+                        });
+                    });
+                    if (!body) {
+                        body = `<tr><td colspan="${colCount}" class="text-center text-muted">No hay asignaturas para este programa.</td></tr>`;
+                    }
+                    container.append(`
+                        <div class="mb-4">
+                            <h6 class="fw-bold mb-2" style="color: #1e293b;">${track.programName || 'Programa'}</h6>
+                            <table class="table table-hover table-bordered align-middle bulletin-history-table">
+                                <thead style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white;">
+                                    <tr>
+                                        <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Área</th>
+                                        <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Asignatura</th>
+                                        ${grades.map(g => `<th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">${g.gradeName}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${yearRow}
+                                    ${body}
+                                </tbody>
+                            </table>
+                        </div>
+                    `);
+                });
+            }
+
+            function loadBulletin() {
+                const studentId = $('#student-id').val();
+                $.ajax({
+                    url: '@Url.Action("GetBulletin", "StudentReport")',
+                    type: 'GET',
+                    data: { studentId: studentId },
+                    success: function (data) {
+                        if (data.error) {
+                            $('#bulletin-table-body').html(`<tr><td colspan="6" class="text-center text-danger">${data.error}</td></tr>`);
+                            return;
+                        }
+                        renderBulletin(data);
+                        bulletinLoaded = true;
+                    },
+                    error: function () {
+                        $('#bulletin-table-body').html('<tr><td colspan="6" class="text-center text-danger">No se pudo cargar el boletín.</td></tr>');
+                    }
+                });
+            }
+
+            function loadBulletinHistory() {
+                const studentId = $('#student-id').val();
+                $('#bulletin-history-container').html('<p class="text-muted mb-0">Cargando historial...</p>');
+                $.ajax({
+                    url: '@Url.Action("GetBulletinHistory", "StudentReport")',
+                    type: 'GET',
+                    data: { studentId: studentId },
+                    success: function (data) {
+                        if (data.error) {
+                            $('#bulletin-history-container').html(`<p class="text-danger mb-0">${data.error}</p>`);
+                            return;
+                        }
+                        renderBulletinHistory(data);
+                        bulletinHistoryLoaded = true;
+                    },
+                    error: function () {
+                        $('#bulletin-history-container').html('<p class="text-danger mb-0">No se pudo cargar el historial del boletín.</p>');
+                    }
+                });
+            }
+
+            $('#bulletin-tab').on('shown.bs.tab', function () {
+                if (bulletinView === 'history') {
+                    if (!bulletinHistoryLoaded) loadBulletinHistory();
+                } else if (!bulletinLoaded) {
+                    loadBulletin();
+                }
+            });
+            $('#bulletin-view-grade').on('click', function () { setBulletinView('grade'); });
+            $('#bulletin-view-history').on('click', function () { setBulletinView('history'); });
+            $('#bulletin-export-pdf').on('click', function () {
+                const view = bulletinView === 'history' ? 'program' : 'grade';
+                const studentId = $('#student-id').val() || '';
+                const url = '@Url.Action("ExportBulletinPdf", "StudentReport")'
+                    + '?view=' + encodeURIComponent(view)
+                    + (studentId ? '&studentId=' + encodeURIComponent(studentId) : '');
+                window.location.href = url;
             });
         });
 

@@ -29,6 +29,34 @@ namespace SchoolManager.Services.Implementations
             _logger = logger;
         }
 
+        private async Task<Guid?> GetCanonicalActiveAcademicYearIdAsync(Guid? schoolId)
+        {
+            if (!schoolId.HasValue)
+                return null;
+
+            var active = await _academicYearService.GetActiveAcademicYearAsync(schoolId.Value);
+            return active?.Id;
+        }
+
+        /// <summary>Nombre del año académico para la cabecera. No altera el filtro de notas.</summary>
+        private async Task<string> GetDisplayAcademicYearNameAsync(Guid studentId, Guid? schoolId)
+        {
+            if (schoolId.HasValue)
+            {
+                var active = await _academicYearService.GetActiveAcademicYearAsync(schoolId.Value);
+                if (!string.IsNullOrWhiteSpace(active?.Name))
+                    return active.Name;
+            }
+
+            var fromAssignment = await _context.StudentAssignments.AsNoTracking()
+                .Where(sa => sa.StudentId == studentId && sa.IsActive && sa.AcademicYearId != null)
+                .OrderByDescending(sa => sa.CreatedAt)
+                .Select(sa => sa.AcademicYear != null ? sa.AcademicYear.Name : null)
+                .FirstOrDefaultAsync();
+
+            return string.IsNullOrWhiteSpace(fromAssignment) ? "—" : fromAssignment!;
+        }
+
         /// <summary>Grupos de matrículas activas y etiqueta de encabezado (multi-matrícula nocturna).</summary>
         private async Task<(HashSet<Guid> GroupIds, string GradeHeader)> GetActiveEnrollmentGroupsAsync(Guid studentId)
         {
@@ -124,16 +152,15 @@ namespace SchoolManager.Services.Implementations
                 // Obtener las actividades del estudiante con la calificación para el trimestre seleccionado
                 _logger.LogInformation("Buscando calificaciones para StudentId: {StudentId}, Trimester: {Trimester}", studentId, selectedTrimester);
 
-                // Obtener año académico activo para filtrar notas
-                var activeAcademicYear = await _academicYearService.GetActiveAcademicYearAsync(studentUser.SchoolId);
+                var activeYearId = await GetCanonicalActiveAcademicYearIdAsync(studentUser.SchoolId);
 
                 var scoresBaseQuery = _context.StudentActivityScores
                     .Where(s => s.StudentId == studentId);
 
-                // La columna academic_year_id existe desde la migración AddAcademicYearSupport (nov-2025)
-                if (activeAcademicYear != null)
+                if (activeYearId.HasValue)
                 {
-                    scoresBaseQuery = scoresBaseQuery.Where(s => s.AcademicYearId == activeAcademicYear.Id);
+                    scoresBaseQuery = scoresBaseQuery.Where(s =>
+                        s.AcademicYearId == activeYearId.Value);
                 }
 
                 var scoresQuery = scoresBaseQuery
@@ -182,6 +209,7 @@ namespace SchoolManager.Services.Implementations
 
                 var name = $"{studentUser.Name} {studentUser.LastName}";
                 var gradeName = gradeHeaderLabel;
+                var academicYearName = await GetDisplayAcademicYearNameAsync(studentId, studentUser.SchoolId);
 
                 // Si no hay calificaciones, devolver reporte vacío pero con trimestres disponibles
                 if (studentScores == null || !studentScores.Any())
@@ -197,10 +225,13 @@ namespace SchoolManager.Services.Implementations
                         AttendanceByTrimester = new List<AttendanceDto>(),
                         AttendanceByMonth = new List<AttendanceDto>(),
                         Trimester = selectedTrimester,
+                        AcademicYear = academicYearName,
                         AvailableTrimesters = trimesters.Select(t => new AvailableTrimesters { Trimester = t }).ToList(),
                         DisciplineReports = new List<DisciplineReportDto>(),
                         PendingActivities = new List<PendingActivityDto>(),
-                        AvailableSubjects = new List<string>()
+                        AvailableSubjects = new List<string>(),
+                        SubjectAverages = new List<SubjectTrimesterAverageDto>(),
+                        TrimesterAverage = null
                     };
                 }
 
@@ -410,6 +441,7 @@ namespace SchoolManager.Services.Implementations
                     AttendanceByTrimester = attendanceByTrimester,
                     AttendanceByMonth = attendanceByMonth,
                     Trimester = selectedTrimester,
+                    AcademicYear = academicYearName,
                     AvailableTrimesters = trimesters
                         .Select(t => new AvailableTrimesters { Trimester = t })
                         .ToList(),
@@ -417,6 +449,8 @@ namespace SchoolManager.Services.Implementations
                     PendingActivities = pendingActivities,
                     AvailableSubjects = availableSubjects
                 };
+
+                ApplyOfficialAverages(result);
 
                 _logger.LogInformation("=== FIN GetReportByStudentIdAsync - Reporte construido exitosamente ===");
 
@@ -439,18 +473,17 @@ namespace SchoolManager.Services.Implementations
 
             var (activeGroupIds, gradeHeaderLabel) = await GetActiveEnrollmentGroupsAsync(studentId);
 
-            // MEJORADO: Obtener año académico activo para filtrar notas
-            var activeAcademicYear = studentUser?.SchoolId.HasValue == true
-                ? await _academicYearService.GetActiveAcademicYearAsync(studentUser.SchoolId)
+            var activeYearId = studentUser?.SchoolId.HasValue == true
+                ? await GetCanonicalActiveAcademicYearIdAsync(studentUser.SchoolId)
                 : null;
 
             var scoresBaseQuery = _context.StudentActivityScores
                 .Where(s => s.StudentId == studentId);
 
-            // La columna academic_year_id existe desde la migración AddAcademicYearSupport (nov-2025)
-            if (activeAcademicYear != null)
+            if (activeYearId.HasValue)
             {
-                scoresBaseQuery = scoresBaseQuery.Where(s => s.AcademicYearId == activeAcademicYear.Id);
+                scoresBaseQuery = scoresBaseQuery.Where(s =>
+                    s.AcademicYearId == activeYearId.Value);
             }
 
             // Obtener las actividades del estudiante con las calificaciones para el trimestre seleccionado
@@ -505,6 +538,7 @@ namespace SchoolManager.Services.Implementations
             }
 
             var name = $"{studentData.Name} {studentData.LastName}";
+            var academicYearName = await GetDisplayAcademicYearNameAsync(studentId, studentUser?.SchoolId);
 
             var scoreGroupIds2 = studentScores.Where(s => s.GroupId.HasValue).Select(s => s.GroupId!.Value).Distinct().ToList();
             var groupLabels2 = scoreGroupIds2.Count == 0
@@ -681,7 +715,7 @@ namespace SchoolManager.Services.Implementations
                 pendingActivities = new List<PendingActivityDto>();
             }
 
-            return new StudentReportDto
+            var report = new StudentReportDto
             {
                 StudentId = studentId,
                 StudentName = name,
@@ -692,10 +726,45 @@ namespace SchoolManager.Services.Implementations
                 AttendanceByTrimester = attendanceByTrimester,
                 AttendanceByMonth = attendanceByMonth,
                 Trimester = trimester,
+                AcademicYear = academicYearName,
                 AvailableTrimesters = new List<AvailableTrimesters> { new AvailableTrimesters { Trimester = trimester } },
                 DisciplineReports = disciplineReports,
                 PendingActivities = pendingActivities
             };
+
+            ApplyOfficialAverages(report);
+            return report;
+        }
+
+        private static void ApplyOfficialAverages(StudentReportDto report)
+        {
+            var grades = report.Grades ?? new List<GradeDto>();
+            var subjectAverages = grades
+                .GroupBy(g => g.Subject ?? string.Empty)
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                {
+                    var pairs = g.Select(x => ((string?)x.Type, x.Value)).ToList();
+                    return new SubjectTrimesterAverageDto
+                    {
+                        Subject = g.Key,
+                        AverageApreciacion = OfficialTrimesterAverageCalculator.AverageByType(
+                            pairs, OfficialTrimesterAverageCalculator.TypeApreciacion),
+                        AverageEjercicios = OfficialTrimesterAverageCalculator.AverageByType(
+                            pairs, OfficialTrimesterAverageCalculator.TypeEjercicios),
+                        AverageExamen = OfficialTrimesterAverageCalculator.AverageByType(
+                            pairs, OfficialTrimesterAverageCalculator.TypeExamen),
+                        SubjectAverage = OfficialTrimesterAverageCalculator.ComputeTrimesterAverage(pairs)
+                    };
+                })
+                .ToList();
+
+            report.SubjectAverages = subjectAverages;
+            var withValue = subjectAverages
+                .Where(a => a.SubjectAverage.HasValue)
+                .Select(a => a.SubjectAverage!.Value)
+                .ToList();
+            report.TrimesterAverage = withValue.Count == 0 ? null : withValue.Average();
         }
 
         public async Task<List<DisciplineReportDto>> GetDisciplineReportsByStudentIdAsync(Guid studentId)
