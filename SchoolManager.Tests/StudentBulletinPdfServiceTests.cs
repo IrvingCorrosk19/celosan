@@ -106,6 +106,66 @@ public class StudentBulletinPdfServiceTests
     }
 
     [Fact]
+    public void Program_pdf_with_two_large_tracks_and_logo_is_valid()
+    {
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        var history = SamplePremediaHistory();
+        history.Tracks.Add(new ProgramHistoryTrackDto
+        {
+            SpecialtyId = Guid.NewGuid(),
+            ProgramType = "Media",
+            ProgramName = "BACHILLER EN INFORMÁTICA",
+            Grades =
+            [
+                new() { GradeNumber = 10, GradeName = "10°", AcademicYear = "2024" },
+                new() { GradeNumber = 11, GradeName = "11°", AcademicYear = "2025" },
+                new() { GradeNumber = 12, GradeName = "12°", AcademicYear = "2026" }
+            ],
+            Areas = history.Tracks[0].Areas
+        });
+
+        var pdf = CreateService().GenerateProgramHistoryPdf(history, new BulletinPdfIdentity
+        {
+            SchoolName = "Colegio de Prueba",
+            LogoBytes = png
+        });
+
+        AssertPdf(pdf);
+        AssertDoesNotContainPending(pdf);
+    }
+
+    [Fact]
+    public void Program_pdf_with_oversized_area_paginates()
+    {
+        var history = SamplePremediaHistory();
+        var grades = history.Tracks[0].Grades;
+        history.Tracks[0].Areas[0].Subjects = Enumerable.Range(1, 40)
+            .Select(i => new ProgramHistorySubjectDto
+            {
+                SubjectId = Guid.NewGuid(),
+                SubjectName = $"Asignatura extra {i}",
+                GradeResults = grades.Select(g => new ProgramHistoryGradeResultDto
+                {
+                    GradeNumber = g.GradeNumber,
+                    FinalAverage = 3.8m
+                }).ToList()
+            })
+            .ToList();
+
+        var pdf = CreateService().GenerateProgramHistoryPdf(history, new BulletinPdfIdentity
+        {
+            SchoolName = "Colegio de Prueba"
+        });
+
+        AssertPdf(pdf);
+        var pages = System.Text.RegularExpressions.Regex.Matches(
+            System.Text.Encoding.ASCII.GetString(pdf),
+            @"/Type\s*/Page(?!s)").Count;
+        Assert.True(pages >= 2, $"Expected multiple pages, got {pages}");
+    }
+
+    [Fact]
     public void Program_pdf_without_logo_is_valid()
     {
         var pdf = CreateService().GenerateProgramHistoryPdf(SampleHistory(), new BulletinPdfIdentity

@@ -324,7 +324,7 @@ public class StudentReportController : Controller
             if (history == null)
                 return NotFound(new { error = "No se encontró el historial del boletín." });
 
-            var year = history.Tracks
+            var year = (history.Tracks ?? new List<ProgramHistoryTrackDto>())
                 .SelectMany(t => t.Grades ?? new List<ProgramHistoryGradeColumnDto>())
                 .Select(g => g.AcademicYear)
                 .FirstOrDefault(y => !string.IsNullOrWhiteSpace(y) && y != "—");

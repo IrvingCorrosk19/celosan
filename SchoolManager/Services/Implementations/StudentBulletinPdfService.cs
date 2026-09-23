@@ -139,10 +139,13 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                         return;
                     }
 
-                    foreach (var track in tracks)
+                    for (var i = 0; i < tracks.Count; i++)
                     {
-                        col.Item().ShowEntire().Element(e => BuildProgramSection(
-                            e, branding, academicYear, meta, track));
+                        if (i > 0)
+                            col.Item().PageBreak();
+
+                        col.Item().Element(e => BuildProgramSection(
+                            e, branding, academicYear, meta, tracks[i]));
                     }
                 });
                 page.Footer().Element(BuildFooter);
@@ -316,7 +319,7 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                 }
 
                 foreach (var area in populated)
-                    col.Item().ShowEntire().Element(e => BuildHistoryTableChrome(e, grades, area));
+                    col.Item().Element(e => BuildHistoryTableChrome(e, grades, area));
             });
         });
     }
