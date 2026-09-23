@@ -23,6 +23,13 @@ public class StudentGradeImportController : Controller
     }
 
     [HttpGet]
+    public IActionResult DownloadTemplate()
+    {
+        var bytes = StudentGradeImportTemplateBuilder.Build();
+        return File(bytes, StudentGradeImportTemplateBuilder.ContentType, StudentGradeImportTemplateBuilder.FileName);
+    }
+
+    [HttpGet]
     public async Task<IActionResult> Index()
     {
         var school = await _currentUserService.GetCurrentUserSchoolAsync();

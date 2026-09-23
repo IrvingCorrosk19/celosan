@@ -46,4 +46,5 @@ public class ProgramHistoryGradeResultDto
     public string GradeName { get; set; } = string.Empty;
     public string? AcademicYear { get; set; }
     public decimal? FinalAverage { get; set; }
+    public string Display { get; set; } = "—";
 }

@@ -89,8 +89,8 @@
                     <td>@op.GroupName</td>
                     <td>@op.Trimester</td>
                     <td>@op.CurrentOrigin</td>
-                    <td>@(op.CurrentOfficialScore.HasValue ? op.CurrentOfficialScore.Value.ToString("0.0") : "—")</td>
-                    <td>@(op.NewScore.HasValue ? op.NewScore.Value.ToString("0.0") : "—")</td>
+                    <td>@(string.IsNullOrWhiteSpace(op.CurrentDisplay) ? "—" : op.CurrentDisplay)</td>
+                    <td>@(string.IsNullOrWhiteSpace(op.NewDisplay) ? "—" : op.NewDisplay)</td>
                     <td>@op.Message</td>
                 </tr>
             }

@@ -8,6 +8,8 @@ namespace SchoolManager.Dtos
         public decimal? AverageEjercicios { get; set; }
         public decimal? AverageExamen { get; set; }
         public decimal? SubjectAverage { get; set; }
+        public string Status { get; set; } = SchoolManager.Helpers.ImportedTrimesterGradeStatus.Graded;
+        public string Display { get; set; } = "—";
         public bool IsImported { get; set; }
         public string GradeOrigin { get; set; } = OfficialTrimesterGradeOrigin.None;
     }

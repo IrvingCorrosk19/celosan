@@ -777,6 +777,8 @@ namespace SchoolManager.Services.Implementations
                     if (hit != null)
                     {
                         avg.SubjectAverage = hit.Score;
+                        avg.Status = hit.Status;
+                        avg.Display = OfficialGradeMark.Display(hit.Score, hit.Status, true);
                         avg.IsImported = true;
                         avg.GradeOrigin = OfficialTrimesterGradeOrigin.Imported;
                     }
@@ -795,6 +797,8 @@ namespace SchoolManager.Services.Implementations
                     {
                         Subject = hit.SubjectName,
                         SubjectAverage = hit.Score,
+                        Status = hit.Status,
+                        Display = OfficialGradeMark.Display(hit.Score, hit.Status, true),
                         IsImported = true,
                         GradeOrigin = OfficialTrimesterGradeOrigin.Imported
                     });
@@ -805,6 +809,9 @@ namespace SchoolManager.Services.Implementations
                 foreach (var avg in subjectAverages.Where(a => a.SubjectAverage.HasValue))
                     avg.GradeOrigin = OfficialTrimesterGradeOrigin.Activities;
             }
+
+            foreach (var avg in subjectAverages.Where(a => string.IsNullOrWhiteSpace(a.Display) || a.Display == "—"))
+                avg.Display = OfficialGradeMark.Display(avg.SubjectAverage, avg.Status, avg.IsImported);
 
             report.SubjectAverages = subjectAverages.OrderBy(a => a.Subject).ToList();
             var withValue = subjectAverages

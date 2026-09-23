@@ -226,7 +226,7 @@ public class StudentGradeImportService : IStudentGradeImportService
                 !o.StudentSubjectAssignmentId.HasValue ||
                 !o.AcademicYearId.HasValue ||
                 !o.TrimesterId.HasValue ||
-                !o.NewScore.HasValue ||
+                !IsPersistableMark(o.NewScore, o.NewStatus) ||
                 o.AcademicYearId != year.Id))
         {
             return RevalidationFail();
@@ -272,14 +272,15 @@ public class StudentGradeImportService : IStudentGradeImportService
                     StudentAssignmentId = op.StudentAssignmentId!.Value,
                     AcademicYearId = year.Id,
                     TrimesterId = op.TrimesterId!.Value,
-                    Score = op.NewScore!.Value,
+                    Score = op.NewScore,
+                    Status = ImportedTrimesterGradeStatus.Normalize(op.NewStatus),
                     Source = StudentImportedTrimesterGradeSource.ExcelImport,
                     ImportBatchId = batchId,
                     CreatedBy = userId,
                     CreatedAt = now
                 });
                 _context.AuditLogs.Add(BuildGradeAudit(
-                    CreatedAuditAction, schoolId, userId, displayName, userRole, batchId, op, null, op.NewScore));
+                    CreatedAuditAction, schoolId, userId, displayName, userRole, batchId, op, null, null, op.NewScore, op.NewStatus));
             }
 
             foreach (var op in revalidated.Where(o => o.Display.Status == GradeImportStatus.Actualizar))
@@ -295,13 +296,15 @@ public class StudentGradeImportService : IStudentGradeImportService
                 if (existing.SchoolId != schoolId)
                     throw new InvalidOperationException("imported-tenant-mismatch");
 
-                var previous = existing.Score;
-                existing.Score = op.NewScore!.Value;
+                var previousScore = existing.Score;
+                var previousStatus = existing.Status;
+                existing.Score = op.NewScore;
+                existing.Status = ImportedTrimesterGradeStatus.Normalize(op.NewStatus);
                 existing.UpdatedBy = userId;
                 existing.UpdatedAt = now;
                 existing.ImportBatchId = batchId;
                 _context.AuditLogs.Add(BuildGradeAudit(
-                    UpdatedAuditAction, schoolId, userId, displayName, userRole, batchId, op, previous, op.NewScore));
+                    UpdatedAuditAction, schoolId, userId, displayName, userRole, batchId, op, previousScore, previousStatus, op.NewScore, op.NewStatus));
             }
 
             _context.AuditLogs.Add(new AuditLog
@@ -468,10 +471,18 @@ public class StudentGradeImportService : IStudentGradeImportService
                 continue;
             }
 
-            if (score.HasFormulaWithoutValue || score.ScoreError != null || !score.Score.HasValue)
+            if (score.HasFormulaWithoutValue || score.ScoreError != null)
             {
                 operations.Add(ErrorOp(row, identity.StudentName, score.TrimesterCode, null,
                     score.ScoreError ?? "La nota no es válida.",
+                    score.RawValue, identity.Student.Id, enrollment.Assignment.Id, subject.SsaId, year.Id, tri[0]));
+                continue;
+            }
+
+            if (!IsPersistableMark(score.Score, score.Status))
+            {
+                operations.Add(ErrorOp(row, identity.StudentName, score.TrimesterCode, null,
+                    "La nota no es válida.",
                     score.RawValue, identity.Student.Id, enrollment.Assignment.Id, subject.SsaId, year.Id, tri[0]));
                 continue;
             }
@@ -482,7 +493,7 @@ public class StudentGradeImportService : IStudentGradeImportService
                     g.StudentSubjectAssignmentId == subject.SsaId &&
                     g.AcademicYearId == year.Id &&
                     g.TrimesterId == tri[0]!.Value)
-                .Select(g => (decimal?)g.Score)
+                .Select(g => new { g.Score, g.Status })
                 .FirstOrDefaultAsync();
 
             var activityRows = await (
@@ -500,9 +511,10 @@ public class StudentGradeImportService : IStudentGradeImportService
             var official = await _officialGradeService.GetTrimesterGradeAsync(
                 subject.SsaId!.Value, year.Id, tri[0]!.Value, activityPairs);
 
+            var newStatus = ImportedTrimesterGradeStatus.Normalize(score.Status);
             var status = imported == null
                 ? GradeImportStatus.Nuevo
-                : imported.Value == score.Score.Value
+                : MarksEqual(imported.Score, imported.Status, score.Score, newStatus)
                     ? GradeImportStatus.SinCambios
                     : GradeImportStatus.Actualizar;
 
@@ -512,12 +524,15 @@ public class StudentGradeImportService : IStudentGradeImportService
                     ? GradeImportCurrentOrigin.Activities
                     : GradeImportCurrentOrigin.None;
 
+            var currentDisplay = OfficialGradeMark.Display(
+                imported?.Score ?? official.Score,
+                imported?.Status ?? official.Status,
+                imported != null || official.IsImported);
+            var newDisplay = OfficialGradeMark.Display(score.Score, newStatus, true);
             var message = status switch
             {
-                GradeImportStatus.Nuevo => imported == null
-                    ? "Se crearía una nota oficial importada."
-                    : string.Empty,
-                GradeImportStatus.Actualizar => $"Reemplazaría {imported.Value.ToString("0.0", CultureInfo.InvariantCulture)} por {score.Score.Value.ToString("0.0", CultureInfo.InvariantCulture)}.",
+                GradeImportStatus.Nuevo => "Se crearía una nota oficial importada.",
+                GradeImportStatus.Actualizar => $"Reemplazaría {currentDisplay} por {newDisplay}.",
                 GradeImportStatus.SinCambios => "La nota importada ya coincide.",
                 _ => string.Empty
             };
@@ -530,13 +545,18 @@ public class StudentGradeImportService : IStudentGradeImportService
                 AcademicYearId = year.Id,
                 TrimesterId = tri[0],
                 NewScore = score.Score,
+                NewStatus = newStatus,
                 Display = BaseDisplay(row, identity.StudentName, score.TrimesterCode, score.Score)
                 .Tap(d =>
                 {
                     d.Status = status;
                     d.Message = message;
-                    d.CurrentImportedScore = imported;
+                    d.CurrentImportedScore = imported?.Score;
                     d.CurrentOfficialScore = official.Score;
+                    d.CurrentStatus = imported?.Status ?? official.Status;
+                    d.CurrentDisplay = currentDisplay;
+                    d.NewStatus = newStatus;
+                    d.NewDisplay = newDisplay;
                     d.CurrentOrigin = origin;
                 })
             });
@@ -789,7 +809,14 @@ public class StudentGradeImportService : IStudentGradeImportService
                     {
                         TrimesterCode = StudentGradeImportExcelParser.NormalizeTrimester(op.Display.Trimester)
                     };
-                    if (!op.NewScore.HasValue)
+                    var markStatus = ImportedTrimesterGradeStatus.Normalize(op.NewStatus);
+                    score.Status = markStatus;
+                    if (ImportedTrimesterGradeStatus.IsSpecial(markStatus))
+                    {
+                        score.Score = null;
+                        score.RawValue = OfficialGradeMark.Display(null, markStatus, true);
+                    }
+                    else if (!op.NewScore.HasValue)
                     {
                         score.ScoreError = "La nota no es válida.";
                         score.RawValue = op.Display.Message;
@@ -842,6 +869,23 @@ public class StudentGradeImportService : IStudentGradeImportService
         }
     }
 
+    private static bool IsPersistableMark(decimal? score, string? status)
+    {
+        var normalized = ImportedTrimesterGradeStatus.Normalize(status);
+        if (ImportedTrimesterGradeStatus.IsSpecial(normalized))
+            return !score.HasValue;
+        return score.HasValue;
+    }
+
+    private static bool MarksEqual(decimal? leftScore, string? leftStatus, decimal? rightScore, string? rightStatus)
+    {
+        if (ImportedTrimesterGradeStatus.Normalize(leftStatus) != ImportedTrimesterGradeStatus.Normalize(rightStatus))
+            return false;
+        if (ImportedTrimesterGradeStatus.IsSpecial(leftStatus))
+            return true;
+        return leftScore == rightScore;
+    }
+
     private static AuditLog BuildGradeAudit(
         string action,
         Guid schoolId,
@@ -850,11 +894,13 @@ public class StudentGradeImportService : IStudentGradeImportService
         string? userRole,
         Guid batchId,
         GradeImportResolvedOperation op,
-        decimal? previous,
-        decimal? next)
+        decimal? previousScore,
+        string? previousStatus,
+        decimal? nextScore,
+        string? nextStatus)
     {
-        var previousText = previous.HasValue ? previous.Value.ToString("0.0", CultureInfo.InvariantCulture) : "null";
-        var nextText = next.HasValue ? next.Value.ToString("0.0", CultureInfo.InvariantCulture) : "null";
+        var previousText = OfficialGradeMark.Display(previousScore, previousStatus, previousStatus != null);
+        var nextText = OfficialGradeMark.Display(nextScore, nextStatus, true);
         return new AuditLog
         {
             Id = Guid.NewGuid(),
@@ -867,7 +913,9 @@ public class StudentGradeImportService : IStudentGradeImportService
             Details =
                 $"Batch={batchId}; StudentId={op.StudentId}; Document={op.Display.DocumentId}; " +
                 $"SSA={op.StudentSubjectAssignmentId}; Subject={op.Display.SubjectName}; " +
-                $"Year={op.AcademicYearId}; Trimester={op.Display.Trimester}; Previous={previousText}; New={nextText}",
+                $"Year={op.AcademicYearId}; Trimester={op.Display.Trimester}; " +
+                $"Previous={previousText}; PreviousStatus={ImportedTrimesterGradeStatus.Normalize(previousStatus)}; " +
+                $"New={nextText}; NewStatus={ImportedTrimesterGradeStatus.Normalize(nextStatus)}",
             Timestamp = DateTime.UtcNow
         };
     }

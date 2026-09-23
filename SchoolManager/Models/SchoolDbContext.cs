@@ -1000,7 +1000,9 @@ public partial class SchoolDbContext : DbContext
             entity.HasKey(e => e.Id).HasName("student_imported_trimester_grades_pkey");
             entity.ToTable("student_imported_trimester_grades", table =>
             {
-                table.HasCheckConstraint("ck_imported_trimester_grades_score_range", "score >= 1.0 AND score <= 5.0");
+                table.HasCheckConstraint(
+                    "ck_imported_trimester_grades_status_score",
+                    "(status = 'Graded' AND score IS NOT NULL AND score >= 1.0 AND score <= 5.0) OR (status IN ('NoAsistio', 'SinNota') AND score IS NULL)");
             });
 
             entity.HasIndex(e => new { e.SchoolId, e.StudentSubjectAssignmentId, e.AcademicYearId, e.TrimesterId },
@@ -1022,6 +1024,10 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.Score)
                 .HasPrecision(2, 1)
                 .HasColumnName("score");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue(Helpers.ImportedTrimesterGradeStatus.Graded)
+                .HasColumnName("status");
             entity.Property(e => e.Source)
                 .HasMaxLength(40)
                 .HasDefaultValue(StudentImportedTrimesterGradeSource.ExcelImport)

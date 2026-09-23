@@ -30,6 +30,7 @@ internal sealed class GradeImportParsedScore
     public string RawValue { get; set; } = string.Empty;
     public bool HasFormulaWithoutValue { get; set; }
     public decimal? Score { get; set; }
+    public string Status { get; set; } = ImportedTrimesterGradeStatus.Graded;
     public string? ScoreError { get; set; }
 }
 
@@ -303,9 +304,17 @@ public static class StudentGradeImportExcelParser
         if (value == null)
             return result;
 
-        result.RawValue = Convert.ToString(value, CultureInfo.InvariantCulture)?.Trim() ?? string.Empty;
+        result.RawValue = Convert.ToString(value, CultureInfo.CurrentCulture)?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(result.RawValue))
             return result;
+
+        if (OfficialGradeMark.TryParseToken(result.RawValue, out var specialStatus, out _, out _)
+            && ImportedTrimesterGradeStatus.IsSpecial(specialStatus))
+        {
+            result.Status = specialStatus!;
+            result.Score = null;
+            return result;
+        }
 
         if (!TryParseScore(value, out var score, out var error))
         {

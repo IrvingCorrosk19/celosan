@@ -102,6 +102,7 @@ public class StudentBulletinPdfServiceTests
         });
 
         AssertPdf(pdf);
+        AssertDoesNotContainPending(pdf);
     }
 
     [Fact]
@@ -113,6 +114,25 @@ public class StudentBulletinPdfServiceTests
         });
 
         AssertPdf(pdf);
+    }
+
+    [Fact]
+    public void Program_pdf_premedia_section_fits_single_page()
+    {
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        var pdf = CreateService().GenerateProgramHistoryPdf(SamplePremediaHistory(), new BulletinPdfIdentity
+        {
+            SchoolName = "Colegio de Prueba",
+            LogoBytes = png
+        });
+
+        AssertPdf(pdf);
+        AssertDoesNotContainPending(pdf);
+        var pages = System.Text.RegularExpressions.Regex.Matches(
+            System.Text.Encoding.ASCII.GetString(pdf),
+            @"/Type\s*/Page(?!s)").Count;
+        Assert.Equal(1, pages);
     }
 
     [Fact]
@@ -259,6 +279,83 @@ public class StudentBulletinPdfServiceTests
         ]
     };
 
+    private static StudentProgramHistoryDto SamplePremediaHistory()
+    {
+        var grades = new List<ProgramHistoryGradeColumnDto>
+        {
+            new() { GradeNumber = 7, GradeName = "7°", AcademicYear = "2024" },
+            new() { GradeNumber = 8, GradeName = "8°", AcademicYear = "2025" },
+            new() { GradeNumber = 9, GradeName = "9°", AcademicYear = "2026" }
+        };
+
+        ProgramHistorySubjectDto Subject(string name) => new()
+        {
+            SubjectId = Guid.NewGuid(),
+            SubjectName = name,
+            GradeResults = grades.Select(g => new ProgramHistoryGradeResultDto
+            {
+                GradeNumber = g.GradeNumber,
+                FinalAverage = 3.8m
+            }).ToList()
+        };
+
+        return new StudentProgramHistoryDto
+        {
+            StudentId = Guid.NewGuid(),
+            StudentName = "Estudiante Premedia",
+            Tracks =
+            [
+                new ProgramHistoryTrackDto
+                {
+                    SpecialtyId = Guid.NewGuid(),
+                    ProgramType = "Premedia",
+                    ProgramName = "PRE-MEDIA",
+                    Grades = grades,
+                    Areas =
+                    [
+                        new ProgramHistoryAreaDto
+                        {
+                            AreaId = Guid.NewGuid(),
+                            AreaName = "HUMANÍSTICA",
+                            Subjects =
+                            [
+                                Subject("ESPAÑOL"),
+                                Subject("HISTORIA"),
+                                Subject("GEOGRAFÍA"),
+                                Subject("CÍVICA"),
+                                Subject("VAL. ÉTICOS / REL. HUMANAS"),
+                                Subject("RELACIONES LABORALES"),
+                                Subject("INGLÉS"),
+                                Subject("ORIENTACIÓN")
+                            ]
+                        },
+                        new ProgramHistoryAreaDto
+                        {
+                            AreaId = Guid.NewGuid(),
+                            AreaName = "CIENTÍFICA",
+                            Subjects =
+                            [
+                                Subject("MATEMÁTICA"),
+                                Subject("CIENCIAS NATURALES"),
+                                Subject("SALUD FÍSICA Y MENTAL")
+                            ]
+                        },
+                        new ProgramHistoryAreaDto
+                        {
+                            AreaId = Guid.NewGuid(),
+                            AreaName = "TECNOLÓGICA",
+                            Subjects =
+                            [
+                                Subject("FDC 1"),
+                                Subject("MET")
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+    }
+
     private static StudentProgramHistoryDto SampleHistory() => new()
     {
         StudentId = Guid.NewGuid(),
@@ -314,6 +411,13 @@ public class StudentBulletinPdfServiceTests
         Assert.Equal((byte)'P', pdf[1]);
         Assert.Equal((byte)'D', pdf[2]);
         Assert.Equal((byte)'F', pdf[3]);
+    }
+
+    private static void AssertDoesNotContainPending(byte[] pdf)
+    {
+        var text = System.Text.Encoding.Latin1.GetString(pdf);
+        Assert.DoesNotContain("PREMEDIA", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PENDIENTES", text, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class FakeHttpBytesDownloadCache : IHttpBytesDownloadCache

@@ -3807,10 +3807,18 @@ namespace SchoolManager.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("school_id");
 
-                    b.Property<decimal>("Score")
+                    b.Property<decimal?>("Score")
                         .HasPrecision(2, 1)
                         .HasColumnType("numeric(2,1)")
                         .HasColumnName("score");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Graded")
+                        .HasColumnName("status");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -3870,7 +3878,7 @@ namespace SchoolManager.Migrations
 
                     b.ToTable("student_imported_trimester_grades", null, t =>
                         {
-                            t.HasCheckConstraint("ck_imported_trimester_grades_score_range", "score >= 1.0 AND score <= 5.0");
+                            t.HasCheckConstraint("ck_imported_trimester_grades_status_score", "(status = 'Graded' AND score IS NOT NULL AND score >= 1.0 AND score <= 5.0) OR (status IN ('NoAsistio', 'SinNota') AND score IS NULL)");
                         });
                 });
 

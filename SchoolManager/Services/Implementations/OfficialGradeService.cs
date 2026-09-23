@@ -55,15 +55,7 @@ public class OfficialGradeService : IOfficialGradeService
             var rows = await GetImportedForSsaYearAsync(studentSubjectAssignmentId, academicYearId);
             var hit = rows.FirstOrDefault(r => r.TrimesterCode == code);
             if (hit != null)
-            {
-                return new OfficialTrimesterGradeResult
-                {
-                    Score = hit.Score,
-                    IsImported = true,
-                    Origin = OfficialTrimesterGradeOrigin.Imported,
-                    ImportedGradeId = hit.ImportedGradeId
-                };
-            }
+                return ToImported(hit);
         }
 
         var yearName = await GetAcademicYearNameAsync(academicYearId);
@@ -113,13 +105,16 @@ public class OfficialGradeService : IOfficialGradeService
         Guid? importedGradeId,
         IEnumerable<(string? Type, decimal? Score)> activityScores,
         string? academicYearName,
-        string? trimesterCode)
+        string? trimesterCode,
+        bool hasImported = false,
+        string? importedStatus = null)
     {
-        if (importedScore.HasValue)
+        if (hasImported)
         {
             return new OfficialTrimesterGradeResult
             {
-                Score = importedScore.Value,
+                Score = importedScore,
+                Status = ImportedTrimesterGradeStatus.Normalize(importedStatus),
                 IsImported = true,
                 Origin = OfficialTrimesterGradeOrigin.Imported,
                 ImportedGradeId = importedGradeId
@@ -165,7 +160,8 @@ public class OfficialGradeService : IOfficialGradeService
                    SubjectId = sa.SubjectId,
                    SubjectName = sub.Name ?? string.Empty,
                    TrimesterCode = t.Name ?? string.Empty,
-                   Score = g.Score
+                   Score = g.Score,
+                   Status = g.Status
                };
     }
 
@@ -190,9 +186,20 @@ public class OfficialGradeService : IOfficialGradeService
         new()
         {
             Score = imported.Score,
+            Status = ImportedTrimesterGradeStatus.Normalize(imported.Status),
             IsImported = true,
             Origin = OfficialTrimesterGradeOrigin.Imported,
             ImportedGradeId = imported.Id
+        };
+
+    private static OfficialTrimesterGradeResult ToImported(ImportedOfficialGradeRow imported) =>
+        new()
+        {
+            Score = imported.Score,
+            Status = ImportedTrimesterGradeStatus.Normalize(imported.Status),
+            IsImported = true,
+            Origin = OfficialTrimesterGradeOrigin.Imported,
+            ImportedGradeId = imported.ImportedGradeId
         };
 
     private async Task<string?> GetAcademicYearNameAsync(Guid academicYearId)

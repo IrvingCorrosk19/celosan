@@ -12,7 +12,7 @@ namespace SchoolManager.Services.Implementations;
 public class StudentBulletinPdfService : IStudentBulletinPdfService
 {
     private const string HeaderBlue = "#1e40af";
-    private const string AreaBlue = "#e3f2fd";
+    private const string AreaFill = "#f1f5f9";
     private const string PassGreen = "#15803d";
     private const string FailRed = "#b91c1c";
     private const string Muted = "#64748b";
@@ -101,7 +101,6 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                         ("Año académico", academicYear)
                     }));
                     col.Item().Element(e => BuildGradeTable(e, bulletin.Areas));
-                    col.Item().Element(e => BuildPendingPremediaSection(e, bulletin.PendingPremedia));
                     col.Item().Element(BuildDirectorSignature);
                 });
                 page.Footer().Element(BuildFooter);
@@ -115,38 +114,36 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         var branding = ResolveIdentity(identity);
         var tracks = history.Tracks ?? new List<ProgramHistoryTrackDto>();
         var academicYear = ResolveHistoryYear(tracks);
+        var meta = new[]
+        {
+            ("Nombre", Display(history.StudentName)),
+            ("Programas", tracks.Count == 0 ? "—" : string.Join(" · ", tracks.Select(t => Display(t.ProgramName)).Distinct())),
+            ("Año académico", academicYear)
+        };
 
         return Document.Create(container =>
         {
             container.Page(page =>
             {
-                page.Size(PageSizes.A4.Landscape());
-                page.Margin(24);
+                page.Size(PageSizes.A4);
+                page.Margin(28);
                 page.DefaultTextStyle(x => x.FontSize(9).FontColor(Colors.Grey.Darken2));
 
-                page.Header().Element(h => BuildInstitutionalHeader(h, branding, academicYear, isProgramComplete: true));
                 page.Content().PaddingBottom(8).Column(col =>
                 {
                     col.Spacing(12);
-                    col.Item().Element(e => BuildMetaGrid(e, new[]
-                    {
-                        ("Nombre", Display(history.StudentName)),
-                        ("Programas", tracks.Count == 0 ? "—" : string.Join(" · ", tracks.Select(t => Display(t.ProgramName)).Distinct())),
-                        ("Año académico", academicYear)
-                    }));
 
                     if (tracks.Count == 0)
                     {
-                        col.Item().Text("No hay historial académico para mostrar.").FontColor(Muted).Italic();
-                    }
-                    else
-                    {
-                        foreach (var track in tracks)
-                            col.Item().Element(e => BuildTrackSection(e, track));
+                        col.Item().Element(e => BuildProgramSection(e, branding, academicYear, meta, track: null));
+                        return;
                     }
 
-                    col.Item().Element(e => BuildPendingPremediaSection(e, history.PendingPremedia));
-                    col.Item().Element(BuildDirectorSignature);
+                    foreach (var track in tracks)
+                    {
+                        col.Item().ShowEntire().Element(e => BuildProgramSection(
+                            e, branding, academicYear, meta, track));
+                    }
                 });
                 page.Footer().Element(BuildFooter);
             });
@@ -214,6 +211,28 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         });
     }
 
+    private static void BuildProgramSection(
+        IContainer container,
+        BulletinPdfIdentity branding,
+        string academicYear,
+        IReadOnlyList<(string Label, string Value)> meta,
+        ProgramHistoryTrackDto? track)
+    {
+        container.Column(col =>
+        {
+            col.Spacing(12);
+            col.Item().Element(h => BuildInstitutionalHeader(h, branding, academicYear, isProgramComplete: true));
+            col.Item().Element(e => BuildMetaGrid(e, meta));
+
+            if (track == null)
+                col.Item().Text("No hay historial académico para mostrar.").FontColor(Muted).Italic();
+            else
+                col.Item().Element(e => BuildTrackSection(e, track));
+
+            col.Item().Element(BuildDirectorSignature);
+        });
+    }
+
     private static void BuildTrackSection(IContainer container, ProgramHistoryTrackDto track)
     {
         var grades = track.Grades ?? new List<ProgramHistoryGradeColumnDto>();
@@ -222,55 +241,6 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
             col.Spacing(6);
             col.Item().Text(Display(track.ProgramName, "Programa")).FontSize(11).Bold().FontColor(HeaderBlue);
             col.Item().Element(e => BuildHistoryTable(e, grades, track.Areas ?? new List<ProgramHistoryAreaDto>()));
-        });
-    }
-
-    private static void BuildPendingPremediaSection(IContainer container, List<PendingPremediaSubjectDto>? pending)
-    {
-        var list = (pending ?? new List<PendingPremediaSubjectDto>())
-            .Where(p => p != null)
-            .ToList();
-        if (list.Count == 0)
-            return;
-
-        container.Column(col =>
-        {
-            col.Spacing(6);
-            col.Item().Text("PREMEDIA — MATERIAS PENDIENTES").FontSize(11).Bold().FontColor(HeaderBlue);
-            col.Item().Table(table =>
-            {
-                table.ColumnsDefinition(def =>
-                {
-                    def.ConstantColumn(52);
-                    def.RelativeColumn(3.4f);
-                    def.ConstantColumn(50);
-                    def.ConstantColumn(50);
-                    def.ConstantColumn(50);
-                    def.ConstantColumn(78);
-                });
-
-                table.Header(h =>
-                {
-                    HeaderCell(h.Cell(), "Grado");
-                    HeaderCell(h.Cell(), "Asignatura", alignLeft: true);
-                    HeaderCell(h.Cell(), "T1");
-                    HeaderCell(h.Cell(), "T2");
-                    HeaderCell(h.Cell(), "T3");
-                    HeaderCell(h.Cell(), "Promedio Final");
-                });
-
-                foreach (var subject in list.OrderBy(s => s.GradeNumber).ThenBy(s => s.SubjectName))
-                {
-                    table.Cell().Element(BodyCellCenter)
-                        .Text(Display(subject.Grade))
-                        .SemiBold().FontSize(8);
-                    table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName)).FontSize(8.5f);
-                    ScoreCell(table, subject.T1);
-                    ScoreCell(table, subject.T2);
-                    ScoreCell(table, subject.T3);
-                    ScoreCell(table, subject.FinalAverage, bold: true);
-                }
-            });
         });
     }
 
@@ -286,7 +256,6 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                 def.ConstantColumn(50);
                 def.ConstantColumn(50);
                 def.ConstantColumn(50);
-                def.ConstantColumn(78);
             });
 
             table.Header(h =>
@@ -296,12 +265,11 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                 HeaderCell(h.Cell(), "T1");
                 HeaderCell(h.Cell(), "T2");
                 HeaderCell(h.Cell(), "T3");
-                HeaderCell(h.Cell(), "Promedio Final");
             });
 
             if (list.Count == 0 || list.All(a => (a.Subjects?.Count ?? 0) == 0))
             {
-                table.Cell().ColumnSpan(6).Element(EmptyCell).AlignCenter()
+                table.Cell().ColumnSpan(5).Element(EmptyCell).AlignCenter()
                     .Text("No hay asignaturas para mostrar en el boletín.").FontColor(Muted).Italic();
                 return;
             }
@@ -319,10 +287,9 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                         AreaGroupCell(table, Display(area.AreaName, "Sin área"), subjects.Count);
 
                     table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName)).FontSize(8.5f);
-                    ScoreCell(table, subject.T1);
-                    ScoreCell(table, subject.T2);
-                    ScoreCell(table, subject.T3);
-                    ScoreCell(table, subject.FinalAverage, bold: true);
+                    MarkCell(table, subject.T1Display, subject.T1);
+                    MarkCell(table, subject.T2Display, subject.T2);
+                    MarkCell(table, subject.T3Display, subject.T3);
                 }
             }
         });
@@ -332,6 +299,33 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         IContainer container,
         List<ProgramHistoryGradeColumnDto> grades,
         List<ProgramHistoryAreaDto> areas)
+    {
+        var populated = (areas ?? new List<ProgramHistoryAreaDto>())
+            .Where(a => (a.Subjects?.Count ?? 0) > 0)
+            .ToList();
+
+        container.Decoration(decoration =>
+        {
+            decoration.Before().Element(e => BuildHistoryTableChrome(e, grades, body: null));
+            decoration.Content().Column(col =>
+            {
+                if (populated.Count == 0)
+                {
+                    col.Item().Element(e => BuildHistoryTableChrome(e, grades, body: null, emptyMessage: true));
+                    return;
+                }
+
+                foreach (var area in populated)
+                    col.Item().ShowEntire().Element(e => BuildHistoryTableChrome(e, grades, area));
+            });
+        });
+    }
+
+    private static void BuildHistoryTableChrome(
+        IContainer container,
+        List<ProgramHistoryGradeColumnDto> grades,
+        ProgramHistoryAreaDto? body,
+        bool emptyMessage = false)
     {
         container.Table(table =>
         {
@@ -343,41 +337,35 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                     def.ConstantColumn(58);
             });
 
-            table.Header(h =>
+            if (body == null && !emptyMessage)
             {
-                HeaderCell(h.Cell(), "Área");
-                HeaderCell(h.Cell(), "Asignatura", alignLeft: true);
+                HeaderCell(table.Cell(), "Área");
+                HeaderCell(table.Cell(), "Asignatura", alignLeft: true);
                 foreach (var grade in grades)
-                    HeaderCell(h.Cell(), Display(grade.GradeName));
-            });
+                    HeaderCell(table.Cell(), Display(grade.GradeName));
+                return;
+            }
 
-            var colCount = 2 + grades.Count;
-            if (areas.Count == 0 || areas.All(a => (a.Subjects?.Count ?? 0) == 0))
+            if (emptyMessage)
             {
-                table.Cell().ColumnSpan((uint)Math.Max(colCount, 1)).Element(EmptyCell).AlignCenter()
+                table.Cell().ColumnSpan((uint)Math.Max(2 + grades.Count, 1)).Element(EmptyCell).AlignCenter()
                     .Text("No hay asignaturas para este programa.").FontColor(Muted).Italic();
                 return;
             }
 
-            foreach (var area in areas)
+            var subjects = body!.Subjects ?? new List<ProgramHistorySubjectDto>();
+            for (var i = 0; i < subjects.Count; i++)
             {
-                var subjects = area.Subjects ?? new List<ProgramHistorySubjectDto>();
-                if (subjects.Count == 0)
-                    continue;
+                var subject = subjects[i];
+                if (i == 0)
+                    AreaGroupCell(table, Display(body.AreaName, "Sin área"), subjects.Count);
 
-                for (var i = 0; i < subjects.Count; i++)
+                table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName)).FontSize(8.5f);
+                foreach (var col in grades)
                 {
-                    var subject = subjects[i];
-                    if (i == 0)
-                        AreaGroupCell(table, Display(area.AreaName, "Sin área"), subjects.Count);
-
-                    table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName)).FontSize(8.5f);
-                    foreach (var col in grades)
-                    {
-                        var result = (subject.GradeResults ?? new List<ProgramHistoryGradeResultDto>())
-                            .FirstOrDefault(r => r.GradeNumber == col.GradeNumber);
-                        ScoreCell(table, result?.FinalAverage, bold: true);
-                    }
+                    var result = (subject.GradeResults ?? new List<ProgramHistoryGradeResultDto>())
+                        .FirstOrDefault(r => r.GradeNumber == col.GradeNumber);
+                        MarkCell(table, result?.Display, result?.FinalAverage, bold: true);
                 }
             }
         });
@@ -430,20 +418,31 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
             span.Bold();
     }
 
+    private static void MarkCell(TableDescriptor table, string? display, decimal? score, bool bold = false)
+    {
+        var text = string.IsNullOrWhiteSpace(display) ? FormatScore(score) : display;
+        var color = score.HasValue
+            ? (score.Value >= 3.0m ? PassGreen : FailRed)
+            : Muted;
+        var span = table.Cell().Element(BodyCellCenter).Text(text).FontColor(color);
+        if (bold)
+            span.Bold();
+    }
+
     private static void AreaGroupCell(TableDescriptor table, string areaName, int rowCount)
     {
         table.Cell().RowSpan((uint)Math.Max(rowCount, 1)).Element(c =>
-            c.Background(AreaBlue)
-                .Border(0.6f)
-                .BorderColor(Colors.Grey.Lighten1)
+            c.Background(AreaFill)
+                .Border(0.5f)
+                .BorderColor(Colors.Grey.Lighten2)
                 .PaddingHorizontal(8)
-                .PaddingVertical(6)
+                .PaddingVertical(10)
                 .AlignCenter()
                 .AlignMiddle()
                 .Text(areaName)
                 .SemiBold()
                 .FontSize(8)
-                .FontColor(HeaderBlue));
+                .FontColor(Colors.Grey.Darken3));
     }
 
     private static IContainer BodyCellLeft(IContainer container) =>

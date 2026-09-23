@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using SchoolManager.Dtos;
+using SchoolManager.Helpers;
 
 namespace SchoolManager.Services.Interfaces;
 
@@ -43,5 +44,6 @@ public class ImportedOfficialGradeRow
     public Guid SubjectId { get; set; }
     public string SubjectName { get; set; } = string.Empty;
     public string TrimesterCode { get; set; } = string.Empty;
-    public decimal Score { get; set; }
+    public decimal? Score { get; set; }
+    public string Status { get; set; } = ImportedTrimesterGradeStatus.Graded;
 }

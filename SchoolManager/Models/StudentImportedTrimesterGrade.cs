@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel.DataAnnotations;
 
 namespace SchoolManager.Models;
 
@@ -23,8 +22,9 @@ public class StudentImportedTrimesterGrade
 
     public Guid TrimesterId { get; set; }
 
-    [Range(typeof(decimal), "1.0", "5.0")]
-    public decimal Score { get; set; }
+    public decimal? Score { get; set; }
+
+    public string Status { get; set; } = Helpers.ImportedTrimesterGradeStatus.Graded;
 
     public string Source { get; set; } = StudentImportedTrimesterGradeSource.ExcelImport;
 

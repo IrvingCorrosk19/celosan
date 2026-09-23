@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SchoolManager.Helpers;
 
 namespace SchoolManager.Dtos;
 
@@ -64,7 +65,11 @@ public class GradeImportOperationDto
     public string CurrentOrigin { get; set; } = GradeImportCurrentOrigin.None;
     public decimal? CurrentOfficialScore { get; set; }
     public decimal? CurrentImportedScore { get; set; }
+    public string CurrentStatus { get; set; } = ImportedTrimesterGradeStatus.Graded;
+    public string CurrentDisplay { get; set; } = "—";
     public decimal? NewScore { get; set; }
+    public string NewStatus { get; set; } = ImportedTrimesterGradeStatus.Graded;
+    public string NewDisplay { get; set; } = "—";
 }
 
 public class GradeImportAnalyzeResult
@@ -94,6 +99,7 @@ public class GradeImportResolvedOperation
     public Guid? AcademicYearId { get; set; }
     public Guid? TrimesterId { get; set; }
     public decimal? NewScore { get; set; }
+    public string NewStatus { get; set; } = ImportedTrimesterGradeStatus.Graded;
 }
 
 public class GradeImportConfirmResult

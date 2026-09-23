@@ -111,6 +111,55 @@
         text-align: center;
         vertical-align: middle;
     }
+    .bulletin-area-cell {
+        vertical-align: middle !important;
+        text-align: center !important;
+        background: #f1f5f9 !important;
+        color: #334155;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        border-color: #e2e8f0 !important;
+    }
+    .bulletin-pending-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.85rem;
+        padding: 1rem 1.15rem;
+    }
+    .bulletin-pending-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+    .bulletin-pending-title {
+        margin: 0;
+        color: #1e293b;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+    .bulletin-pending-summary {
+        margin: 0.25rem 0 0;
+        color: #64748b;
+        font-size: 0.9rem;
+    }
+    .bulletin-pending-toggle {
+        border-color: #cbd5e1;
+        color: #334155;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .bulletin-pending-toggle:hover,
+    .bulletin-pending-toggle:focus {
+        background: #e2e8f0;
+        border-color: #94a3b8;
+        color: #1e293b;
+    }
+    .bulletin-pending-detail {
+        display: none;
+        margin-top: 1rem;
+    }
     
     /* Estilos para las pestañas */
     .nav-tabs-custom {
@@ -712,18 +761,35 @@
                                 <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T1</th>
                                 <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T2</th>
                                 <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T3</th>
-                                <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Promedio Final</th>
                             </tr>
                         </thead>
                         <tbody id="bulletin-table-body">
                             <tr>
-                                <td colspan="6" class="text-center text-muted">Seleccione la pestaña Boletín para cargar el reporte.</td>
+                                <td colspan="5" class="text-center text-muted">Seleccione la pestaña Boletín para cargar el reporte.</td>
                             </tr>
                         </tbody>
                     </table>
-                    <div id="bulletin-pending-premedia" class="mt-4" style="display: none;">
-                        <h6 class="fw-bold mb-2" style="color: #1e40af;">PREMEDIA — MATERIAS PENDIENTES</h6>
-                        <table class="table table-hover table-bordered align-middle" id="bulletin-pending-table">
+                    </div>
+                    <div id="bulletin-history-view" style="display: none;">
+                        <div id="bulletin-history-container">
+                            <p class="text-muted mb-0">Seleccione Programa completo para cargar el historial.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="pending-premedia-card" class="card card-outline mb-4 bulletin-pending-card" style="display: none;">
+                <div class="card-body">
+                    <div class="bulletin-pending-header">
+                        <div>
+                            <h6 class="bulletin-pending-title">MATERIAS PENDIENTES DE PREMEDIA</h6>
+                            <p class="bulletin-pending-summary"></p>
+                        </div>
+                        <button type="button" class="btn btn-sm bulletin-pending-toggle" aria-expanded="false">
+                            Ver materias pendientes
+                        </button>
+                    </div>
+                    <div class="bulletin-pending-detail">
+                        <table class="table table-hover table-bordered align-middle mb-0" id="pending-premedia-table">
                             <thead style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white;">
                                 <tr>
                                     <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Grado</th>
@@ -731,17 +797,10 @@
                                     <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T1</th>
                                     <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T2</th>
                                     <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T3</th>
-                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Promedio Final</th>
                                 </tr>
                             </thead>
-                            <tbody id="bulletin-pending-table-body"></tbody>
+                            <tbody id="pending-premedia-table-body"></tbody>
                         </table>
-                    </div>
-                    </div>
-                    <div id="bulletin-history-view" style="display: none;">
-                        <div id="bulletin-history-container">
-                            <p class="text-muted mb-0">Seleccione Programa completo para cargar el historial.</p>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -779,7 +838,8 @@
             return null;
         }
 
-        function formatOfficialAverage(valor) {
+        function formatOfficialAverage(valor, display) {
+            if (typeof display === 'string' && display.trim() !== '') return display;
             return (typeof valor === 'number' && !isNaN(valor)) ? Number(valor).toFixed(1) : '—';
         }
 
@@ -873,6 +933,7 @@
                 }
                 
                 const promedioFinal = subjectAvg ? subjectAvg.subjectAverage : null;
+                const promedioFinalDisplay = subjectAvg ? subjectAvg.display : null;
                 
                 // Renderizar filas
                 let rowIndexForSubject = 0;
@@ -934,7 +995,7 @@
                     <tr style="background-color: #fff3cd; border-top: 2px solid #2563eb;">
                         <td colspan="3" class="text-end fw-bold" style="font-size: 1.05rem;">PROMEDIO FINAL DE ${subject.toUpperCase()}:</td>
                         <td class="text-center fw-bold" style="font-size: 1.2rem;">
-                            <span class="${finalClass}">${formatOfficialAverage(promedioFinal)}</span>
+                            <span class="${finalClass}">${formatOfficialAverage(promedioFinal, promedioFinalDisplay)}</span>
                         </td>
                     </tr>
                 `;
@@ -1127,7 +1188,8 @@
                 });
             });
 
-            function formatBulletinScore(value) {
+            function formatBulletinScore(value, display) {
+                if (typeof display === 'string' && display.trim() !== '') return display;
                 return (typeof value === 'number' && !isNaN(value)) ? Number(value).toFixed(1) : '—';
             }
 
@@ -1142,56 +1204,75 @@
                 tbody.empty();
                 const areas = data.areas || [];
                 if (areas.length === 0) {
-                    tbody.append('<tr><td colspan="6" class="text-center text-muted">No hay asignaturas para mostrar en el boletín.</td></tr>');
+                    tbody.append('<tr><td colspan="5" class="text-center text-muted">No hay asignaturas para mostrar en el boletín.</td></tr>');
                 } else {
                 areas.forEach(area => {
                     const subjects = area.subjects || [];
                     subjects.forEach((subject, index) => {
-                        const finalClass = typeof subject.finalAverage === 'number'
-                            ? (subject.finalAverage >= 3.0 ? 'text-success' : 'text-danger')
-                            : 'text-muted';
                         tbody.append(`
                             <tr>
-                                ${index === 0 ? `<td rowspan="${subjects.length}" style="vertical-align: middle; background-color: #e3f2fd;" class="fw-bold">${area.areaName || 'Sin área'}</td>` : ''}
+                                ${index === 0 ? `<td rowspan="${subjects.length}" class="bulletin-area-cell">${area.areaName || 'Sin área'}</td>` : ''}
                                 <td>${subject.subjectName || ''}</td>
-                                <td class="text-center">${formatBulletinScore(subject.t1)}</td>
-                                <td class="text-center">${formatBulletinScore(subject.t2)}</td>
-                                <td class="text-center">${formatBulletinScore(subject.t3)}</td>
-                                <td class="text-center fw-bold ${finalClass}">${formatBulletinScore(subject.finalAverage)}</td>
+                                <td class="text-center">${formatBulletinScore(subject.t1, subject.t1Display)}</td>
+                                <td class="text-center">${formatBulletinScore(subject.t2, subject.t2Display)}</td>
+                                <td class="text-center">${formatBulletinScore(subject.t3, subject.t3Display)}</td>
                             </tr>
                         `);
                     });
                 });
                 }
-                renderPendingPremedia(data.pendingPremedia, '#bulletin-pending-premedia', '#bulletin-pending-table-body');
+                renderPendingPremedia(data.pendingPremedia);
             }
 
-            function renderPendingPremedia(pending, sectionSelector, bodySelector) {
-                const section = $(sectionSelector);
-                const body = $(bodySelector);
+            function pendingPremediaSummary(count) {
+                return count === 1
+                    ? 'Tiene 1 materia pendiente de Premedia'
+                    : `Tiene ${count} materias pendientes de Premedia`;
+            }
+
+            function collapsePendingPremedia(section) {
+                section.find('.bulletin-pending-detail').hide();
+                section.find('.bulletin-pending-toggle')
+                    .attr('aria-expanded', 'false')
+                    .text('Ver materias pendientes');
+            }
+
+            function renderPendingPremedia(pending) {
+                const section = $('#pending-premedia-card');
+                const body = $('#pending-premedia-table-body');
                 body.empty();
                 const rows = pending || [];
                 if (rows.length === 0) {
                     section.hide();
+                    collapsePendingPremedia(section);
                     return;
                 }
+                section.find('.bulletin-pending-summary').text(pendingPremediaSummary(rows.length));
                 rows.forEach(subject => {
-                    const finalClass = typeof subject.finalAverage === 'number'
-                        ? (subject.finalAverage >= 3.0 ? 'text-success' : 'text-danger')
-                        : 'text-muted';
                     body.append(`
                         <tr>
                             <td class="fw-bold">${subject.grade || ''}</td>
                             <td>${subject.subjectName || ''}</td>
-                            <td class="text-center">${formatBulletinScore(subject.t1)}</td>
-                            <td class="text-center">${formatBulletinScore(subject.t2)}</td>
-                            <td class="text-center">${formatBulletinScore(subject.t3)}</td>
-                            <td class="text-center fw-bold ${finalClass}">${formatBulletinScore(subject.finalAverage)}</td>
+                            <td class="text-center">${formatBulletinScore(subject.t1, subject.t1Display)}</td>
+                            <td class="text-center">${formatBulletinScore(subject.t2, subject.t2Display)}</td>
+                            <td class="text-center">${formatBulletinScore(subject.t3, subject.t3Display)}</td>
                         </tr>
                     `);
                 });
+                collapsePendingPremedia(section);
                 section.show();
             }
+
+            $(document).off('click.bulletinPending', '.bulletin-pending-toggle')
+                .on('click.bulletinPending', '.bulletin-pending-toggle', function () {
+                    const button = $(this);
+                    const card = button.closest('.bulletin-pending-card');
+                    const detail = card.find('.bulletin-pending-detail');
+                    const opening = !detail.is(':visible');
+                    detail.stop(true, true).slideToggle(180);
+                    button.attr('aria-expanded', opening ? 'true' : 'false');
+                    button.text(opening ? 'Ocultar materias pendientes' : 'Ver materias pendientes');
+                });
 
             let bulletinLoaded = false;
             let bulletinHistoryLoaded = false;
@@ -1241,11 +1322,11 @@
                                 const cls = typeof value === 'number'
                                     ? (value >= 3.0 ? 'text-success' : 'text-danger')
                                     : 'text-muted';
-                                return `<td class="text-center fw-bold ${cls}">${formatBulletinScore(value)}</td>`;
+                                return `<td class="text-center fw-bold ${cls}">${formatBulletinScore(value, result.display)}</td>`;
                             }).join('');
                             body += `
                                 <tr>
-                                    ${index === 0 ? `<td rowspan="${subjects.length}" style="vertical-align: middle; background-color: #e3f2fd;" class="fw-bold">${area.areaName || 'Sin área'}</td>` : ''}
+                                    ${index === 0 ? `<td rowspan="${subjects.length}" class="bulletin-area-cell">${area.areaName || 'Sin área'}</td>` : ''}
                                     <td>${subject.subjectName || ''}</td>
                                     ${cells}
                                 </tr>`;
@@ -1273,25 +1354,7 @@
                         </div>
                     `);
                 });
-                container.append(`
-                    <div id="bulletin-history-pending-premedia" class="mt-4" style="display: none;">
-                        <h6 class="fw-bold mb-2" style="color: #1e40af;">PREMEDIA — MATERIAS PENDIENTES</h6>
-                        <table class="table table-hover table-bordered align-middle">
-                            <thead style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white;">
-                                <tr>
-                                    <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Grado</th>
-                                    <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Asignatura</th>
-                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T1</th>
-                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T2</th>
-                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T3</th>
-                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Promedio Final</th>
-                                </tr>
-                            </thead>
-                            <tbody id="bulletin-history-pending-table-body"></tbody>
-                        </table>
-                    </div>
-                `);
-                renderPendingPremedia(data.pendingPremedia, '#bulletin-history-pending-premedia', '#bulletin-history-pending-table-body');
+                renderPendingPremedia(data.pendingPremedia);
             }
 
             function loadBulletin() {
@@ -1302,14 +1365,14 @@
                     data: { studentId: studentId },
                     success: function (data) {
                         if (data.error) {
-                            $('#bulletin-table-body').html(`<tr><td colspan="6" class="text-center text-danger">${data.error}</td></tr>`);
+                            $('#bulletin-table-body').html(`<tr><td colspan="5" class="text-center text-danger">${data.error}</td></tr>`);
                             return;
                         }
                         renderBulletin(data);
                         bulletinLoaded = true;
                     },
                     error: function () {
-                        $('#bulletin-table-body').html('<tr><td colspan="6" class="text-center text-danger">No se pudo cargar el boletín.</td></tr>');
+                        $('#bulletin-table-body').html('<tr><td colspan="5" class="text-center text-danger">No se pudo cargar el boletín.</td></tr>');
                     }
                 });
             }
@@ -1336,11 +1399,8 @@
             }
 
             $('#bulletin-tab').on('shown.bs.tab', function () {
-                if (bulletinView === 'history') {
-                    if (!bulletinHistoryLoaded) loadBulletinHistory();
-                } else if (!bulletinLoaded) {
-                    loadBulletin();
-                }
+                if (!bulletinLoaded) loadBulletin();
+                if (bulletinView === 'history' && !bulletinHistoryLoaded) loadBulletinHistory();
             });
             $('#bulletin-view-grade').on('click', function () { setBulletinView('grade'); });
             $('#bulletin-view-history').on('click', function () { setBulletinView('history'); });

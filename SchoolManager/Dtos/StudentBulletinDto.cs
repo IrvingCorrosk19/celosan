@@ -23,6 +23,9 @@ public class PendingPremediaSubjectDto
     public decimal? T1 { get; set; }
     public decimal? T2 { get; set; }
     public decimal? T3 { get; set; }
+    public string T1Display { get; set; } = "—";
+    public string T2Display { get; set; } = "—";
+    public string T3Display { get; set; } = "—";
     public decimal? FinalAverage { get; set; }
 }
 
@@ -40,5 +43,8 @@ public class SubjectBulletinDto
     public decimal? T1 { get; set; }
     public decimal? T2 { get; set; }
     public decimal? T3 { get; set; }
+    public string T1Display { get; set; } = "—";
+    public string T2Display { get; set; } = "—";
+    public string T3Display { get; set; } = "—";
     public decimal? FinalAverage { get; set; }
 }

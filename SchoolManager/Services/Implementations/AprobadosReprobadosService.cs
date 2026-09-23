@@ -335,7 +335,8 @@ namespace SchoolManager.Services.Implementations
 
                     if (importedHit != null)
                     {
-                        officialScores.Add(importedHit.Score);
+                        if (importedHit.Score.HasValue)
+                            officialScores.Add(importedHit.Score.Value);
                         continue;
                     }
 

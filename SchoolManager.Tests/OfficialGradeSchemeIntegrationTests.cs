@@ -78,7 +78,7 @@ public class OfficialGradeSchemeIntegrationTests
         var weighted = OfficialGradeService.FromActivities(WeightedPairs, "2026", "3T");
         Assert.Equal(4.1m, weighted.Score);
 
-        var official = OfficialGradeService.SelectOfficial(4.5m, Guid.NewGuid(), WeightedPairs, "2026", "3T");
+        var official = OfficialGradeService.SelectOfficial(4.5m, Guid.NewGuid(), WeightedPairs, "2026", "3T", hasImported: true);
         Assert.Equal(4.5m, official.Score);
         Assert.True(official.IsImported);
         Assert.Equal(OfficialTrimesterGradeOrigin.Imported, official.Origin);
