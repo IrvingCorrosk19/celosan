@@ -1,0 +1,33 @@
+@model SchoolManager.Dtos.GradeImportConfirmSummaryDto
+@{
+    ViewData["Title"] = "Importación completada";
+    Layout = "_AdminLayout";
+}
+
+<div class="container-fluid py-4">
+    <div class="alert alert-success">
+        <h2 class="h4 mb-0"><i class="fas fa-check-circle"></i> Importación completada</h2>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="row mb-2">
+                <div class="col-md-4"><strong>Archivo:</strong> @Model.FileName</div>
+                <div class="col-md-4"><strong>Año:</strong> @Model.AcademicYearName</div>
+                <div class="col-md-4"><strong>Procesadas:</strong> @Model.Processed</div>
+            </div>
+            <div class="row mb-2">
+                <div class="col-md-3"><span class="badge bg-success">Nuevas @Model.NewCount</span></div>
+                <div class="col-md-3"><span class="badge bg-warning text-dark">Actualizadas @Model.UpdateCount</span></div>
+                <div class="col-md-3"><span class="badge bg-secondary">Sin cambios @Model.UnchangedCount</span></div>
+                <div class="col-md-3"><span class="badge bg-danger">Errores @Model.ErrorCount</span></div>
+            </div>
+            <div class="row">
+                <div class="col-md-6"><strong>Fecha:</strong> @Model.CompletedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+                <div class="col-md-6"><strong>Usuario:</strong> @Model.UserName</div>
+            </div>
+        </div>
+    </div>
+
+    <a class="btn btn-primary" asp-action="Index">Volver a Importación de notas</a>
+</div>

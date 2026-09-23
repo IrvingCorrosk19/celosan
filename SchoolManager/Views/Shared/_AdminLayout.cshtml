@@ -348,7 +348,7 @@
                             </a>
                         </li>
                         }
-                        @if (userRole == "admin" || userRole == "director" || userRole == "teacher" || userRole == "superadmin") {
+                        @if (userRole == "admin" || userRole == "director" || userRole == "teacher" || userRole == "superadmin" || userRole == "secretaria") {
                         <li class="nav-item has-treeview">
                             <a href="#" class="nav-link">
                                 <i class="nav-icon fas fa-file-alt"></i>
@@ -358,6 +358,14 @@
                                 </p>
                             </a>
                             <ul class="nav nav-treeview">
+                                @if (userRole == "admin" || userRole == "secretaria" || userRole == "superadmin") {
+                                <li class="nav-item">
+                                    <a href="@Url.Action("Index", "StudentGradeImport")" class="nav-link">
+                                        <i class="fas fa-file-import nav-icon"></i>
+                                        <p>Importación de notas</p>
+                                    </a>
+                                </li>
+                                }
                                 @if (userRole == "admin" || userRole == "director" || userRole == "teacher") {
                                 <li class="nav-item">
                                     <a href="@Url.Action("Index", "AprobadosReprobados")" class="nav-link">

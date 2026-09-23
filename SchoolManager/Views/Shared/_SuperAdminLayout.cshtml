@@ -86,6 +86,13 @@
                                 <p>Directorio de personal</p>
                             </a>
                         </li>
+                        <li class="nav-header">REPORTES</li>
+                        <li class="nav-item">
+                            <a href="/StudentGradeImport" class="nav-link">
+                                <i class="nav-icon fas fa-file-import"></i>
+                                <p>Importación de notas</p>
+                            </a>
+                        </li>
                         <li class="nav-header">CONFIGURACIÓN</li>
                         <li class="nav-item">
                             <a href="/SuperAdmin/EmailApiSettings" class="nav-link @(ViewContext.RouteData.Values["Action"]?.ToString() == "EmailApiSettings" ? "active" : "")">

@@ -126,7 +126,12 @@ public partial class CelosanBulkImportLog
     public string? ErrorSummary { get; set; }
     public DateTime CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }
+    public Guid? AcademicYearId { get; set; }
+    public int NewCount { get; set; }
+    public int UpdateCount { get; set; }
+    public int UnchangedCount { get; set; }
 
     public virtual School School { get; set; } = null!;
     public virtual User? CreatedByUser { get; set; }
+    public virtual AcademicYear? AcademicYear { get; set; }
 }

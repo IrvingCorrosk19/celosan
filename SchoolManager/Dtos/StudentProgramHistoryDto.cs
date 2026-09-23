@@ -5,6 +5,7 @@ public class StudentProgramHistoryDto
     public Guid StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public List<ProgramHistoryTrackDto> Tracks { get; set; } = new();
+    public List<PendingPremediaSubjectDto> PendingPremedia { get; set; } = new();
 }
 
 public class ProgramHistoryTrackDto

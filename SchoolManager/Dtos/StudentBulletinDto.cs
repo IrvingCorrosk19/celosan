@@ -9,6 +9,21 @@ public class StudentBulletinDto
     public string Specialty { get; set; } = string.Empty;
     public string AcademicYear { get; set; } = string.Empty;
     public List<AreaBulletinDto> Areas { get; set; } = new();
+    public List<PendingPremediaSubjectDto> PendingPremedia { get; set; } = new();
+}
+
+public class PendingPremediaSubjectDto
+{
+    public Guid SubjectId { get; set; }
+    public string SubjectName { get; set; } = string.Empty;
+    public string Grade { get; set; } = string.Empty;
+    public int GradeNumber { get; set; }
+    public Guid GradeLevelId { get; set; }
+    public string AreaName { get; set; } = string.Empty;
+    public decimal? T1 { get; set; }
+    public decimal? T2 { get; set; }
+    public decimal? T3 { get; set; }
+    public decimal? FinalAverage { get; set; }
 }
 
 public class AreaBulletinDto

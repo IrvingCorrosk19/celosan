@@ -5,6 +5,8 @@ VisualStudioVersion = 17.12.35707.178
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchoolManager", "SchoolManager\SchoolManager.csproj", "{B4DA3571-35FF-4EDF-970A-CFF98BC723CE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchoolManager.Tests", "SchoolManager.Tests\SchoolManager.Tests.csproj", "{7C2E8F11-4A6B-4D3E-9F01-8B5C2A17D904}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementos de la solución", "Elementos de la solución", "{49EE4AB3-EB9D-4A1D-A7A5-3C8548B23770}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
@@ -20,6 +22,10 @@ Global
 		{B4DA3571-35FF-4EDF-970A-CFF98BC723CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B4DA3571-35FF-4EDF-970A-CFF98BC723CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B4DA3571-35FF-4EDF-970A-CFF98BC723CE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C2E8F11-4A6B-4D3E-9F01-8B5C2A17D904}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C2E8F11-4A6B-4D3E-9F01-8B5C2A17D904}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C2E8F11-4A6B-4D3E-9F01-8B5C2A17D904}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C2E8F11-4A6B-4D3E-9F01-8B5C2A17D904}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -55,6 +55,8 @@ public partial class SchoolDbContext : DbContext
 
     public virtual DbSet<StudentActivityScore> StudentActivityScores { get; set; }
 
+    public virtual DbSet<StudentImportedTrimesterGrade> StudentImportedTrimesterGrades { get; set; }
+
     public virtual DbSet<StudentAssignment> StudentAssignments { get; set; }
 
     public virtual DbSet<StudentSubjectAssignment> StudentSubjectAssignments { get; set; }
@@ -991,6 +993,86 @@ public partial class SchoolDbContext : DbContext
                 .HasForeignKey(d => d.AcademicYearId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("student_activity_scores_academic_year_id_fkey");
+        });
+
+        modelBuilder.Entity<StudentImportedTrimesterGrade>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("student_imported_trimester_grades_pkey");
+            entity.ToTable("student_imported_trimester_grades", table =>
+            {
+                table.HasCheckConstraint("ck_imported_trimester_grades_score_range", "score >= 1.0 AND score <= 5.0");
+            });
+
+            entity.HasIndex(e => new { e.SchoolId, e.StudentSubjectAssignmentId, e.AcademicYearId, e.TrimesterId },
+                    "uq_imported_trimester_grades_ssa_year_trimester")
+                .IsUnique();
+            entity.HasIndex(e => new { e.SchoolId, e.StudentId, e.AcademicYearId },
+                "ix_imported_trimester_grades_school_student_year");
+            entity.HasIndex(e => e.ImportBatchId, "ix_imported_trimester_grades_import_batch_id");
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("id");
+            entity.Property(e => e.SchoolId).HasColumnName("school_id");
+            entity.Property(e => e.StudentId).HasColumnName("student_id");
+            entity.Property(e => e.StudentSubjectAssignmentId).HasColumnName("student_subject_assignment_id");
+            entity.Property(e => e.StudentAssignmentId).HasColumnName("student_assignment_id");
+            entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.TrimesterId).HasColumnName("trimester_id");
+            entity.Property(e => e.Score)
+                .HasPrecision(2, 1)
+                .HasColumnName("score");
+            entity.Property(e => e.Source)
+                .HasMaxLength(40)
+                .HasDefaultValue(StudentImportedTrimesterGradeSource.ExcelImport)
+                .HasColumnName("source");
+            entity.Property(e => e.ImportBatchId).HasColumnName("import_batch_id");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("timestamp with time zone")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnType("timestamp with time zone")
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.School).WithMany()
+                .HasForeignKey(d => d.SchoolId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("imported_trimester_grades_school_id_fkey");
+            entity.HasOne(d => d.Student).WithMany()
+                .HasForeignKey(d => d.StudentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("imported_trimester_grades_student_id_fkey");
+            entity.HasOne(d => d.StudentSubjectAssignment).WithMany()
+                .HasForeignKey(d => d.StudentSubjectAssignmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("imported_trimester_grades_ssa_id_fkey");
+            entity.HasOne(d => d.StudentAssignment).WithMany()
+                .HasForeignKey(d => d.StudentAssignmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("imported_trimester_grades_assignment_id_fkey");
+            entity.HasOne(d => d.AcademicYear).WithMany()
+                .HasForeignKey(d => d.AcademicYearId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("imported_trimester_grades_academic_year_id_fkey");
+            entity.HasOne(d => d.Trimester).WithMany()
+                .HasForeignKey(d => d.TrimesterId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("imported_trimester_grades_trimester_id_fkey");
+            entity.HasOne(d => d.ImportBatch).WithMany()
+                .HasForeignKey(d => d.ImportBatchId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("imported_trimester_grades_import_batch_id_fkey");
+            entity.HasOne(d => d.CreatedByUser).WithMany()
+                .HasForeignKey(d => d.CreatedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("imported_trimester_grades_created_by_fkey");
+            entity.HasOne(d => d.UpdatedByUser).WithMany()
+                .HasForeignKey(d => d.UpdatedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("imported_trimester_grades_updated_by_fkey");
         });
 
         modelBuilder.Entity<StudentAssignment>(entity =>
@@ -2392,9 +2474,16 @@ public partial class SchoolDbContext : DbContext
             entity.Property(e => e.ErrorSummary).HasColumnName("error_summary");
             entity.Property(e => e.CreatedAt).HasColumnType("timestamp with time zone").HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.AcademicYearId).HasColumnName("academic_year_id");
+            entity.Property(e => e.NewCount).HasDefaultValue(0).HasColumnName("new_count");
+            entity.Property(e => e.UpdateCount).HasDefaultValue(0).HasColumnName("update_count");
+            entity.Property(e => e.UnchangedCount).HasDefaultValue(0).HasColumnName("unchanged_count");
+
+            entity.HasIndex(e => e.AcademicYearId, "ix_celosan_bulk_import_logs_academic_year_id");
 
             entity.HasOne(d => d.School).WithMany().HasForeignKey(d => d.SchoolId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(d => d.CreatedByUser).WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.AcademicYear).WithMany().HasForeignKey(d => d.AcademicYearId).OnDelete(DeleteBehavior.SetNull);
         });
 
         // Configuración de Payment

@@ -19,19 +19,22 @@ namespace SchoolManager.Services
         private readonly ICurrentUserService _currentUserService;
         private readonly IAcademicYearService _academicYearService;
         private readonly IDocumentStorageService _documentStorage;
+        private readonly IOfficialGradeService _officialGradeService;
 
         public StudentActivityScoreService(
             SchoolDbContext context,
             ITrimesterService trimesterService,
             ICurrentUserService currentUserService,
             IAcademicYearService academicYearService,
-            IDocumentStorageService documentStorage)
+            IDocumentStorageService documentStorage,
+            IOfficialGradeService officialGradeService)
         {
             _context = context;
             _trimesterService = trimesterService;
             _currentUserService = currentUserService;
             _academicYearService = academicYearService;
             _documentStorage = documentStorage;
+            _officialGradeService = officialGradeService;
         }
 
         private async Task<Guid?> ResolveStudentAssignmentIdAsync(Guid studentId, Guid? activityGroupId, Guid? activityGradeLevelId)
@@ -148,6 +151,7 @@ namespace SchoolManager.Services
         {
             foreach (var dto in scores)
             {
+                EnsureScoreInRange(dto.Score);
                 if (!string.IsNullOrEmpty(dto.Trimester))
                     await _trimesterService.ValidateTrimesterActiveAsync(dto.Trimester);
 
@@ -375,10 +379,19 @@ namespace SchoolManager.Services
                 var activeAcademicYear = await _academicYearService.GetActiveAcademicYearAsync(currentUserSchool.Id);
 
                 foreach (var dto in registros)
+                    EnsureScoreInRange(dto.Score);
+
+                foreach (var dto in registros)
                 {
                     var key = ActivityKey(dto);
                     if (!activityByKey.TryGetValue(key, out var activity))
                     {
+                        var scheme = EvaluationSchemeResolver.Resolve(activeAcademicYear?.Name, dto.Trimester);
+                        if (!EvaluationActivityTypes.IsAllowedForCreate(dto.Type, scheme))
+                        {
+                            throw new InvalidOperationException(
+                                $"El tipo '{dto.Type}' no está permitido para este trimestre.");
+                        }
                         var trimesterId = trimesterIdByCode[dto.Trimester];
                         activity = new Activity
                         {
@@ -611,6 +624,14 @@ namespace SchoolManager.Services
                            && (string.IsNullOrEmpty(notes.Trimester) || x.Trimester == notes.Trimester))
                 .ToListAsync();
 
+            var activityTypesByTrimester = await _context.Activities.AsNoTracking()
+                .Where(a =>
+                    a.SubjectId == notes.SubjectId &&
+                    a.GroupId == notes.GroupId &&
+                    a.GradeLevelId == notes.GradeLevelId)
+                .Select(a => new { a.Trimester, a.Type })
+                .ToListAsync();
+
             // 3. Tomar trimestres reales del período académico para evitar rigidez 1T/2T/3T
             var trimestres = notasPorTrimestre
                 .Select(x => x.Trimester)
@@ -622,6 +643,20 @@ namespace SchoolManager.Services
                 trimestres.Add(notes.Trimester);
             if (trimestres.Count == 0)
                 trimestres.AddRange(new[] { "1T", "2T", "3T" });
+
+            Guid? activeYearId = null;
+            string? activeYearName = null;
+            var currentSchool = await _currentUserService.GetCurrentUserSchoolAsync();
+            if (currentSchool != null)
+            {
+                var activeYear = await _academicYearService.GetActiveAcademicYearAsync(currentSchool.Id);
+                activeYearId = activeYear?.Id;
+                activeYearName = activeYear?.Name;
+            }
+
+            var importedRows = activeYearId.HasValue
+                ? await _officialGradeService.GetImportedForStudentsAsync(studentIdsScoped)
+                : Array.Empty<ImportedOfficialGradeRow>();
 
             // 4. Construir la lista de promedios por estudiante y trimestre
             var promedios = new List<PromedioFinalDto>();
@@ -650,7 +685,23 @@ namespace SchoolManager.Services
                         scorePairs, OfficialTrimesterAverageCalculator.TypeEjercicios);
                     var promedioExamenFinal = OfficialTrimesterAverageCalculator.AverageByType(
                         scorePairs, OfficialTrimesterAverageCalculator.TypeExamen);
-                    var notaFinal = OfficialTrimesterAverageCalculator.ComputeTrimesterAverage(scorePairs);
+                    var trimestreCode = OfficialGradeService.NormalizeTrimester(trimestre);
+                    var importedScore = activeYearId.HasValue
+                        ? importedRows
+                            .Where(r =>
+                                r.StudentId == student.Id &&
+                                r.AcademicYearId == activeYearId.Value &&
+                                r.TrimesterCode == trimestreCode &&
+                                idsForStudent.Contains(r.StudentSubjectAssignmentId))
+                            .Select(r => (decimal?)r.Score)
+                            .FirstOrDefault()
+                        : null;
+                    var contextTypes = activityTypesByTrimester
+                        .Where(a => a.Trimester == trimestre)
+                        .Select(a => (string?)a.Type)
+                        .ToList();
+                    var notaFinal = importedScore
+                        ?? _officialGradeService.CalculateFromActivities(scorePairs, activeYearName, trimestreCode, contextTypes).Score;
 
                     promedios.Add(new PromedioFinalDto
                     {
@@ -707,6 +758,15 @@ namespace SchoolManager.Services
             }
 
             return resumen;
+        }
+
+        private static void EnsureScoreInRange(decimal? score)
+        {
+            if (!OfficialAcademicScore.IsValidScore(score))
+            {
+                throw new InvalidOperationException(
+                    $"La nota '{score}' está fuera del rango permitido (1.0 a 5.0).");
+            }
         }
     }
 }

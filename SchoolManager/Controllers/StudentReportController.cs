@@ -246,7 +246,9 @@ public class StudentReportController : Controller
                 averageApreciacion = a.AverageApreciacion,
                 averageEjercicios = a.AverageEjercicios,
                 averageExamen = a.AverageExamen,
-                subjectAverage = a.SubjectAverage
+                subjectAverage = a.SubjectAverage,
+                isImported = a.IsImported,
+                gradeOrigin = a.GradeOrigin
             }).Cast<object>().ToList() ?? new List<object>();
 
             var result = new
@@ -312,8 +314,8 @@ public class StudentReportController : Controller
         if (resolved.Error != null)
             return resolved.Error;
 
-        var school = await _currentUserService.GetCurrentUserSchoolAsync();
-        var schoolName = string.IsNullOrWhiteSpace(school?.Name) ? "CELO San Miguelito" : school.Name!;
+        var school = await ResolveBulletinSchoolAsync(resolved.TargetId);
+        var identity = await _bulletinPdfService.BuildIdentityAsync(school?.Name, school?.LogoUrl);
         var isProgram = IsProgramBulletinView(view);
 
         if (isProgram)
@@ -326,7 +328,7 @@ public class StudentReportController : Controller
                 .SelectMany(t => t.Grades ?? new List<ProgramHistoryGradeColumnDto>())
                 .Select(g => g.AcademicYear)
                 .FirstOrDefault(y => !string.IsNullOrWhiteSpace(y) && y != "—");
-            var bytes = _bulletinPdfService.GenerateProgramHistoryPdf(history, schoolName);
+            var bytes = _bulletinPdfService.GenerateProgramHistoryPdf(history, identity);
             var fileName = _bulletinPdfService.BuildFileName(history.StudentName, year, isProgramComplete: true);
             return File(bytes, "application/pdf", fileName);
         }
@@ -335,7 +337,7 @@ public class StudentReportController : Controller
         if (bulletin == null)
             return NotFound(new { error = "No se encontró el boletín." });
 
-        var pdf = _bulletinPdfService.GenerateByGradePdf(bulletin, schoolName);
+        var pdf = _bulletinPdfService.GenerateByGradePdf(bulletin, identity);
         var gradeFileName = _bulletinPdfService.BuildFileName(bulletin.StudentName, bulletin.AcademicYear, isProgramComplete: false);
         return File(pdf, "application/pdf", gradeFileName);
     }
@@ -523,6 +525,42 @@ public class StudentReportController : Controller
             return (Guid.Empty, access);
 
         return (targetId, null);
+    }
+
+    /// <summary>
+    /// Identidad institucional del PDF: escuela del estudiante (SchoolId).
+    /// La escuela del usuario autenticado solo se usa si el estudiante no tiene SchoolId.
+    /// No se cruza a otra escuela cuando el estudiante ya tiene tenant.
+    /// </summary>
+    private async Task<School?> ResolveBulletinSchoolAsync(Guid studentId)
+    {
+        var studentSchoolId = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == studentId)
+            .Select(u => u.SchoolId)
+            .FirstOrDefaultAsync();
+
+        if (studentSchoolId.HasValue)
+        {
+            var studentSchool = await _context.Schools.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == studentSchoolId.Value);
+            if (studentSchool != null)
+                return studentSchool;
+
+            _logger.LogWarning(
+                "Boletín PDF: el estudiante {StudentId} tiene SchoolId {SchoolId} pero no se encontró la escuela. No se usa otra institución.",
+                studentId, studentSchoolId);
+            return null;
+        }
+
+        var userSchool = await _currentUserService.GetCurrentUserSchoolAsync();
+        if (userSchool != null)
+        {
+            _logger.LogInformation(
+                "Boletín PDF: el estudiante {StudentId} no tiene SchoolId; se usa la escuela del usuario autenticado {SchoolId} como fallback.",
+                studentId, userSchool.Id);
+        }
+
+        return userSchool;
     }
 
     private static bool IsProgramBulletinView(string? view)

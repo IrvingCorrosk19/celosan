@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using SchoolManager.Helpers;
 using SchoolManager.Services.Interfaces;
 using SchoolManager.ViewModels;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,8 @@ namespace SchoolManager.Services.Implementations
         private readonly ITrimesterService _trimesterService;
         private readonly SchoolDbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IOfficialGradeService _officialGradeService;
+        private readonly IAcademicYearService _academicYearService;
 
         public DirectorService(
             IUserService userService, 
@@ -25,7 +28,9 @@ namespace SchoolManager.Services.Implementations
             ISubjectService subjectService, 
             ITrimesterService trimesterService, 
             SchoolDbContext context,
-            ICurrentUserService currentUserService)
+            ICurrentUserService currentUserService,
+            IOfficialGradeService officialGradeService,
+            IAcademicYearService academicYearService)
         {
             _userService = userService;
             _studentReportService = studentReportService;
@@ -33,6 +38,8 @@ namespace SchoolManager.Services.Implementations
             _trimesterService = trimesterService;
             _context = context;
             _currentUserService = currentUserService;
+            _officialGradeService = officialGradeService;
+            _academicYearService = academicYearService;
         }
 
         public async Task<DirectorViewModel> GetDashboardViewModelAsync(string trimestre = null)
@@ -65,17 +72,18 @@ namespace SchoolManager.Services.Implementations
 
             foreach (var estudiante in soloEstudiantes)
             {
-                if (reportesPorEstudiante.TryGetValue(estudiante.Id, out var reporte) && reporte.Grades != null && reporte.Grades.Count > 0)
+                if (reportesPorEstudiante.TryGetValue(estudiante.Id, out var reporte))
                 {
-                    var promedio = reporte.Grades.Average(g => (double)g.Value);
-                    if (promedio >= 3.0)
+                    var promedio = OfficialStudentAverage(reporte);
+                    if (promedio.HasValue && promedio.Value >= 3.0)
                         totalAprobados++;
-                    else if (promedio >= 1.0 && promedio < 3.0)
+                    else if (promedio.HasValue && promedio.Value >= 1.0 && promedio.Value < 3.0)
                         totalReprobados++;
+                    else
+                        totalSinEvaluar++;
                 }
                 else
                 {
-                    // CORRECCIÓN: Estudiantes sin notas van a "Sin Evaluar", NO a reprobados
                     totalSinEvaluar++;
                 }
             }
@@ -103,21 +111,21 @@ namespace SchoolManager.Services.Implementations
 
                 foreach (var estudiante in soloEstudiantes)
                 {
-                    if (reportesPorEstudiante.TryGetValue(estudiante.Id, out var reporte) && reporte.Grades != null)
-                    {
-                        var notasMateria = reporte.Grades.Where(g => g.Subject == materia.Name).ToList();
-                        if (notasMateria.Count > 0)
-                        {
-                            estudiantesMateria++;
-                            var promedioMateria = notasMateria.Average(g => (double)g.Value);
-                            sumaPromedios += promedioMateria;
-                            totalPromedios++;
-                            if (promedioMateria >= 3.0)
-                                aprobadosMateria++;
-                            else if (promedioMateria >= 1.0 && promedioMateria < 3.0)
-                                reprobadosMateria++;
-                        }
-                    }
+                    if (!reportesPorEstudiante.TryGetValue(estudiante.Id, out var reporte))
+                        continue;
+                    var oficial = reporte.SubjectAverages?
+                        .FirstOrDefault(a => string.Equals(a.Subject, materia.Name, StringComparison.OrdinalIgnoreCase));
+                    if (oficial?.SubjectAverage == null)
+                        continue;
+
+                    estudiantesMateria++;
+                    var promedioMateria = (double)oficial.SubjectAverage.Value;
+                    sumaPromedios += promedioMateria;
+                    totalPromedios++;
+                    if (promedioMateria >= 3.0)
+                        aprobadosMateria++;
+                    else if (promedioMateria >= 1.0 && promedioMateria < 3.0)
+                        reprobadosMateria++;
                 }
                 double promedioFinal = totalPromedios > 0 ? sumaPromedios / totalPromedios : 0;
                 materiasDesempeno.Add(new MateriaDesempenoViewModel
@@ -195,9 +203,10 @@ namespace SchoolManager.Services.Implementations
             int totalPromediosGlobal = 0;
             foreach (var reporte in reportesPorEstudiante.Values)
             {
-                if (reporte.Grades != null && reporte.Grades.Count > 0)
+                var promedio = OfficialStudentAverage(reporte);
+                if (promedio.HasValue)
                 {
-                    promedioGeneralActual += reporte.Grades.Average(g => (double)g.Value);
+                    promedioGeneralActual += promedio.Value;
                     totalPromediosGlobal++;
                 }
             }
@@ -301,37 +310,33 @@ namespace SchoolManager.Services.Implementations
 
         public async Task<PagedResult<MateriaDesempenoViewModel>> GetMateriasDesempenoAsync(int page, int pageSize, string trimestre = null)
         {
+            var school = await _currentUserService.GetCurrentUserSchoolAsync();
             var materias = await _context.Subjects
+                .Where(s => school == null || s.SchoolId == school.Id || s.SchoolId == null)
                 .OrderBy(s => s.Name)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
                 .ToListAsync();
-            var totalCount = await _context.Subjects.CountAsync();
+            var official = await LoadOfficialSubjectScoresAsync(trimestre);
 
-            var scoreQuery = from score in _context.StudentActivityScores
-                             join activity in _context.Activities on score.ActivityId equals activity.Id
-                             where (trimestre == "todos" || activity.Trimester == trimestre)
-                             select new { activity.SubjectId, score.Score };
-
-            var scoreList = await scoreQuery.ToListAsync();
-
-            var result = materias.Select(subject => {
-                var scores = scoreList.Where(x => x.SubjectId == subject.Id).ToList();
+            var materiasPage = materias.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            var result = materiasPage.Select(subject =>
+            {
+                var scores = official.Where(x => x.SubjectId == subject.Id).Select(x => x.Score).ToList();
+                var promedio = scores.Count > 0 ? scores.Average() : (decimal?)null;
                 return new MateriaDesempenoViewModel
                 {
                     Nombre = subject.Name,
                     Estudiantes = scores.Count,
-                    Promedio = scores.Any() ? Math.Round((double)scores.Average(x => (decimal)x.Score), 1) : 0,
-                    Aprobados = scores.Count(x => x.Score >= 3.0m),
-                    Reprobados = scores.Count(x => x.Score < 3.0m && x.Score >= 1.0m),
-                    ColorBarra = scores.Any() ? (scores.Average(x => (decimal)x.Score) >= 4.0m ? "#27ae60" : "#f1c40f") : "#f1c40f"
+                    Promedio = promedio.HasValue ? Math.Round((double)promedio.Value, 1) : 0,
+                    Aprobados = scores.Count(x => x >= 3.0m),
+                    Reprobados = scores.Count(x => x < 3.0m && x >= 1.0m),
+                    ColorBarra = promedio.HasValue && promedio.Value >= 4.0m ? "#27ae60" : "#f1c40f"
                 };
             }).ToList();
 
             return new PagedResult<MateriaDesempenoViewModel>
             {
                 Items = result,
-                TotalCount = totalCount
+                TotalCount = materias.Count
             };
         }
 
@@ -392,34 +397,28 @@ namespace SchoolManager.Services.Implementations
 
         public async Task<PagedResult<MateriaAprobacionViewModel>> GetMateriasAprobacionAsync(int page, int pageSize, string trimestre = null)
         {
+            var school = await _currentUserService.GetCurrentUserSchoolAsync();
             var materias = await _context.Subjects
+                .Where(s => school == null || s.SchoolId == school.Id || s.SchoolId == null)
                 .OrderBy(s => s.Name)
                 .ToListAsync();
+            var official = await LoadOfficialSubjectScoresAsync(trimestre);
 
-            var scoreQuery = from score in _context.StudentActivityScores
-                             join activity in _context.Activities on score.ActivityId equals activity.Id
-                             join teacher in _context.Users on activity.TeacherId equals teacher.Id into teacherJoin
-                             from teacher in teacherJoin.DefaultIfEmpty()
-                             where (trimestre == "todos" || activity.Trimester == trimestre)
-                             select new { activity.SubjectId, Teacher = teacher != null ? teacher.Name : "-", score.Score };
-            
-            var scoreList = await scoreQuery.ToListAsync();
+            var teacherBySubject = await (
+                from ta in _context.TeacherAssignments.AsNoTracking()
+                join sa in _context.SubjectAssignments.AsNoTracking() on ta.SubjectAssignmentId equals sa.Id
+                join u in _context.Users.AsNoTracking() on ta.TeacherId equals u.Id
+                select new { sa.SubjectId, u.Name }
+            ).ToListAsync();
 
-            // Paginación de resultados
-            var materiasPage = materias
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
-
+            var materiasPage = materias.Skip((page - 1) * pageSize).Take(pageSize).ToList();
             var result = materiasPage.Select(subject =>
             {
-                var scores = scoreList.Where(x => x.SubjectId == subject.Id).ToList();
-                string profesor = scores.Select(x => x.Teacher).FirstOrDefault() ?? "-";
+                var scores = official.Where(x => x.SubjectId == subject.Id).Select(x => x.Score).ToList();
+                var profesor = teacherBySubject.FirstOrDefault(t => t.SubjectId == subject.Id)?.Name ?? "-";
                 int totalEstudiantes = scores.Count;
-                int aprobados = scores.Count(x => x.Score >= 3.0m);
-                int reprobados = scores.Count(x => x.Score < 3.0m && x.Score >= 1.0m);
-                double porcentajeAprobacion = totalEstudiantes > 0 ? aprobados * 100.0 / totalEstudiantes : 0;
-
+                int aprobados = scores.Count(x => x >= 3.0m);
+                int reprobados = scores.Count(x => x < 3.0m && x >= 1.0m);
                 return new MateriaAprobacionViewModel
                 {
                     Nombre = subject.Name,
@@ -427,7 +426,7 @@ namespace SchoolManager.Services.Implementations
                     TotalEstudiantes = totalEstudiantes,
                     Aprobados = aprobados,
                     Reprobados = reprobados,
-                    PorcentajeAprobacion = porcentajeAprobacion
+                    PorcentajeAprobacion = totalEstudiantes > 0 ? aprobados * 100.0 / totalEstudiantes : 0
                 };
             }).ToList();
 
@@ -440,23 +439,20 @@ namespace SchoolManager.Services.Implementations
 
         public async Task<PagedResult<AlertaNotificacionViewModel>> GetAlertasAsync(int page, int pageSize, string trimestre = null)
         {
+            var school = await _currentUserService.GetCurrentUserSchoolAsync();
             var materias = await _context.Subjects
+                .Where(s => school == null || s.SchoolId == school.Id || s.SchoolId == null)
                 .OrderBy(s => s.Name)
                 .ToListAsync();
-
-            var scoreQuery = from score in _context.StudentActivityScores
-                             join activity in _context.Activities on score.ActivityId equals activity.Id
-                             where (trimestre == "todos" || activity.Trimester == trimestre)
-                             select new { activity.SubjectId, score.Score };
-            var scoreList = await scoreQuery.ToListAsync();
+            var official = await LoadOfficialSubjectScoresAsync(trimestre);
 
             var alertas = new List<AlertaNotificacionViewModel>();
             foreach (var subject in materias)
             {
-                var scores = scoreList.Where(x => x.SubjectId == subject.Id).ToList();
-                double promedio = scores.Any() ? (double)scores.Average(x => (decimal)x.Score) : 0;
+                var scores = official.Where(x => x.SubjectId == subject.Id).Select(x => x.Score).ToList();
+                double promedio = scores.Count > 0 ? (double)scores.Average() : 0;
                 int totalEstudiantes = scores.Count;
-                int reprobados = scores.Count(x => x.Score < 3.0m && x.Score >= 1.0m);
+                int reprobados = scores.Count(x => x < 3.0m && x >= 1.0m);
                 if (scores.Any() && promedio < 3.0)
                 {
                     alertas.Add(new AlertaNotificacionViewModel
@@ -511,36 +507,45 @@ namespace SchoolManager.Services.Implementations
             model.TrimestresDisponibles = await _trimesterService.GetAllAsync();
             model.TrimestreSeleccionado = "";
 
-            // Consulta optimizada para obtener totales en una sola consulta SQL
-            var totals = await _context.Users
-                .Where(u => u.Role.ToLower() == "estudiante" || 
-                           u.Role.ToLower() == "student" || 
-                           u.Role.ToLower() == "alumno")
-                .GroupBy(u => 1)
-                .Select(g => new
-                {
-                    TotalEstudiantes = g.Count(),
-                    TotalAprobados = g.Count(u => u.StudentActivityScores.Any() && 
-                        u.StudentActivityScores.Average(s => (double)s.Score) >= 3.0),
-                    TotalReprobados = g.Count(u => u.StudentActivityScores.Any() && 
-                        u.StudentActivityScores.Average(s => (double)s.Score) < 3.0),
-                    TotalSinEvaluar = g.Count(u => !u.StudentActivityScores.Any())
-                })
-                .FirstOrDefaultAsync();
-
-            if (totals != null)
-            {
-                model.TotalEstudiantes = totals.TotalEstudiantes;
-                model.TotalAprobados = totals.TotalAprobados;
-                model.TotalReprobados = totals.TotalReprobados;
-                model.TotalSinEvaluar = totals.TotalSinEvaluar;
-            }
-            else
+            var school = await _currentUserService.GetCurrentUserSchoolAsync();
+            if (school == null)
             {
                 model.TotalEstudiantes = 0;
                 model.TotalAprobados = 0;
                 model.TotalReprobados = 0;
                 model.TotalSinEvaluar = 0;
+            }
+            else
+            {
+                var studentIds = await _context.Users
+                    .Where(u => u.SchoolId == school.Id &&
+                                (u.Role.ToLower() == "estudiante" ||
+                                 u.Role.ToLower() == "student" ||
+                                 u.Role.ToLower() == "alumno"))
+                    .Select(u => u.Id)
+                    .ToListAsync();
+                var official = await LoadOfficialSubjectScoresAsync(null);
+                var byStudent = official.GroupBy(x => x.StudentId).ToDictionary(g => g.Key, g => g.Select(x => x.Score).ToList());
+
+                int aprobados = 0, reprobados = 0, sinEvaluar = 0;
+                foreach (var studentId in studentIds)
+                {
+                    if (!byStudent.TryGetValue(studentId, out var scores) || scores.Count == 0)
+                    {
+                        sinEvaluar++;
+                        continue;
+                    }
+
+                    var promedio = scores.Average();
+                    if (promedio >= 3.0m) aprobados++;
+                    else if (promedio >= 1.0m) reprobados++;
+                    else sinEvaluar++;
+                }
+
+                model.TotalEstudiantes = studentIds.Count;
+                model.TotalAprobados = aprobados;
+                model.TotalReprobados = reprobados;
+                model.TotalSinEvaluar = sinEvaluar;
             }
 
             // Calcular porcentajes
@@ -557,21 +562,18 @@ namespace SchoolManager.Services.Implementations
             // Calcular tasa de aprobación general
             model.TasaAprobacionGeneral = model.PorcentajeAprobados;
 
-            // Generar análisis de tendencia
-            var materiasQuery = from score in _context.StudentActivityScores
-                              join activity in _context.Activities on score.ActivityId equals activity.Id
-                              join subject in _context.Subjects on activity.SubjectId equals subject.Id
-                              group score by subject.Name into g
-                              select new
-                              {
-                                  Materia = g.Key,
-                                  Promedio = g.Average(s => (double)s.Score),
-                                  TotalEstudiantes = g.Count(),
-                                  Aprobados = g.Count(s => s.Score >= 3.0m),
-                                  Reprobados = g.Count(s => s.Score < 3.0m)
-                              };
-
-            var materias = await materiasQuery.ToListAsync();
+            var officialTrend = await LoadOfficialSubjectScoresAsync(null);
+            var materias = officialTrend
+                .GroupBy(x => x.SubjectName)
+                .Select(g => new
+                {
+                    Materia = g.Key,
+                    Promedio = (double)g.Average(s => s.Score),
+                    TotalEstudiantes = g.Select(s => s.StudentId).Distinct().Count(),
+                    Aprobados = g.Count(s => s.Score >= 3.0m),
+                    Reprobados = g.Count(s => s.Score < 3.0m)
+                })
+                .ToList();
             var materiasOrdenadas = materias.OrderByDescending(m => m.Promedio).ToList();
 
             // Generar análisis de tendencia
@@ -626,6 +628,133 @@ namespace SchoolManager.Services.Implementations
             model.Alertas = new List<AlertaNotificacionViewModel>();
 
             return model;
+        }
+
+        private static double? OfficialStudentAverage(SchoolManager.Dtos.StudentReportDto reporte)
+        {
+            if (reporte.TrimesterAverage.HasValue)
+                return (double)reporte.TrimesterAverage.Value;
+
+            var official = (reporte.SubjectAverages ?? new List<SchoolManager.Dtos.SubjectTrimesterAverageDto>())
+                .Where(a => a.SubjectAverage.HasValue)
+                .Select(a => a.SubjectAverage!.Value)
+                .ToList();
+            return official.Count == 0 ? null : (double)official.Average();
+        }
+
+        private async Task<List<OfficialSubjectScore>> LoadOfficialSubjectScoresAsync(string? trimestre)
+        {
+            var school = await _currentUserService.GetCurrentUserSchoolAsync();
+            if (school == null)
+                return new List<OfficialSubjectScore>();
+
+            var year = await _academicYearService.GetActiveAcademicYearAsync(school.Id);
+            var yearId = year?.Id;
+            var trimesterCode = string.IsNullOrWhiteSpace(trimestre) || trimestre == "todos"
+                ? null
+                : OfficialGradeService.NormalizeTrimester(trimestre);
+
+            var studentIds = await _context.Users.AsNoTracking()
+                .Where(u => u.SchoolId == school.Id &&
+                            (u.Role.ToLower() == "estudiante" ||
+                             u.Role.ToLower() == "student" ||
+                             u.Role.ToLower() == "alumno"))
+                .Select(u => u.Id)
+                .ToListAsync();
+            if (studentIds.Count == 0)
+                return new List<OfficialSubjectScore>();
+
+            var enrollments = await (
+                from ssa in _context.StudentSubjectAssignments.AsNoTracking()
+                join sa in _context.SubjectAssignments.AsNoTracking() on ssa.SubjectAssignmentId equals sa.Id
+                join sub in _context.Subjects.AsNoTracking() on sa.SubjectId equals sub.Id
+                where ssa.IsActive && studentIds.Contains(ssa.StudentId)
+                select new { ssa.Id, ssa.StudentId, sa.SubjectId, SubjectName = sub.Name }
+            ).ToListAsync();
+
+            var imported = yearId.HasValue
+                ? await _officialGradeService.GetImportedForStudentsAsync(studentIds)
+                : Array.Empty<ImportedOfficialGradeRow>();
+
+            var activityRows = await (
+                from sas in _context.StudentActivityScores.AsNoTracking()
+                join a in _context.Activities.AsNoTracking() on sas.ActivityId equals a.Id
+                where studentIds.Contains(sas.StudentId)
+                select new
+                {
+                    sas.StudentId,
+                    sas.StudentSubjectAssignmentId,
+                    sas.AcademicYearId,
+                    a.SubjectId,
+                    a.Trimester,
+                    a.Type,
+                    sas.Score
+                }
+            ).ToListAsync();
+
+            if (yearId.HasValue)
+                activityRows = activityRows.Where(x => x.AcademicYearId == yearId.Value || x.AcademicYearId == null).ToList();
+            if (trimesterCode != null)
+                activityRows = activityRows.Where(x => OfficialGradeService.NormalizeTrimester(x.Trimester) == trimesterCode).ToList();
+
+            var contextActivities = await _context.Activities.AsNoTracking()
+                .Select(a => new { a.SubjectId, a.Trimester, a.Type })
+                .ToListAsync();
+
+            var result = new List<OfficialSubjectScore>();
+            foreach (var enrollment in enrollments)
+            {
+                decimal? OfficialFor(string code)
+                {
+                    var importedHit = yearId.HasValue
+                        ? imported.FirstOrDefault(r =>
+                            r.StudentId == enrollment.StudentId &&
+                            r.StudentSubjectAssignmentId == enrollment.Id &&
+                            r.AcademicYearId == yearId.Value &&
+                            r.TrimesterCode == code)
+                        : null;
+                    if (importedHit != null)
+                        return importedHit.Score;
+
+                    var pairs = activityRows
+                        .Where(x =>
+                            x.StudentId == enrollment.StudentId &&
+                            OfficialGradeService.NormalizeTrimester(x.Trimester) == code &&
+                            ((x.StudentSubjectAssignmentId.HasValue && x.StudentSubjectAssignmentId.Value == enrollment.Id)
+                             || (!x.StudentSubjectAssignmentId.HasValue && x.SubjectId == enrollment.SubjectId)))
+                        .Select(x => ((string?)x.Type, x.Score));
+                    var contextTypes = contextActivities
+                        .Where(a => a.SubjectId == enrollment.SubjectId
+                                    && OfficialGradeService.NormalizeTrimester(a.Trimester) == code)
+                        .Select(a => (string?)a.Type);
+                    return _officialGradeService.CalculateFromActivities(pairs, year?.Name, code, contextTypes).Score;
+                }
+
+                decimal? score = trimesterCode == null
+                    ? OfficialTrimesterAverageCalculator.ComputeFinalAverage(OfficialFor("1T"), OfficialFor("2T"), OfficialFor("3T"))
+                    : OfficialFor(trimesterCode);
+
+                if (score.HasValue)
+                {
+                    result.Add(new OfficialSubjectScore
+                    {
+                        StudentId = enrollment.StudentId,
+                        SubjectId = enrollment.SubjectId,
+                        SubjectName = enrollment.SubjectName,
+                        Score = score.Value
+                    });
+                }
+            }
+
+            return result;
+        }
+
+        private sealed class OfficialSubjectScore
+        {
+            public Guid StudentId { get; set; }
+            public Guid SubjectId { get; set; }
+            public string SubjectName { get; set; } = string.Empty;
+            public decimal Score { get; set; }
         }
     }
 } 

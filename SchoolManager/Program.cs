@@ -216,6 +216,9 @@ builder.Services.AddScoped<IActivityTypeService, ActivityTypeService>();
 builder.Services.AddScoped<ITeacherGroupService, TeacherGroupService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<IStudentActivityScoreService, StudentActivityScoreService>();
+builder.Services.AddScoped<IEvaluationSchemeResolver, EvaluationSchemeResolver>();
+builder.Services.AddScoped<IOfficialGradeService, OfficialGradeService>();
+builder.Services.AddScoped<IStudentGradeImportService, StudentGradeImportService>();
 
 builder.Services.AddSingleton<IFileStorage, LocalFileStorage>(); // o tu propio servicio
 

@@ -105,6 +105,23 @@ namespace SchoolManager.Services.Implementations
                     Url = "/Director/Index",
                     RequiredRoles = new[] { "director" }
                 },
+                new MenuItem
+                {
+                    Title = "Reportes",
+                    Icon = "fas fa-file-alt",
+                    Url = "#",
+                    RequiredRoles = new[] { "admin", "secretaria", "superadmin" },
+                    SubItems = new List<MenuItem>
+                    {
+                        new MenuItem
+                        {
+                            Title = "Importación de notas",
+                            Icon = "fas fa-file-import",
+                            Url = "/StudentGradeImport",
+                            RequiredRoles = new[] { "admin", "secretaria", "superadmin" }
+                        }
+                    }
+                },
                 new MenuItem 
                 { 
                     Title = "Catálogo de Asignaciones", 

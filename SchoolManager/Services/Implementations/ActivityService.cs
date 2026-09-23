@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolManager.Dtos;            // ⇦ DTOs con get/set
+using SchoolManager.Helpers;
 using SchoolManager.Interfaces;      // ⇦ IActivityService, IFileStorage
 using SchoolManager.Models;          // ⇦ SchoolDbContext, Activity
 using SchoolManager.Services.Interfaces;
@@ -14,19 +15,25 @@ namespace SchoolManager.Services
         private readonly IDocumentStorageService _documentStorage;
         private readonly ITrimesterService _trimesterService;
         private readonly ICurrentUserService _currentUserService;
+        private readonly IAcademicYearService _academicYearService;
+        private readonly IEvaluationSchemeResolver _schemeResolver;
 
         public ActivityService(
             SchoolDbContext context,
             IFileStorage fileStorage,
             IDocumentStorageService documentStorage,
             ITrimesterService trimesterService,
-            ICurrentUserService currentUserService)
+            ICurrentUserService currentUserService,
+            IAcademicYearService academicYearService,
+            IEvaluationSchemeResolver schemeResolver)
         {
             _context = context;
             _fileStorage = fileStorage;
             _documentStorage = documentStorage;
             _trimesterService = trimesterService;
             _currentUserService = currentUserService;
+            _academicYearService = academicYearService;
+            _schemeResolver = schemeResolver;
         }
 
         /* ────────────────────────────────────────
@@ -61,11 +68,13 @@ namespace SchoolManager.Services
             }
                 Console.WriteLine($"[ActivityService] Trimestre encontrado: {trimestre.Name}");
 
+            dto.Type = await CanonicalizeTypeForCreateAsync(currentUserSchool.Id, dto.TrimesterCode, dto.Type);
+
             var activity = new Activity
             {
                 Id = Guid.NewGuid(),
                 Name = dto.Name,
-                Type = dto.Type,          // 'tarea' | 'parcial' | 'examen'
+                Type = dto.Type,
                 Trimester = dto.TrimesterCode, // '1T' | '2T' | '3T'
                 TrimesterId = trimestre.Id,    // ← Asignar TrimesterId
                 TeacherId = dto.TeacherId,
@@ -157,6 +166,9 @@ namespace SchoolManager.Services
                 {
                     throw new InvalidOperationException($"No se encontró el trimestre '{dto.TrimesterCode}' para la escuela actual.");
                 }
+
+                dto.Type = await CanonicalizeTypeForUpdateAsync(
+                    currentUserSchool.Id, dto.TrimesterCode, activity.Type, dto.Type);
 
                 // Actualizar los campos
                 activity.Name = dto.Name;
@@ -378,6 +390,37 @@ namespace SchoolManager.Services
                          && a.SubjectId == subjectId
                          && a.SchoolId == currentUserSchool.Id)  // ← Filtrar por escuela
                 .ToListAsync();
+        }
+
+        private async Task<string> CanonicalizeTypeForCreateAsync(Guid schoolId, string? trimester, string? type)
+        {
+            var scheme = await ResolveDeclaredSchemeAsync(schoolId, trimester);
+            if (!EvaluationActivityTypes.TryCanonicalize(type, scheme, out var canonical))
+            {
+                throw new InvalidOperationException(
+                    $"El tipo '{type}' no está permitido para este trimestre. " +
+                    "Use únicamente las categorías del esquema vigente.");
+            }
+
+            return canonical;
+        }
+
+        private async Task<string> CanonicalizeTypeForUpdateAsync(
+            Guid schoolId, string? trimester, string? existingType, string? incomingType)
+        {
+            if (EvaluationActivityTypes.Normalize(EvaluationActivityTypes.StripDisplaySuffix(incomingType))
+                == EvaluationActivityTypes.Normalize(existingType))
+            {
+                return existingType ?? string.Empty;
+            }
+
+            return await CanonicalizeTypeForCreateAsync(schoolId, trimester, incomingType);
+        }
+
+        private async Task<EvaluationScheme> ResolveDeclaredSchemeAsync(Guid schoolId, string? trimester)
+        {
+            var year = await _academicYearService.GetActiveAcademicYearAsync(schoolId);
+            return _schemeResolver.Resolve(schoolId, year?.Name, trimester);
         }
     }
 }

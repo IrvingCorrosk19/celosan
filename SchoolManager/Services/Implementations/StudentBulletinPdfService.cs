@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.AspNetCore.Hosting;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -15,11 +16,69 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
     private const string PassGreen = "#15803d";
     private const string FailRed = "#b91c1c";
     private const string Muted = "#64748b";
+    private const string NeutralSchoolName = "Institución educativa";
+    private const float LogoMaxWidthPt = 160f;
+    private const float LogoMaxHeightPt = 72f;
+    private const int MaxImageDownloadBytes = 5 * 1024 * 1024;
+    private static readonly TimeSpan ImageDownloadTimeout = TimeSpan.FromSeconds(10);
 
-    public byte[] GenerateByGradePdf(StudentBulletinDto bulletin, string schoolName)
+    private readonly IHttpBytesDownloadCache _httpBytesDownloadCache;
+    private readonly IWebHostEnvironment _environment;
+    private readonly ILogger<StudentBulletinPdfService> _logger;
+
+    public StudentBulletinPdfService(
+        IHttpBytesDownloadCache httpBytesDownloadCache,
+        IWebHostEnvironment environment,
+        ILogger<StudentBulletinPdfService> logger)
+    {
+        _httpBytesDownloadCache = httpBytesDownloadCache;
+        _environment = environment;
+        _logger = logger;
+    }
+
+    public async Task<BulletinPdfIdentity> BuildIdentityAsync(
+        string? schoolName,
+        string? logoUrl,
+        CancellationToken cancellationToken = default)
+    {
+        var identity = new BulletinPdfIdentity
+        {
+            SchoolName = string.IsNullOrWhiteSpace(schoolName) ? NeutralSchoolName : schoolName.Trim()
+        };
+
+        if (string.IsNullOrWhiteSpace(logoUrl))
+            return identity;
+
+        try
+        {
+            var bytes = await TryLoadLogoBytesAsync(logoUrl.Trim(), cancellationToken);
+            if (bytes == null)
+            {
+                _logger.LogWarning("Boletín PDF: no se pudieron obtener bytes de logo. El documento se genera sin imagen.");
+                return identity;
+            }
+
+            if (!IsValidPngOrJpeg(bytes))
+            {
+                _logger.LogWarning("Boletín PDF: los bytes de logo no son PNG/JPEG válidos. El documento se genera sin imagen.");
+                return identity;
+            }
+
+            identity.LogoBytes = bytes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Boletín PDF: error al cargar el logo institucional. El documento se genera sin imagen.");
+        }
+
+        return identity;
+    }
+
+    public byte[] GenerateByGradePdf(StudentBulletinDto bulletin, BulletinPdfIdentity identity)
     {
         EnsureLicense();
-        var school = Display(schoolName, "CELO San Miguelito");
+        var branding = ResolveIdentity(identity);
+        var academicYear = Display(bulletin.AcademicYear);
 
         return Document.Create(container =>
         {
@@ -29,30 +88,33 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                 page.Margin(28);
                 page.DefaultTextStyle(x => x.FontSize(9).FontColor(Colors.Grey.Darken2));
 
-                page.Header().Element(h => BuildDocumentHeader(h, school, "BOLETÍN ACADÉMICO", null));
-                page.Content().Column(col =>
+                page.Header().Element(h => BuildInstitutionalHeader(h, branding, academicYear, isProgramComplete: false));
+                page.Content().PaddingBottom(8).Column(col =>
                 {
-                    col.Spacing(10);
+                    col.Spacing(12);
                     col.Item().Element(e => BuildMetaGrid(e, new[]
                     {
                         ("Nombre", Display(bulletin.StudentName)),
                         ("Grado", Display(bulletin.Grade)),
                         ("Grupo", Display(bulletin.Group)),
                         ("Programa / Bachiller", Display(bulletin.Specialty)),
-                        ("Año académico", Display(bulletin.AcademicYear))
+                        ("Año académico", academicYear)
                     }));
                     col.Item().Element(e => BuildGradeTable(e, bulletin.Areas));
+                    col.Item().Element(e => BuildPendingPremediaSection(e, bulletin.PendingPremedia));
+                    col.Item().Element(BuildDirectorSignature);
                 });
                 page.Footer().Element(BuildFooter);
             });
         }).GeneratePdf();
     }
 
-    public byte[] GenerateProgramHistoryPdf(StudentProgramHistoryDto history, string schoolName)
+    public byte[] GenerateProgramHistoryPdf(StudentProgramHistoryDto history, BulletinPdfIdentity identity)
     {
         EnsureLicense();
-        var school = Display(schoolName, "CELO San Miguelito");
+        var branding = ResolveIdentity(identity);
         var tracks = history.Tracks ?? new List<ProgramHistoryTrackDto>();
+        var academicYear = ResolveHistoryYear(tracks);
 
         return Document.Create(container =>
         {
@@ -62,15 +124,15 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                 page.Margin(24);
                 page.DefaultTextStyle(x => x.FontSize(9).FontColor(Colors.Grey.Darken2));
 
-                page.Header().Element(h => BuildDocumentHeader(h, school, "BOLETÍN ACADÉMICO", "PROGRAMA COMPLETO"));
-                page.Content().Column(col =>
+                page.Header().Element(h => BuildInstitutionalHeader(h, branding, academicYear, isProgramComplete: true));
+                page.Content().PaddingBottom(8).Column(col =>
                 {
                     col.Spacing(12);
                     col.Item().Element(e => BuildMetaGrid(e, new[]
                     {
                         ("Nombre", Display(history.StudentName)),
                         ("Programas", tracks.Count == 0 ? "—" : string.Join(" · ", tracks.Select(t => Display(t.ProgramName)).Distinct())),
-                        ("Año académico", ResolveHistoryYear(tracks))
+                        ("Año académico", academicYear)
                     }));
 
                     if (tracks.Count == 0)
@@ -80,10 +142,11 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
                     else
                     {
                         foreach (var track in tracks)
-                        {
                             col.Item().Element(e => BuildTrackSection(e, track));
-                        }
                     }
+
+                    col.Item().Element(e => BuildPendingPremediaSection(e, history.PendingPremedia));
+                    col.Item().Element(BuildDirectorSignature);
                 });
                 page.Footer().Element(BuildFooter);
             });
@@ -100,6 +163,57 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         return $"{prefix}_{name}_{year}.pdf";
     }
 
+    internal static void BuildInstitutionalHeader(
+        IContainer container,
+        BulletinPdfIdentity identity,
+        string academicYear,
+        bool isProgramComplete)
+    {
+        var schoolName = string.IsNullOrWhiteSpace(identity.SchoolName)
+            ? NeutralSchoolName
+            : identity.SchoolName.Trim();
+        var logoBytes = IsValidPngOrJpeg(identity.LogoBytes) ? identity.LogoBytes : null;
+
+        container.Column(col =>
+        {
+            col.Spacing(3);
+            if (logoBytes != null)
+            {
+                col.Item().AlignCenter().Width(LogoMaxWidthPt).Height(LogoMaxHeightPt)
+                    .AlignCenter().AlignMiddle()
+                    .Image(logoBytes)
+                    .FitArea();
+            }
+
+            col.Item().PaddingTop(logoBytes != null ? 6 : 0).AlignCenter()
+                .Text(schoolName).FontSize(14).Bold().FontColor(HeaderBlue);
+            col.Item().AlignCenter()
+                .Text("BOLETÍN ACADÉMICO").FontSize(12).SemiBold().FontColor(HeaderBlue);
+
+            if (isProgramComplete)
+            {
+                col.Item().AlignCenter()
+                    .Text("PROGRAMA COMPLETO").FontSize(10).SemiBold().FontColor(HeaderBlue);
+            }
+
+            col.Item().AlignCenter()
+                .Text($"Año académico: {academicYear}").FontSize(9).FontColor(Muted);
+            col.Item().PaddingTop(8).LineHorizontal(1.5f).LineColor(HeaderBlue);
+        });
+    }
+
+    private static void BuildDirectorSignature(IContainer container)
+    {
+        container.PaddingTop(32).ShowEntire().AlignCenter().Column(col =>
+        {
+            col.Item().Width(180).LineHorizontal(1).LineColor(Colors.Grey.Darken2);
+            col.Item().PaddingTop(6).AlignCenter()
+                .Text("Firma del Director(a)").FontSize(9).FontColor(Colors.Grey.Darken3);
+            col.Item().AlignCenter()
+                .Text("Director(a)").FontSize(8).FontColor(Muted);
+        });
+    }
+
     private static void BuildTrackSection(IContainer container, ProgramHistoryTrackDto track)
     {
         var grades = track.Grades ?? new List<ProgramHistoryGradeColumnDto>();
@@ -111,6 +225,55 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         });
     }
 
+    private static void BuildPendingPremediaSection(IContainer container, List<PendingPremediaSubjectDto>? pending)
+    {
+        var list = (pending ?? new List<PendingPremediaSubjectDto>())
+            .Where(p => p != null)
+            .ToList();
+        if (list.Count == 0)
+            return;
+
+        container.Column(col =>
+        {
+            col.Spacing(6);
+            col.Item().Text("PREMEDIA — MATERIAS PENDIENTES").FontSize(11).Bold().FontColor(HeaderBlue);
+            col.Item().Table(table =>
+            {
+                table.ColumnsDefinition(def =>
+                {
+                    def.ConstantColumn(52);
+                    def.RelativeColumn(3.4f);
+                    def.ConstantColumn(50);
+                    def.ConstantColumn(50);
+                    def.ConstantColumn(50);
+                    def.ConstantColumn(78);
+                });
+
+                table.Header(h =>
+                {
+                    HeaderCell(h.Cell(), "Grado");
+                    HeaderCell(h.Cell(), "Asignatura", alignLeft: true);
+                    HeaderCell(h.Cell(), "T1");
+                    HeaderCell(h.Cell(), "T2");
+                    HeaderCell(h.Cell(), "T3");
+                    HeaderCell(h.Cell(), "Promedio Final");
+                });
+
+                foreach (var subject in list.OrderBy(s => s.GradeNumber).ThenBy(s => s.SubjectName))
+                {
+                    table.Cell().Element(BodyCellCenter)
+                        .Text(Display(subject.Grade))
+                        .SemiBold().FontSize(8);
+                    table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName)).FontSize(8.5f);
+                    ScoreCell(table, subject.T1);
+                    ScoreCell(table, subject.T2);
+                    ScoreCell(table, subject.T3);
+                    ScoreCell(table, subject.FinalAverage, bold: true);
+                }
+            });
+        });
+    }
+
     private static void BuildGradeTable(IContainer container, List<AreaBulletinDto>? areas)
     {
         var list = areas ?? new List<AreaBulletinDto>();
@@ -118,11 +281,11 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         {
             table.ColumnsDefinition(def =>
             {
-                def.RelativeColumn(1.4f);
-                def.RelativeColumn(2.4f);
-                def.ConstantColumn(52);
-                def.ConstantColumn(52);
-                def.ConstantColumn(52);
+                def.RelativeColumn(1.5f);
+                def.RelativeColumn(3.2f);
+                def.ConstantColumn(50);
+                def.ConstantColumn(50);
+                def.ConstantColumn(50);
                 def.ConstantColumn(78);
             });
 
@@ -146,11 +309,16 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
             foreach (var area in list)
             {
                 var subjects = area.Subjects ?? new List<SubjectBulletinDto>();
+                if (subjects.Count == 0)
+                    continue;
+
                 for (var i = 0; i < subjects.Count; i++)
                 {
                     var subject = subjects[i];
-                    table.Cell().Element(AreaCell).Text(i == 0 ? Display(area.AreaName, "Sin área") : "").SemiBold().FontSize(8);
-                    table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName));
+                    if (i == 0)
+                        AreaGroupCell(table, Display(area.AreaName, "Sin área"), subjects.Count);
+
+                    table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName)).FontSize(8.5f);
                     ScoreCell(table, subject.T1);
                     ScoreCell(table, subject.T2);
                     ScoreCell(table, subject.T3);
@@ -169,10 +337,10 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         {
             table.ColumnsDefinition(def =>
             {
-                def.RelativeColumn(1.4f);
-                def.RelativeColumn(2.6f);
+                def.RelativeColumn(1.5f);
+                def.RelativeColumn(3.0f);
                 foreach (var _ in grades)
-                    def.ConstantColumn(56);
+                    def.ConstantColumn(58);
             });
 
             table.Header(h =>
@@ -194,11 +362,16 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
             foreach (var area in areas)
             {
                 var subjects = area.Subjects ?? new List<ProgramHistorySubjectDto>();
+                if (subjects.Count == 0)
+                    continue;
+
                 for (var i = 0; i < subjects.Count; i++)
                 {
                     var subject = subjects[i];
-                    table.Cell().Element(AreaCell).Text(i == 0 ? Display(area.AreaName, "Sin área") : "").SemiBold().FontSize(8);
-                    table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName));
+                    if (i == 0)
+                        AreaGroupCell(table, Display(area.AreaName, "Sin área"), subjects.Count);
+
+                    table.Cell().Element(BodyCellLeft).Text(Display(subject.SubjectName)).FontSize(8.5f);
                     foreach (var col in grades)
                     {
                         var result = (subject.GradeResults ?? new List<ProgramHistoryGradeResultDto>())
@@ -210,26 +383,15 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
         });
     }
 
-    private static void BuildDocumentHeader(IContainer container, string schoolName, string title, string? subtitle)
-    {
-        container.Column(col =>
-        {
-            col.Item().AlignCenter().Text(schoolName).FontSize(11).SemiBold().FontColor(HeaderBlue);
-            col.Item().AlignCenter().Text(title).FontSize(16).Bold().FontColor(HeaderBlue);
-            if (!string.IsNullOrWhiteSpace(subtitle))
-                col.Item().AlignCenter().Text(subtitle).FontSize(11).SemiBold().FontColor(HeaderBlue);
-            col.Item().PaddingTop(6).LineHorizontal(1.5f).LineColor(HeaderBlue);
-        });
-    }
-
     private static void BuildMetaGrid(IContainer container, IReadOnlyList<(string Label, string Value)> items)
     {
-        container.Row(row =>
+        container.Background(Colors.Grey.Lighten4).PaddingVertical(10).PaddingHorizontal(12).Row(row =>
         {
             foreach (var item in items)
             {
-                row.RelativeItem().PaddingRight(8).Column(c =>
+                row.RelativeItem().PaddingRight(10).Column(c =>
                 {
+                    c.Spacing(2);
                     c.Item().Text(item.Label).FontSize(8).Bold().FontColor(Muted);
                     c.Item().Text(item.Value).FontSize(10).FontColor(Colors.Grey.Darken3);
                 });
@@ -254,9 +416,9 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
 
     private static void HeaderCell(IContainer cell, string text, bool alignLeft = false)
     {
-        var box = cell.Background(HeaderBlue).Padding(6);
+        var box = cell.Background(HeaderBlue).PaddingVertical(7).PaddingHorizontal(6).AlignMiddle();
         (alignLeft ? box.AlignLeft() : box.AlignCenter())
-            .Text(text).FontColor(Colors.White).SemiBold().FontSize(8);
+            .Text(text).FontColor(Colors.White).SemiBold().FontSize(8.5f);
     }
 
     private static void ScoreCell(TableDescriptor table, decimal? value, bool bold = false)
@@ -268,17 +430,124 @@ public class StudentBulletinPdfService : IStudentBulletinPdfService
             span.Bold();
     }
 
-    private static IContainer AreaCell(IContainer container) =>
-        container.Background(AreaBlue).Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5).AlignMiddle();
+    private static void AreaGroupCell(TableDescriptor table, string areaName, int rowCount)
+    {
+        table.Cell().RowSpan((uint)Math.Max(rowCount, 1)).Element(c =>
+            c.Background(AreaBlue)
+                .Border(0.6f)
+                .BorderColor(Colors.Grey.Lighten1)
+                .PaddingHorizontal(8)
+                .PaddingVertical(6)
+                .AlignCenter()
+                .AlignMiddle()
+                .Text(areaName)
+                .SemiBold()
+                .FontSize(8)
+                .FontColor(HeaderBlue));
+    }
 
     private static IContainer BodyCellLeft(IContainer container) =>
-        container.Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5).AlignMiddle();
+        container.Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(6).AlignMiddle();
 
     private static IContainer BodyCellCenter(IContainer container) =>
-        container.Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(5).AlignCenter().AlignMiddle();
+        container.Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(6).AlignCenter().AlignMiddle();
 
     private static IContainer EmptyCell(IContainer container) =>
         container.Border(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(8);
+
+    private async Task<byte[]?> TryLoadLogoBytesAsync(string logoUrl, CancellationToken cancellationToken)
+    {
+        if (logoUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            logoUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            var bytes = await _httpBytesDownloadCache.GetOrDownloadAsync(
+                logoUrl, MaxImageDownloadBytes, ImageDownloadTimeout, cancellationToken);
+            if (bytes == null || bytes.Length == 0 || bytes.Length > MaxImageDownloadBytes)
+                return null;
+            return bytes;
+        }
+
+        return TryReadLocalLogo(logoUrl);
+    }
+
+    private byte[]? TryReadLocalLogo(string logoUrl)
+    {
+        if (IsUnsafeLocalLogoPath(logoUrl))
+        {
+            _logger.LogWarning("Boletín PDF: ruta de logo local rechazada por no ser relativa y segura.");
+            return null;
+        }
+
+        string relative;
+        if (logoUrl.StartsWith('/'))
+            relative = logoUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+        else if (!logoUrl.Contains('/'))
+            relative = Path.Combine("uploads", "schools", logoUrl);
+        else if (logoUrl.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
+            relative = logoUrl.Replace('/', Path.DirectorySeparatorChar);
+        else
+            return null;
+
+        var webRoot = _environment.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+            return null;
+
+        var rootFull = Path.GetFullPath(webRoot);
+        var fullPath = Path.GetFullPath(Path.Combine(rootFull, relative));
+        var relativeToRoot = Path.GetRelativePath(rootFull, fullPath);
+        if (relativeToRoot.StartsWith("..", StringComparison.Ordinal) ||
+            Path.IsPathRooted(relativeToRoot))
+        {
+            _logger.LogWarning("Boletín PDF: la ruta resuelta del logo queda fuera de wwwroot.");
+            return null;
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            _logger.LogWarning("Boletín PDF: archivo de logo local no encontrado.");
+            return null;
+        }
+
+        var bytes = File.ReadAllBytes(fullPath);
+        return bytes.Length == 0 || bytes.Length > MaxImageDownloadBytes ? null : bytes;
+    }
+
+    private static bool IsUnsafeLocalLogoPath(string logoUrl)
+    {
+        if (string.IsNullOrWhiteSpace(logoUrl))
+            return true;
+        if (logoUrl.Contains("..", StringComparison.Ordinal))
+            return true;
+        if (logoUrl.Contains('\\', StringComparison.Ordinal))
+            return true;
+        // Rechazar C:\... y UNC. No usar Path.IsPathRooted: en Windows "/uploads/..." es "rooted".
+        if (logoUrl.Length >= 2 && char.IsLetter(logoUrl[0]) && logoUrl[1] == ':')
+            return true;
+        return logoUrl.StartsWith("//", StringComparison.Ordinal);
+    }
+
+    private static BulletinPdfIdentity ResolveIdentity(BulletinPdfIdentity? identity)
+    {
+        if (identity == null)
+            return new BulletinPdfIdentity { SchoolName = NeutralSchoolName };
+
+        return new BulletinPdfIdentity
+        {
+            SchoolName = string.IsNullOrWhiteSpace(identity.SchoolName)
+                ? NeutralSchoolName
+                : identity.SchoolName.Trim(),
+            LogoBytes = IsValidPngOrJpeg(identity.LogoBytes) ? identity.LogoBytes : null
+        };
+    }
+
+    internal static bool IsValidPngOrJpeg(byte[]? bytes)
+    {
+        if (bytes == null || bytes.Length < 4)
+            return false;
+        if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            return true;
+        return bytes[0] == 0xFF && bytes[1] == 0xD8;
+    }
 
     private static string FormatScore(decimal? value) =>
         value.HasValue ? value.Value.ToString("0.0", CultureInfo.InvariantCulture) : "—";

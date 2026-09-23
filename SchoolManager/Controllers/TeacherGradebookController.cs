@@ -12,6 +12,7 @@ using SchoolManager.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using SchoolManager.Helpers;
+using SchoolManager.Services.Implementations;
 
 namespace SchoolManager.Controllers
 {
@@ -31,6 +32,10 @@ namespace SchoolManager.Controllers
         private readonly IDocumentStorageService _documentStorage;
         private readonly ICurriculumLoadService _curriculumLoadService;
         private readonly SchoolDbContext _context;
+        private readonly IAcademicYearService _academicYearService;
+        private readonly ICurrentUserService _currentUserService;
+        private readonly IEvaluationSchemeResolver _schemeResolver;
+        private readonly IOfficialGradeService _officialGradeService;
 
 
         public TeacherGradebookController(
@@ -46,7 +51,11 @@ namespace SchoolManager.Controllers
             ISubjectAssignmentService subjectAssignmentService,
             IDocumentStorageService documentStorage,
             ICurriculumLoadService curriculumLoadService,
-            SchoolDbContext context)
+            SchoolDbContext context,
+            IAcademicYearService academicYearService,
+            ICurrentUserService currentUserService,
+            IEvaluationSchemeResolver schemeResolver,
+            IOfficialGradeService officialGradeService)
             
         {
             _documentStorage = documentStorage;
@@ -62,7 +71,10 @@ namespace SchoolManager.Controllers
             _subjectAssignmentService = subjectAssignmentService;
             _curriculumLoadService = curriculumLoadService;
             _context = context;
-            
+            _academicYearService = academicYearService;
+            _currentUserService = currentUserService;
+            _schemeResolver = schemeResolver;
+            _officialGradeService = officialGradeService;
         }
 
         private async Task<(bool Ok, IActionResult? Error)> ValidateTeacherGradebookScopeAsync(
@@ -238,7 +250,34 @@ namespace SchoolManager.Controllers
                 };
             }).ToList();
 
-            return Json(data);
+            var context = await BuildEvaluationContextAsync(notes.Trimester, notes.SubjectId, notes.GroupId, notes.GradeLevelId);
+            var studentGuids = estudiantes
+                .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .ToList();
+            var imported = studentGuids.Count == 0
+                ? Array.Empty<ImportedOfficialGradeRow>()
+                : await _officialGradeService.GetImportedForStudentsAsync(studentGuids);
+            var year = await ResolveActiveYearAsync();
+            var importedByStudent = imported
+                .Where(r => year == null || r.AcademicYearId == year.Id)
+                .Where(r => OfficialGradeService.NormalizeTrimester(r.TrimesterCode) == OfficialGradeService.NormalizeTrimester(notes.Trimester))
+                .GroupBy(r => r.StudentId.ToString())
+                .ToDictionary(g => g.Key, g => g.First().Score);
+
+            return Json(new
+            {
+                context,
+                importedByStudent,
+                notes = data
+            });
+        }
+
+        [HttpGet]
+        public async Task<JsonResult> GetEvaluationContext(string trimester, Guid? subjectId = null, Guid? groupId = null, Guid? gradeLevelId = null)
+        {
+            var ctx = await BuildEvaluationContextAsync(trimester, subjectId, groupId, gradeLevelId);
+            return Json(ctx);
         }
 
 
@@ -315,6 +354,47 @@ namespace SchoolManager.Controllers
                 return Json(new { error = ex.Message });
             }
         }
+        private async Task<AcademicYear?> ResolveActiveYearAsync()
+        {
+            var school = await _currentUserService.GetCurrentUserSchoolAsync();
+            if (school == null)
+                return null;
+            return await _academicYearService.GetActiveAcademicYearAsync(school.Id);
+        }
+
+        private async Task<EvaluationContextDto> BuildEvaluationContextAsync(
+            string? trimester,
+            Guid? subjectId,
+            Guid? groupId,
+            Guid? gradeLevelId)
+        {
+            var year = await ResolveActiveYearAsync();
+            var school = await _currentUserService.GetCurrentUserSchoolAsync();
+            var declared = _schemeResolver.Resolve(school?.Id, year?.Name, trimester);
+
+            var contextTypes = new List<string?>();
+            if (subjectId.HasValue && subjectId.Value != Guid.Empty &&
+                groupId.HasValue && groupId.Value != Guid.Empty)
+            {
+                var query = _context.Activities.AsNoTracking()
+                    .Where(a => a.SubjectId == subjectId && a.GroupId == groupId && a.Trimester == trimester);
+                if (gradeLevelId.HasValue && gradeLevelId.Value != Guid.Empty)
+                    query = query.Where(a => a.GradeLevelId == gradeLevelId.Value);
+                contextTypes = (await query.Select(a => a.Type).ToListAsync())
+                    .Select(t => (string?)t)
+                    .ToList();
+            }
+
+            var effective = _schemeResolver.ResolveEffective(school?.Id, year?.Name, trimester, contextTypes);
+            return new EvaluationContextDto
+            {
+                AcademicYear = year?.Name,
+                Scheme = declared.ToString(),
+                CalculationScheme = effective.ToString(),
+                Types = EvaluationActivityTypes.GetAvailable(declared)
+            };
+        }
+
         private Guid GetTeacherId()
         {
             var userId = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;

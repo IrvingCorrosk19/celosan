@@ -18,14 +18,22 @@ namespace SchoolManager.Services.Implementations
         private readonly IDisciplineReportService _disciplineReportService;
         private readonly ICurrentUserService _currentUserService;
         private readonly IAcademicYearService _academicYearService;
+        private readonly IOfficialGradeService _officialGradeService;
         private readonly ILogger<StudentReportService> _logger;
 
-        public StudentReportService(SchoolDbContext context, IDisciplineReportService disciplineReportService, ICurrentUserService currentUserService, IAcademicYearService academicYearService, ILogger<StudentReportService> logger)
+        public StudentReportService(
+            SchoolDbContext context,
+            IDisciplineReportService disciplineReportService,
+            ICurrentUserService currentUserService,
+            IAcademicYearService academicYearService,
+            IOfficialGradeService officialGradeService,
+            ILogger<StudentReportService> logger)
         {
             _context = context;
             _disciplineReportService = disciplineReportService;
             _currentUserService = currentUserService;
             _academicYearService = academicYearService;
+            _officialGradeService = officialGradeService;
             _logger = logger;
         }
 
@@ -211,17 +219,18 @@ namespace SchoolManager.Services.Implementations
                 var gradeName = gradeHeaderLabel;
                 var academicYearName = await GetDisplayAcademicYearNameAsync(studentId, studentUser.SchoolId);
 
-                // Si no hay calificaciones, devolver reporte vacío pero con trimestres disponibles
+                // Si no hay activities, devolver reporte válido (puede existir nota importada).
                 if (studentScores == null || !studentScores.Any())
                 {
-                    _logger.LogWarning("No se encontraron calificaciones para StudentId: {StudentId}, Trimester: {Trimester}", studentId, selectedTrimester);
-                    
-                    return new StudentReportDto
+                    _logger.LogWarning("No se encontraron activities para StudentId: {StudentId}, Trimester: {Trimester}", studentId, selectedTrimester);
+
+                    var emptyReport = new StudentReportDto
                     {
                         StudentId = studentId,
                         StudentName = name,
                         Grade = gradeName,
                         Grades = new List<GradeDto>(),
+                        ActiveEnrollments = await GetActiveEnrollmentSummariesAsync(studentId),
                         AttendanceByTrimester = new List<AttendanceDto>(),
                         AttendanceByMonth = new List<AttendanceDto>(),
                         Trimester = selectedTrimester,
@@ -229,10 +238,10 @@ namespace SchoolManager.Services.Implementations
                         AvailableTrimesters = trimesters.Select(t => new AvailableTrimesters { Trimester = t }).ToList(),
                         DisciplineReports = new List<DisciplineReportDto>(),
                         PendingActivities = new List<PendingActivityDto>(),
-                        AvailableSubjects = new List<string>(),
-                        SubjectAverages = new List<SubjectTrimesterAverageDto>(),
-                        TrimesterAverage = null
+                        AvailableSubjects = new List<string>()
                     };
+                    await ApplyOfficialAveragesAsync(emptyReport, studentId, activeYearId, selectedTrimester);
+                    return emptyReport;
                 }
 
             // Obtener datos adicionales en una sola consulta para evitar duplicaciones
@@ -450,7 +459,7 @@ namespace SchoolManager.Services.Implementations
                     AvailableSubjects = availableSubjects
                 };
 
-                ApplyOfficialAverages(result);
+                await ApplyOfficialAveragesAsync(result, studentId, activeYearId, selectedTrimester);
 
                 _logger.LogInformation("=== FIN GetReportByStudentIdAsync - Reporte construido exitosamente ===");
 
@@ -521,21 +530,13 @@ namespace SchoolManager.Services.Implementations
                 .Select(g => g.OrderByDescending(x => x.ScoreCreatedAt).First())
                 .ToListAsync();
 
-            if (studentScores == null || !studentScores.Any())
-            {
-                return null;
-            }
-
-            // Obtener los datos del estudiante
             var studentData = await _context.Users
                 .Where(u => u.Id == studentId)
                 .Select(u => new { u.Name, u.LastName })
                 .FirstOrDefaultAsync();
 
             if (studentData == null)
-            {
                 return null;
-            }
 
             var name = $"{studentData.Name} {studentData.LastName}";
             var academicYearName = await GetDisplayAcademicYearNameAsync(studentId, studentUser?.SchoolId);
@@ -732,11 +733,15 @@ namespace SchoolManager.Services.Implementations
                 PendingActivities = pendingActivities
             };
 
-            ApplyOfficialAverages(report);
+            await ApplyOfficialAveragesAsync(report, studentId, activeYearId, trimester);
             return report;
         }
 
-        private static void ApplyOfficialAverages(StudentReportDto report)
+        private async Task ApplyOfficialAveragesAsync(
+            StudentReportDto report,
+            Guid studentId,
+            Guid? academicYearId,
+            string? trimester)
         {
             var grades = report.Grades ?? new List<GradeDto>();
             var subjectAverages = grades
@@ -754,12 +759,54 @@ namespace SchoolManager.Services.Implementations
                             pairs, OfficialTrimesterAverageCalculator.TypeEjercicios),
                         AverageExamen = OfficialTrimesterAverageCalculator.AverageByType(
                             pairs, OfficialTrimesterAverageCalculator.TypeExamen),
-                        SubjectAverage = OfficialTrimesterAverageCalculator.ComputeTrimesterAverage(pairs)
+                        SubjectAverage = _officialGradeService.CalculateFromActivities(pairs, report.AcademicYear, trimester).Score
                     };
                 })
                 .ToList();
 
-            report.SubjectAverages = subjectAverages;
+            if (academicYearId.HasValue && !string.IsNullOrWhiteSpace(trimester))
+            {
+                var imported = await _officialGradeService.GetImportedForStudentAsync(studentId);
+                var code = OfficialGradeService.NormalizeTrimester(trimester);
+                foreach (var avg in subjectAverages)
+                {
+                    var hit = imported.FirstOrDefault(r =>
+                        r.AcademicYearId == academicYearId.Value &&
+                        r.TrimesterCode == code &&
+                        string.Equals(r.SubjectName, avg.Subject, StringComparison.OrdinalIgnoreCase));
+                    if (hit != null)
+                    {
+                        avg.SubjectAverage = hit.Score;
+                        avg.IsImported = true;
+                        avg.GradeOrigin = OfficialTrimesterGradeOrigin.Imported;
+                    }
+                    else if (avg.SubjectAverage.HasValue)
+                    {
+                        avg.GradeOrigin = OfficialTrimesterGradeOrigin.Activities;
+                    }
+                }
+
+                foreach (var hit in imported.Where(r =>
+                    r.AcademicYearId == academicYearId.Value && r.TrimesterCode == code))
+                {
+                    if (subjectAverages.Any(a => string.Equals(a.Subject, hit.SubjectName, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    subjectAverages.Add(new SubjectTrimesterAverageDto
+                    {
+                        Subject = hit.SubjectName,
+                        SubjectAverage = hit.Score,
+                        IsImported = true,
+                        GradeOrigin = OfficialTrimesterGradeOrigin.Imported
+                    });
+                }
+            }
+            else
+            {
+                foreach (var avg in subjectAverages.Where(a => a.SubjectAverage.HasValue))
+                    avg.GradeOrigin = OfficialTrimesterGradeOrigin.Activities;
+            }
+
+            report.SubjectAverages = subjectAverages.OrderBy(a => a.Subject).ToList();
             var withValue = subjectAverages
                 .Where(a => a.SubjectAverage.HasValue)
                 .Select(a => a.SubjectAverage!.Value)

@@ -809,10 +809,6 @@
                         <div class="col-md-2">
                             <label class="form-label">Tipo</label>
                             <select id="activityType" name="Type" class="form-select">
-                                <option value="Notas de apreciación">Notas de apreciación</option>
-                                <option value="Ejercicios diarios">Ejercicios diarios</option>
-                                <option value="Examen Final">Examen Final</option>
-                                <option value="Recuperación">Recuperación</option>
                             </select>
                             <small class="text-muted" id="recuperacionHelper" style="display: none;">
                                 <i class="bi bi-info-circle"></i> Solo para 9º y 12º
@@ -1584,6 +1580,7 @@
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="~/js/evaluation-gradebook.js" asp-append-version="true"></script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 @section Scripts {
     <script>
@@ -1639,16 +1636,23 @@
 
         /** Etiqueta corta del tipo para cabeceras compactas (tooltip lleva el nombre completo). */
         function gradebookTypeShortLabel(type) {
-            const t = (type || '').toLowerCase();
-            if (t === 'notas de apreciación') return 'Aprec.';
-            if (t === 'ejercicios diarios') return 'Ejerc.';
-            if (t === 'examen final') return 'Examen';
-            if (t === 'recuperación') return 'Recup.';
-            if (t === 'tarea') return 'Tarea';
-            if (t === 'parcial') return 'Parcial';
-            if (t === 'examen') return 'Examen';
-            const s = type || '';
-            return s.length > 12 ? s.slice(0, 11) + '…' : s;
+            return window.CelosanEvaluation.shortLabel(type);
+        }
+
+        function loadEvaluationContext(subjectId, groupId, gradeLevelId, trimester) {
+            if (!trimester) return $.Deferred().resolve().promise();
+            const params = new URLSearchParams({ trimester });
+            if (subjectId) params.set('subjectId', subjectId);
+            if (groupId) params.set('groupId', groupId);
+            if (gradeLevelId) params.set('gradeLevelId', gradeLevelId);
+            return $.get('/TeacherGradebook/GetEvaluationContext?' + params.toString())
+                .done(function (ctx) {
+                    window.CelosanEvaluation.applyContext(ctx);
+                    window.CelosanEvaluation.fillTypeSelect($('#activityType'));
+                    if (window.CelosanEvaluation.state.scheme === 'Weighted801010') {
+                        $('#recuperacionHelper').hide();
+                    }
+                });
         }
 
         const TZ_PANAMA = 'America/Panama';
@@ -1822,7 +1826,7 @@
 
                 console.log('Objeto activities:', activities);
 
-                const activeTypes = ['notas de apreciación', 'ejercicios diarios', 'examen final', 'recuperación'];
+                const activeTypes = window.CelosanEvaluation.headerTypeOrder(activities);
 
                 let hasActivities = false;
                 activeTypes.forEach(type => {
@@ -1864,7 +1868,8 @@
                 if (!hasActivities) {
                     hdrRow.append('<th class="text-center gradebook-col-empty gradebook-th-empty" scope="col">Sin actividades</th>');
                 }
-                hdrRow.append('<th class="text-center gradebook-col-final gradebook-th-final" scope="col">Nota final</th>');
+                hdrRow.append('<th class="text-center gradebook-col-final gradebook-th-final" scope="col">Promedio</th>');
+                hdrRow.append('<th class="text-center gradebook-col-final gradebook-th-final" scope="col">Oficial</th>');
                 hdrRow.append('<th class="text-center gradebook-col-empty" scope="col">Acciones</th>');
 
                 const body = $('#bodyRows');
@@ -1888,9 +1893,11 @@
                                     row += `<td class="text-center gradebook-col-avg text-primary avg-${typeClass} fw-semibold"></td>`;
                                 }
                             });
-                            row += `<td class="text-center gradebook-col-final text-dark fw-bold final-grade"></td>`;
+                            row += `<td class="text-center gradebook-col-final text-dark fw-bold final-grade" title="Promedio calculado"></td>`;
+                            row += `<td class="text-center gradebook-col-final fw-bold official-grade" title="Nota oficial"></td>`;
                         } else {
                             row += `<td class="text-muted text-center gradebook-col-empty">—</td>`;
+                            row += `<td class="text-center gradebook-col-final fw-bold official-grade" title="Nota oficial"></td>`;
                         }
 
                         if (s.studentSubjectAssignmentId) {
@@ -2155,56 +2162,51 @@
             }
 
             function calcAverages() {
+                const ev = window.CelosanEvaluation;
                 $('#bodyRows tr').each(function () {
                     const row = $(this);
                     const studentId = row.data('stu-id');
-                    
-                    if (!studentId) return; // Skip if no student ID
-                    
-                    const activeTypes = ['notas de apreciación', 'ejercicios diarios', 'examen final', 'recuperación'].filter(type => activities[type] && activities[type].length > 0);
+                    if (!studentId) return;
+
+                    const activeTypes = ev.headerTypeOrder(activities);
                     const typeAvgs = {};
 
                     activeTypes.forEach(type => {
                         const values = row.find(`.score-cell[data-type="${type}"]`)
                             .map((_, td) => {
-                                const val = parseFloat($(td).text());
-                                return isNaN(val) ? 0 : val;
+                                const raw = $(td).text().trim();
+                                if (!raw) return null;
+                                const val = parseFloat(raw);
+                                return isNaN(val) ? null : val;
                             }).get();
-                        const valid = values.filter(n => n > 0);
-                        // Calcular promedio (si no hay notas válidas, promedio = 0)
-                        const avg = valid.length > 0 ? (valid.reduce((a, b) => a + b, 0) / valid.length) : 0;
-                        const truncAvg = Math.floor(avg * 10) / 10;
-                        typeAvgs[type] = truncAvg;
-                        
-                        // Siempre mostrar el promedio (0.0 si está en blanco)
-                        row.find(`.avg-${type.replace(/\s+/g, '-')}`).text(truncAvg.toFixed(1));
+                        const avg = ev.categoryAverage(values);
+                        typeAvgs[type] = avg;
+                        const $avgCell = row.find(`.avg-${type.replace(/\s+/g, '-')}`);
+                        $avgCell.text(avg == null ? '' : ev.formatGrade(ev.officialRound(avg)));
+                        if (ev.isHistoricalType(type) && ev.state.calculationScheme === 'Weighted801010') {
+                            $avgCell.addClass('text-muted').attr('title', 'Histórico: no entra en el 80/10/10');
+                        }
                     });
 
-                    // LÓGICA ESPECIAL PARA RECUPERACIÓN:
-                    // Si existe recuperación y tiene nota > 0, reemplaza el promedio del examen final
-                    let typesForFinal = [...activeTypes];
-                    if (typeAvgs['recuperación'] && typeAvgs['recuperación'] > 0) {
-                        // Si hay recuperación, reemplazar el examen final con recuperación
-                        // y no contar ambos en el promedio final
+                    if (ev.state.calculationScheme !== 'Weighted801010' && typeAvgs['recuperación'] != null) {
                         typeAvgs['examen final'] = typeAvgs['recuperación'];
-                        typesForFinal = typesForFinal.filter(t => t !== 'recuperación');
                     }
 
-                    // Calcular nota final: SOLO con promedios > 0
-                    let finalGrade = 0;
-                    const validAvgs = typesForFinal.filter(type => typeAvgs[type] > 0);
-                    
-                    if (validAvgs.length > 0) {
-                        // Sumar solo los promedios que sean > 0 y dividir entre la cantidad de promedios válidos
-                        finalGrade = validAvgs.reduce((sum, type) => sum + typeAvgs[type], 0) / validAvgs.length;
-                    }
+                    const calculated = ev.computeFinal(typeAvgs);
+                    row.find('.final-grade').text(calculated == null ? '' : ev.formatGrade(calculated));
 
-                    const truncFinalGrade = Math.floor(finalGrade * 10) / 10;
-                    row.find('.final-grade').text(truncFinalGrade.toFixed(1));
+                    const imported = ev.importedScore(studentId);
+                    const official = imported != null ? imported : calculated;
+                    const $official = row.find('.official-grade');
+                    if (imported != null) {
+                        $official.text(ev.formatGrade(imported)).addClass('text-success').attr('title', 'Nota oficial importada');
+                    } else {
+                        $official.text(official == null ? '' : ev.formatGrade(official)).removeClass('text-success').attr('title', 'Nota oficial = promedio calculado');
+                    }
 
                     const trimester = $('#selTrimester').val();
                     if (!studentAnnualScores[studentId]) studentAnnualScores[studentId] = {};
-                    studentAnnualScores[studentId][trimester] = truncFinalGrade;
+                    studentAnnualScores[studentId][trimester] = official == null ? 0 : Number(official);
                 });
 
                 updateResumenTable();
@@ -2263,8 +2265,16 @@
                         clearActivityBuckets();
                         scores = {};
 
-                        if (data && Array.isArray(data)) {
-                            data.forEach(d => {
+                        const payload = data && !Array.isArray(data) ? data : { notes: data };
+                        if (payload.context) {
+                            window.CelosanEvaluation.applyContext(payload.context);
+                            window.CelosanEvaluation.fillTypeSelect($('#activityType'));
+                        }
+                        window.CelosanEvaluation.state.importedByStudent = payload.importedByStudent || {};
+                        const rows = payload.notes || payload;
+
+                        if (rows && Array.isArray(rows)) {
+                            rows.forEach(d => {
                                 if (!scores[d.studentId]) scores[d.studentId] = {};
                                 if (d.notas && Array.isArray(d.notas)) {
                                     d.notas.forEach(nota => {
@@ -2457,6 +2467,7 @@
                     // Reiniciar todo al cambiar de grupo o trimestre (incluye tipos dinámicos de actividad)
                     clearActivityBuckets();
                     scores = {};
+                    loadEvaluationContext(subjectId, groupId, gradeLevelId, trimester);
                     
                     loadStudents(groupId, gradeLevelId, subjectId, () => {
                         loadNotasCargadas(subjectId, groupId, gradeLevelId, trimester);
@@ -2472,6 +2483,7 @@
             if (combo && trimester) {
                 const [subjectId, groupId, gradeLevelId] = combo.split('|');
                 console.log('IDs extraídos:', { subjectId, groupId, gradeLevelId });
+                loadEvaluationContext(subjectId, groupId, gradeLevelId, trimester);
                 loadStudents(groupId, gradeLevelId, subjectId, () => {
                     loadNotasCargadas(subjectId, groupId, gradeLevelId, trimester);
                 });

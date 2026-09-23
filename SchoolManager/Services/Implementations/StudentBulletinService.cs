@@ -10,11 +10,16 @@ public class StudentBulletinService : IStudentBulletinService
 {
     private readonly SchoolDbContext _context;
     private readonly IAcademicYearService _academicYearService;
+    private readonly IOfficialGradeService _officialGradeService;
 
-    public StudentBulletinService(SchoolDbContext context, IAcademicYearService academicYearService)
+    public StudentBulletinService(
+        SchoolDbContext context,
+        IAcademicYearService academicYearService,
+        IOfficialGradeService officialGradeService)
     {
         _context = context;
         _academicYearService = academicYearService;
+        _officialGradeService = officialGradeService;
     }
 
     public async Task<StudentBulletinDto?> GetByGradeBulletinAsync(Guid studentId)
@@ -160,6 +165,22 @@ public class StudentBulletinService : IStudentBulletinService
             }
         }
 
+        var importedRows = await _officialGradeService.GetImportedForStudentAsync(studentId);
+        var importedByKey = importedRows
+            .GroupBy(r => (r.StudentSubjectAssignmentId, r.AcademicYearId, r.TrimesterCode))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var bulletinSubjectIds = subjects.Select(s => s.SubjectId).Distinct().ToList();
+        var contextActivities = bulletinSubjectIds.Count == 0
+            ? new List<(Guid? SubjectId, string? Trimester, string? Type)>()
+            : (await _context.Activities.AsNoTracking()
+                .Where(a => a.SubjectId.HasValue && bulletinSubjectIds.Contains(a.SubjectId.Value)
+                            && (a.GroupId == null || a.GroupId == primary.GroupId))
+                .Select(a => new { a.SubjectId, a.Trimester, a.Type })
+                .ToListAsync())
+                .Select(a => (SubjectId: (Guid?)a.SubjectId, Trimester: (string?)a.Trimester, Type: (string?)a.Type))
+                .ToList();
+
         var bulletinSubjects = subjects
             .Select(subject =>
             {
@@ -175,10 +196,17 @@ public class StudentBulletinService : IStudentBulletinService
 
                 decimal? ForTrimester(string code)
                 {
+                    if (subject.SsaId != Guid.Empty && activeYear != null &&
+                        importedByKey.TryGetValue((subject.SsaId, activeYear.Id, code), out var imported))
+                        return imported.Score;
+
                     var slice = subjectScores
                         .Where(s => NormalizeTrimester(s.Trimester) == code)
                         .Select(s => ((string?)s.Type, s.Score));
-                    return OfficialTrimesterAverageCalculator.ComputeTrimesterAverage(slice);
+                    var contextTypes = contextActivities
+                        .Where(a => a.SubjectId == subject.SubjectId && NormalizeTrimester(a.Trimester) == code)
+                        .Select(a => a.Type);
+                    return _officialGradeService.CalculateFromActivities(slice, activeYear?.Name, code, contextTypes).Score;
                 }
 
                 var t1 = ForTrimester("1T");
@@ -233,7 +261,13 @@ public class StudentBulletinService : IStudentBulletinService
             Group = primary.Group?.Name ?? "—",
             Specialty = string.IsNullOrWhiteSpace(specialtyName) ? "—" : specialtyName,
             AcademicYear = activeYear?.Name ?? "—",
-            Areas = areas
+            Areas = areas,
+            PendingPremedia = await LoadPendingPremediaAsync(
+                student.Id,
+                primary.GradeId,
+                ParseGradeNumber(primary.Grade?.Name),
+                activeYear,
+                importedByKey)
         };
     }
 
@@ -311,6 +345,11 @@ public class StudentBulletinService : IStudentBulletinService
             .Where(x => x.StudentId == studentId)
             .ToListAsync();
 
+        var importedRows = await _officialGradeService.GetImportedForStudentAsync(studentId);
+        var importedByKey = importedRows
+            .GroupBy(r => (r.StudentSubjectAssignmentId, r.AcademicYearId, r.TrimesterCode))
+            .ToDictionary(g => g.Key, g => g.First());
+
         var schoolGrades = student.SchoolId.HasValue
             ? await _context.GradeLevels.AsNoTracking()
                 .Where(g => g.SchoolId == student.SchoolId)
@@ -344,7 +383,8 @@ public class StudentBulletinService : IStudentBulletinService
                 e.SubjectName ?? "—",
                 e.AreaName ?? "Sin área",
                 e.SpecialtyName ?? "—",
-                sa.AcademicYear?.Name));
+                sa.AcademicYear?.Name,
+                sa.AcademicYearId));
         }
 
         var catalogGradeNumbersBySpecialty = new Dictionary<Guid, List<int>>();
@@ -450,6 +490,7 @@ public class StudentBulletinService : IStudentBulletinService
                                 row.SubjectName ?? "—",
                                 row.AreaName ?? "Sin área",
                                 sample.SpecialtyName,
+                                null,
                                 null));
                         }
                     }
@@ -488,10 +529,22 @@ public class StudentBulletinService : IStudentBulletinService
 
                                     decimal? ForTrimester(string code)
                                     {
+                                        foreach (var ssaId in gradeSsaIds)
+                                        {
+                                            var yearId = bandRows
+                                                .Where(r => r.SsaId == ssaId)
+                                                .Select(r => r.AcademicYearId)
+                                                .FirstOrDefault();
+                                            if (yearId.HasValue &&
+                                                importedByKey.TryGetValue((ssaId, yearId.Value, code), out var imported))
+                                                return imported.Score;
+                                        }
+
                                         var tri = slice
                                             .Where(s => NormalizeTrimester(s.Trimester) == code)
-                                            .Select(s => ((string?)s.Type, s.Score));
-                                        return OfficialTrimesterAverageCalculator.ComputeTrimesterAverage(tri);
+                                            .Select(s => (Type: (string?)s.Type, Score: s.Score))
+                                            .ToList();
+                                        return _officialGradeService.CalculateFromActivities(tri, col.AcademicYear, code, tri.Select(s => s.Type)).Score;
                                     }
 
                                     var t1 = ForTrimester("1T");
@@ -531,11 +584,25 @@ public class StudentBulletinService : IStudentBulletinService
             }
         }
 
+        var primary = ActiveStudentAssignmentHelper.GetPrimaryEnrollment(
+            assignments.Where(a => a.IsActive));
+        var pending = primary == null
+            ? new List<PendingPremediaSubjectDto>()
+            : await LoadPendingPremediaAsync(
+                student.Id,
+                primary.GradeId,
+                ParseGradeNumber(primary.Grade?.Name),
+                student.SchoolId.HasValue
+                    ? await _academicYearService.GetActiveAcademicYearAsync(student.SchoolId.Value)
+                    : null,
+                importedByKey);
+
         return new StudentProgramHistoryDto
         {
             StudentId = student.Id,
             StudentName = FormatName(student.Name, student.LastName),
-            Tracks = tracks
+            Tracks = tracks,
+            PendingPremedia = pending
         };
     }
 
@@ -550,7 +617,8 @@ public class StudentBulletinService : IStudentBulletinService
         string SubjectName,
         string AreaName,
         string SpecialtyName,
-        string? AcademicYearName);
+        string? AcademicYearName,
+        Guid? AcademicYearId);
 
     /// <summary>
     /// Un ciclo por track según estructura académica (catálogo de la especialidad),
@@ -598,6 +666,159 @@ public class StudentBulletinService : IStudentBulletinService
         if (combined.Any(CurriculumLoadLevel.IsMediaGrade))
             bands.Add((CurriculumLoadLevel.Media, CurriculumLoadLevel.ExpectedGrades(CurriculumLoadLevel.Media)));
         return bands;
+    }
+
+    private async Task<List<PendingPremediaSubjectDto>> LoadPendingPremediaAsync(
+        Guid studentId,
+        Guid primaryGradeId,
+        int primaryGradeNumber,
+        AcademicYear? activeYear,
+        IReadOnlyDictionary<(Guid StudentSubjectAssignmentId, Guid AcademicYearId, string TrimesterCode), ImportedOfficialGradeRow> importedByKey)
+    {
+        if (!CurriculumLoadLevel.IsMediaGrade(primaryGradeNumber))
+            return new List<PendingPremediaSubjectDto>();
+
+        var primaryRegularGradeIds = (await _context.StudentAssignments.AsNoTracking()
+            .Where(sa => sa.StudentId == studentId && sa.IsActive)
+            .Select(sa => new { sa.GradeId, sa.EnrollmentType })
+            .ToListAsync())
+            .Where(sa => EnrollmentTypeConstants.IsPrimaryLevel(sa.EnrollmentType))
+            .Select(sa => sa.GradeId)
+            .Distinct()
+            .ToList();
+
+        var enrollments = await _context.StudentSubjectAssignments.AsNoTracking()
+            .Where(ssa => ssa.StudentId == studentId && ssa.IsActive)
+            .Join(_context.SubjectAssignments.AsNoTracking(),
+                ssa => ssa.SubjectAssignmentId,
+                sa => sa.Id,
+                (ssa, sa) => new
+                {
+                    SsaId = ssa.Id,
+                    ssa.StudentAssignmentId,
+                    ssa.AcademicYearId,
+                    ssa.EnrollmentType,
+                    sa.SubjectId,
+                    sa.AreaId,
+                    sa.GradeLevelId,
+                    sa.GroupId,
+                    SubjectName = sa.Subject.Name,
+                    AreaName = sa.Area.Name,
+                    GradeName = sa.GradeLevel.Name
+                })
+            .ToListAsync();
+
+        var pending = enrollments
+            .Select(e => new
+            {
+                Row = e,
+                GradeNumber = ParseGradeNumber(e.GradeName)
+            })
+            .Where(x => BulletinPendingPremedia.IsPending(
+                primaryGradeNumber,
+                x.GradeNumber,
+                ssaIsActive: true,
+                x.Row.EnrollmentType,
+                primaryRegularGradeIds.Contains(x.Row.GradeLevelId)))
+            .Where(x => x.Row.GradeLevelId != primaryGradeId)
+            .GroupBy(x => new { x.Row.SubjectId, x.Row.GradeLevelId })
+            .Select(g => g.First())
+            .ToList();
+
+        if (pending.Count == 0)
+            return new List<PendingPremediaSubjectDto>();
+
+        var ssaIds = pending.Select(p => p.Row.SsaId).ToHashSet();
+        var assignmentIds = pending
+            .Where(p => p.Row.StudentAssignmentId.HasValue)
+            .Select(p => p.Row.StudentAssignmentId!.Value)
+            .ToHashSet();
+        var subjectIds = pending.Select(p => p.Row.SubjectId).Distinct().ToList();
+        var groupIds = pending.Select(p => p.Row.GroupId).Distinct().ToList();
+
+        var rawScores = await _context.StudentActivityScores.AsNoTracking()
+            .Where(s => s.StudentId == studentId)
+            .Where(s =>
+                (s.StudentSubjectAssignmentId.HasValue && ssaIds.Contains(s.StudentSubjectAssignmentId.Value))
+                || assignmentIds.Contains(s.StudentAssignmentId))
+            .Join(_context.Activities.AsNoTracking(),
+                score => score.ActivityId,
+                activity => activity.Id,
+                (score, activity) => new
+                {
+                    score.StudentSubjectAssignmentId,
+                    score.StudentAssignmentId,
+                    score.Score,
+                    activity.SubjectId,
+                    activity.Type,
+                    activity.Trimester
+                })
+            .ToListAsync();
+
+        var contextActivities = subjectIds.Count == 0
+            ? new List<(Guid? SubjectId, Guid? GroupId, string? Trimester, string? Type)>()
+            : (await _context.Activities.AsNoTracking()
+                .Where(a => a.SubjectId.HasValue && subjectIds.Contains(a.SubjectId.Value)
+                            && (a.GroupId == null || groupIds.Contains(a.GroupId.Value)))
+                .Select(a => new { a.SubjectId, a.GroupId, a.Trimester, a.Type })
+                .ToListAsync())
+                .Select(a => (SubjectId: (Guid?)a.SubjectId, GroupId: a.GroupId, Trimester: (string?)a.Trimester, Type: (string?)a.Type))
+                .ToList();
+
+        return pending
+            .OrderBy(p => p.GradeNumber)
+            .ThenBy(p => p.Row.SubjectName)
+            .Select(p =>
+            {
+                var subjectScores = rawScores
+                    .Where(s =>
+                        s.SubjectId == p.Row.SubjectId &&
+                        (
+                            (s.StudentSubjectAssignmentId.HasValue && s.StudentSubjectAssignmentId.Value == p.Row.SsaId)
+                            || (p.Row.StudentAssignmentId.HasValue && s.StudentAssignmentId == p.Row.StudentAssignmentId.Value)
+                        ))
+                    .ToList();
+
+                decimal? ForTrimester(string code)
+                {
+                    if (p.Row.AcademicYearId.HasValue &&
+                        importedByKey.TryGetValue((p.Row.SsaId, p.Row.AcademicYearId.Value, code), out var importedSsaYear))
+                        return importedSsaYear.Score;
+                    if (activeYear != null &&
+                        importedByKey.TryGetValue((p.Row.SsaId, activeYear.Id, code), out var importedActive))
+                        return importedActive.Score;
+
+                    var slice = subjectScores
+                        .Where(s => NormalizeTrimester(s.Trimester) == code)
+                        .Select(s => ((string?)s.Type, s.Score));
+                    var contextTypes = contextActivities
+                        .Where(a => a.SubjectId == p.Row.SubjectId
+                                    && NormalizeTrimester(a.Trimester) == code
+                                    && (a.GroupId == null || a.GroupId == p.Row.GroupId))
+                        .Select(a => a.Type);
+                    return _officialGradeService.CalculateFromActivities(slice, activeYear?.Name, code, contextTypes).Score;
+                }
+
+                var t1 = ForTrimester("1T");
+                var t2 = ForTrimester("2T");
+                var t3 = ForTrimester("3T");
+                return new PendingPremediaSubjectDto
+                {
+                    SubjectId = p.Row.SubjectId,
+                    SubjectName = string.IsNullOrWhiteSpace(p.Row.SubjectName) ? "—" : p.Row.SubjectName,
+                    Grade = string.IsNullOrWhiteSpace(p.Row.GradeName)
+                        ? CurriculumLoadLevel.FormatGradeLabel(p.GradeNumber)
+                        : p.Row.GradeName,
+                    GradeNumber = p.GradeNumber,
+                    GradeLevelId = p.Row.GradeLevelId,
+                    AreaName = string.IsNullOrWhiteSpace(p.Row.AreaName) ? "Sin área" : p.Row.AreaName,
+                    T1 = t1,
+                    T2 = t2,
+                    T3 = t3,
+                    FinalAverage = OfficialTrimesterAverageCalculator.ComputeFinalAverage(t1, t2, t3)
+                };
+            })
+            .ToList();
     }
 
     private static int ParseGradeNumber(string? name) =>

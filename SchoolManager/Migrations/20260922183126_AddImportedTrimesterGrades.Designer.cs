@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SchoolManager.Models;
@@ -11,9 +12,11 @@ using SchoolManager.Models;
 namespace SchoolManager.Migrations
 {
     [DbContext(typeof(SchoolDbContext))]
-    partial class SchoolDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922183126_AddImportedTrimesterGrades")]
+    partial class AddImportedTrimesterGrades
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -555,10 +558,6 @@ namespace SchoolManager.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid?>("AcademicYearId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("academic_year_id");
-
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -589,12 +588,6 @@ namespace SchoolManager.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("import_type");
 
-                    b.Property<int>("NewCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("new_count");
-
                     b.Property<int>("ProcessedRows")
                         .HasColumnType("integer")
                         .HasColumnName("processed_rows");
@@ -607,24 +600,10 @@ namespace SchoolManager.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("success_rows");
 
-                    b.Property<int>("UnchangedCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("unchanged_count");
-
-                    b.Property<int>("UpdateCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("update_count");
-
                     b.HasKey("Id")
                         .HasName("celosan_bulk_import_logs_pkey");
 
                     b.HasIndex("CreatedBy");
-
-                    b.HasIndex(new[] { "AcademicYearId" }, "ix_celosan_bulk_import_logs_academic_year_id");
 
                     b.HasIndex(new[] { "CreatedAt" }, "ix_celosan_bulk_import_logs_created_at");
 
@@ -5512,11 +5491,6 @@ namespace SchoolManager.Migrations
 
             modelBuilder.Entity("SchoolManager.Models.CelosanBulkImportLog", b =>
                 {
-                    b.HasOne("SchoolManager.Models.AcademicYear", "AcademicYear")
-                        .WithMany()
-                        .HasForeignKey("AcademicYearId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("SchoolManager.Models.User", "CreatedByUser")
                         .WithMany()
                         .HasForeignKey("CreatedBy")
@@ -5527,8 +5501,6 @@ namespace SchoolManager.Migrations
                         .HasForeignKey("SchoolId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("AcademicYear");
 
                     b.Navigation("CreatedByUser");
 

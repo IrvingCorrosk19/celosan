@@ -1,0 +1,64 @@
+@model SchoolManager.Dtos.GradeImportPageDto
+@{
+    ViewData["Title"] = "Importación de notas";
+    Layout = "_AdminLayout";
+}
+
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-2"><i class="fas fa-file-import"></i> Importación de notas</h2>
+            <p class="text-muted mb-0">Analice un Excel de notas trimestrales, revise el preview y confirme solo si no hay errores.</p>
+        </div>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger" role="alert">@TempData["Error"]</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.SchoolError))
+    {
+        <div class="alert alert-warning" role="alert">@Model.SchoolError</div>
+    }
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Analizar archivo</h5>
+        </div>
+        <div class="card-body">
+            <form asp-action="Analyze" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label" for="academicYearId"><strong>Año académico</strong></label>
+                        <select class="form-select" id="academicYearId" name="academicYearId" required
+                                @(string.IsNullOrWhiteSpace(Model.SchoolError) ? null : "disabled")>
+                            <option value="">-- Seleccione --</option>
+                            @foreach (var year in Model.Years)
+                            {
+                                <option value="@year.Id">@year.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-5 mb-3">
+                        <label class="form-label" for="file"><strong>Archivo Excel</strong></label>
+                        <input class="form-control" type="file" id="file" name="file" accept=".xlsx" required
+                               @(string.IsNullOrWhiteSpace(Model.SchoolError) ? null : "disabled") />
+                    </div>
+                    <div class="col-md-3 mb-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100"
+                                disabled="@(string.IsNullOrWhiteSpace(Model.SchoolError) ? null : "disabled")">
+                            Analizar archivo
+                        </button>
+                    </div>
+                </div>
+            </form>
+            <ul class="small text-muted mb-0">
+                <li>Solo archivos <strong>.xlsx</strong>. Tamaño máximo: <strong>10 MB</strong>.</li>
+                <li>Las notas no se guardarán hasta confirmar la importación.</li>
+                <li>El archivo será validado antes de realizar cambios.</li>
+                <li>Se usa la hoja <strong>Notas</strong> si existe; si no, la primera hoja con datos.</li>
+            </ul>
+        </div>
+    </div>
+</div>

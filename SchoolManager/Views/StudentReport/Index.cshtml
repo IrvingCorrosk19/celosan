@@ -721,6 +721,22 @@
                             </tr>
                         </tbody>
                     </table>
+                    <div id="bulletin-pending-premedia" class="mt-4" style="display: none;">
+                        <h6 class="fw-bold mb-2" style="color: #1e40af;">PREMEDIA — MATERIAS PENDIENTES</h6>
+                        <table class="table table-hover table-bordered align-middle" id="bulletin-pending-table">
+                            <thead style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white;">
+                                <tr>
+                                    <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Grado</th>
+                                    <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Asignatura</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T1</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T2</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T3</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Promedio Final</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulletin-pending-table-body"></tbody>
+                        </table>
+                    </div>
                     </div>
                     <div id="bulletin-history-view" style="display: none;">
                         <div id="bulletin-history-container">
@@ -1127,9 +1143,7 @@
                 const areas = data.areas || [];
                 if (areas.length === 0) {
                     tbody.append('<tr><td colspan="6" class="text-center text-muted">No hay asignaturas para mostrar en el boletín.</td></tr>');
-                    return;
-                }
-
+                } else {
                 areas.forEach(area => {
                     const subjects = area.subjects || [];
                     subjects.forEach((subject, index) => {
@@ -1148,6 +1162,35 @@
                         `);
                     });
                 });
+                }
+                renderPendingPremedia(data.pendingPremedia, '#bulletin-pending-premedia', '#bulletin-pending-table-body');
+            }
+
+            function renderPendingPremedia(pending, sectionSelector, bodySelector) {
+                const section = $(sectionSelector);
+                const body = $(bodySelector);
+                body.empty();
+                const rows = pending || [];
+                if (rows.length === 0) {
+                    section.hide();
+                    return;
+                }
+                rows.forEach(subject => {
+                    const finalClass = typeof subject.finalAverage === 'number'
+                        ? (subject.finalAverage >= 3.0 ? 'text-success' : 'text-danger')
+                        : 'text-muted';
+                    body.append(`
+                        <tr>
+                            <td class="fw-bold">${subject.grade || ''}</td>
+                            <td>${subject.subjectName || ''}</td>
+                            <td class="text-center">${formatBulletinScore(subject.t1)}</td>
+                            <td class="text-center">${formatBulletinScore(subject.t2)}</td>
+                            <td class="text-center">${formatBulletinScore(subject.t3)}</td>
+                            <td class="text-center fw-bold ${finalClass}">${formatBulletinScore(subject.finalAverage)}</td>
+                        </tr>
+                    `);
+                });
+                section.show();
             }
 
             let bulletinLoaded = false;
@@ -1212,7 +1255,7 @@
                         body = `<tr><td colspan="${colCount}" class="text-center text-muted">No hay asignaturas para este programa.</td></tr>`;
                     }
                     container.append(`
-                        <div class="mb-4">
+                        <div class="mb-4 bulletin-history-track">
                             <h6 class="fw-bold mb-2" style="color: #1e293b;">${track.programName || 'Programa'}</h6>
                             <table class="table table-hover table-bordered align-middle bulletin-history-table">
                                 <thead style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white;">
@@ -1230,6 +1273,25 @@
                         </div>
                     `);
                 });
+                container.append(`
+                    <div id="bulletin-history-pending-premedia" class="mt-4" style="display: none;">
+                        <h6 class="fw-bold mb-2" style="color: #1e40af;">PREMEDIA — MATERIAS PENDIENTES</h6>
+                        <table class="table table-hover table-bordered align-middle">
+                            <thead style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white;">
+                                <tr>
+                                    <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Grado</th>
+                                    <th style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Asignatura</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T1</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T2</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">T3</th>
+                                    <th class="text-center" style="font-weight: 600; font-size: 0.95rem; padding: 1rem; border-color: rgba(255,255,255,0.2);">Promedio Final</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulletin-history-pending-table-body"></tbody>
+                        </table>
+                    </div>
+                `);
+                renderPendingPremedia(data.pendingPremedia, '#bulletin-history-pending-premedia', '#bulletin-history-pending-table-body');
             }
 
             function loadBulletin() {

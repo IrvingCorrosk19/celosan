@@ -51,6 +51,10 @@ public partial class SchoolDbContext
             _tenantContext.BypassTenantFilter ||
             (s.SchoolId != null && s.SchoolId == _tenantContext.SchoolId));
 
+        modelBuilder.Entity<StudentImportedTrimesterGrade>().HasQueryFilter(g =>
+            _tenantContext.BypassTenantFilter ||
+            g.SchoolId == _tenantContext.SchoolId);
+
         modelBuilder.Entity<StudentSubjectAssignment>().HasQueryFilter(s =>
             _tenantContext.BypassTenantFilter ||
             (s.SchoolId != null && s.SchoolId == _tenantContext.SchoolId));
