@@ -5,6 +5,7 @@ WORKDIR /src
 # Copiar archivos de proyecto y restaurar dependencias
 COPY ["SchoolManager.sln", "./"]
 COPY ["SchoolManager/SchoolManager.csproj", "SchoolManager/"]
+COPY ["SchoolManager.Tests/SchoolManager.Tests.csproj", "SchoolManager.Tests/"]
 COPY ["SchoolManager/libman.json", "SchoolManager/"]
 RUN dotnet restore
 
