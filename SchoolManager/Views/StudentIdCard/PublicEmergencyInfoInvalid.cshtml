@@ -13,12 +13,39 @@
         .box { max-width: 360px; text-align: center; background: #fff; padding: 28px 22px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
         h1 { font-size: 1.1rem; margin: 0 0 10px; color: #b91c1c; }
         p { margin: 0; font-size: .9rem; line-height: 1.45; }
+        .celosan-cta { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+        .btn-celosan {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #0d6efd 50%, #0a58ca 100%);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            box-shadow: 0 4px 14px rgba(13, 110, 253, .35);
+        }
+        .btn-celosan:hover,
+        .btn-celosan:focus { color: #fff; filter: brightness(1.05); }
+        .btn-celosan__sub { display: block; margin-top: 8px; font-size: .72rem; font-weight: 500; color: #64748b; }
     </style>
 </head>
 <body>
     <div class="box">
         <h1>No se pudo mostrar la información</h1>
         <p>El código QR está dañado, expiró o no es válido. Solicite un carnet actualizado en su institución.</p>
+        <div class="celosan-cta">
+            <a class="btn-celosan" href="/" rel="noopener noreferrer">
+                <span aria-hidden="true">↗</span>
+                Ir a CELOSAN
+            </a>
+            <span class="btn-celosan__sub">Sistema de gestión educativa · CELOSAN</span>
+        </div>
     </div>
 </body>
 </html>
