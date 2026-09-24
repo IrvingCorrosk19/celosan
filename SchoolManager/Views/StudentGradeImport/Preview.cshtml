@@ -10,10 +10,19 @@
         <a class="btn btn-outline-secondary" asp-action="Index">Analizar otro archivo</a>
     </div>
 
-    @if (Model.ErrorCount > 0)
+    @{
+        var validCount = Model.NewCount + Model.UpdateCount + Model.UnchangedCount;
+    }
+    @if (validCount == 0)
     {
         <div class="alert alert-danger">
-            Debe corregir los errores antes de importar.
+            No hay filas válidas para importar. Corrija los errores y vuelva a analizar el archivo.
+        </div>
+    }
+    else if (Model.ErrorCount > 0)
+    {
+        <div class="alert alert-warning">
+            Se importarán solo las filas válidas. Las @Model.ErrorCount filas con error se omitirán y no se modificarán.
         </div>
     }
     else
@@ -79,7 +88,7 @@
                     "SIN CAMBIOS" => "bg-secondary",
                     _ => "bg-danger"
                 };
-                <tr data-status="@op.Status">
+                <tr data-status="@op.Status" data-error-code="@op.ErrorCode">
                     <td><span class="badge @badge">@op.Status</span></td>
                     <td>@op.RowNumber</td>
                     <td>@op.DocumentId</td>
@@ -91,7 +100,21 @@
                     <td>@op.CurrentOrigin</td>
                     <td>@(string.IsNullOrWhiteSpace(op.CurrentDisplay) ? "—" : op.CurrentDisplay)</td>
                     <td>@(string.IsNullOrWhiteSpace(op.NewDisplay) ? "—" : op.NewDisplay)</td>
-                    <td>@op.Message</td>
+                    <td>
+                        @op.Message
+                        @if (!string.IsNullOrWhiteSpace(op.ReviewHint))
+                        {
+                            <div class="small text-muted">@op.ReviewHint</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(op.FoundValue) && op.Status == "ERROR")
+                        {
+                            <div class="small text-muted">Encontrado: @op.FoundValue</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(op.ErrorCode))
+                        {
+                            <div class="small text-muted">@op.ErrorCode</div>
+                        }
+                    </td>
                 </tr>
             }
             </tbody>
@@ -101,9 +124,15 @@
     <div class="card mt-3">
         <div class="card-body d-flex justify-content-between align-items-center">
             <div>
-                @if (Model.ErrorCount > 0)
+                @if (validCount == 0)
                 {
-                    <span class="text-danger">Debe corregir los errores antes de importar.</span>
+                    <span class="text-danger">No hay filas válidas para importar.</span>
+                }
+                else if (Model.ErrorCount > 0)
+                {
+                    <span class="text-muted">
+                        Se guardarán @Model.NewCount nuevas y @Model.UpdateCount actualizaciones. Se omitirán @Model.ErrorCount filas con error.
+                    </span>
                 }
                 else
                 {
@@ -116,7 +145,7 @@
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="previewToken" value="@Model.PreviewToken" />
                 <button type="submit" class="btn btn-primary" id="confirm-import-btn"
-                        disabled="@(Model.ErrorCount > 0 ? "disabled" : null)">
+                        disabled="@(validCount == 0 ? "disabled" : null)">
                     Confirmar importación
                 </button>
             </form>
@@ -141,7 +170,7 @@
         var confirmBtn = document.getElementById('confirm-import-btn');
         if (form && confirmBtn && !confirmBtn.disabled) {
             form.addEventListener('submit', function (e) {
-                var message = 'Se importarán @Model.NewCount notas nuevas y se actualizarán @Model.UpdateCount notas existentes. Esta acción modificará las notas oficiales de los estudiantes.';
+                var message = 'Se importarán @Model.NewCount notas nuevas y se actualizarán @Model.UpdateCount. Las @Model.ErrorCount filas con error se omitirán y no se modificarán.';
                 if (!confirm(message)) {
                     e.preventDefault();
                     return;

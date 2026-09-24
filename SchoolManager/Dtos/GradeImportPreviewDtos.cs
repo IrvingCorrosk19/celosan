@@ -53,6 +53,10 @@ public class GradeImportOperationDto
 {
     public string Status { get; set; } = GradeImportStatus.Error;
     public string Message { get; set; } = string.Empty;
+    public string? ErrorCode { get; set; }
+    public string? ExcelValue { get; set; }
+    public string? FoundValue { get; set; }
+    public string? ReviewHint { get; set; }
     public int RowNumber { get; set; }
     public string DocumentId { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
@@ -123,6 +127,8 @@ public class GradeImportConfirmSummaryDto
     public int UpdateCount { get; set; }
     public int UnchangedCount { get; set; }
     public int ErrorCount { get; set; }
+    public int OmittedCount { get; set; }
+    public List<GradeImportOperationDto> OmittedOperations { get; set; } = new();
     public DateTime CompletedAt { get; set; }
     public string UserName { get; set; } = string.Empty;
 }
@@ -130,6 +136,6 @@ public class GradeImportConfirmSummaryDto
 public static class GradeImportConfirmMessages
 {
     public const string TokenInvalid = "El análisis expiró o ya no es válido. Vuelva a analizar el archivo.";
-    public const string PreviewHasErrors = "La importación contiene errores. Corrija el archivo y vuelva a analizarlo.";
+    public const string PreviewHasErrors = "No hay filas válidas para importar. Corrija el archivo y vuelva a analizarlo.";
     public const string AcademicChanged = "La información académica cambió durante la importación. Vuelva a analizar el archivo.";
 }

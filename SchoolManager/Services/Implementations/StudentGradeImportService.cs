@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using SchoolManager.Dtos;
 using SchoolManager.Helpers;
 using SchoolManager.Models;
@@ -26,17 +27,20 @@ public class StudentGradeImportService : IStudentGradeImportService
     private readonly IAcademicYearService _academicYearService;
     private readonly IOfficialGradeService _officialGradeService;
     private readonly IMemoryCache _cache;
+    private readonly ILogger<StudentGradeImportService> _logger;
 
     public StudentGradeImportService(
         SchoolDbContext context,
         IAcademicYearService academicYearService,
         IOfficialGradeService officialGradeService,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        ILogger<StudentGradeImportService> logger)
     {
         _context = context;
         _academicYearService = academicYearService;
         _officialGradeService = officialGradeService;
         _cache = cache;
+        _logger = logger;
     }
 
     public async Task<GradeImportPageDto> GetPageAsync(Guid? schoolId)
@@ -98,7 +102,7 @@ public class StudentGradeImportService : IStudentGradeImportService
         var year = (await _academicYearService.GetAllBySchoolAsync(schoolId))
             .FirstOrDefault(y => y.Id == academicYearId);
         if (year == null)
-            return FileError("El año académico no pertenece a la escuela autorizada.");
+            return FileError(GradeImportErrorFactory.AcademicYearInvalid("seleccionado").Message);
 
         GradeImportParseResult parsed;
         try
@@ -119,7 +123,20 @@ public class StudentGradeImportService : IStudentGradeImportService
         var operations = new List<GradeImportResolvedOperation>();
 
         foreach (var row in parsed.Rows)
-            operations.AddRange(await BuildRowOperationsAsync(row, schoolId, year, context));
+        {
+            try
+            {
+                operations.AddRange(await BuildRowOperationsAsync(row, schoolId, year, context));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Grade import UNKNOWN_VALIDATION_ERROR. File={File} Row={Row} Document={Document}",
+                    file.FileName, row.RowNumber, row.DocumentId);
+                operations.Add(ErrorOp(row, $"{row.FirstName} {row.LastName}".Trim(), string.Empty, null,
+                    GradeImportErrorFactory.Unknown()));
+            }
+        }
 
         MarkFileDuplicates(operations);
 
@@ -183,8 +200,7 @@ public class StudentGradeImportService : IStudentGradeImportService
         if (entry.UserId != userId || entry.SchoolId != schoolId)
             return TokenFail();
 
-        if (entry.Preview.ErrorCount > 0 ||
-            entry.ResolvedOperations.Any(o => o.Display.Status == GradeImportStatus.Error))
+        if (!entry.ResolvedOperations.Any(o => GradeImportPersistSelector.IsPersistableStatus(o.Display.Status)))
         {
             return new GradeImportConfirmResult
             {
@@ -218,23 +234,17 @@ public class StudentGradeImportService : IStudentGradeImportService
             return RevalidationFail();
         }
 
-        if (revalidated.Count == 0 ||
-            revalidated.Any(o => o.Display.Status == GradeImportStatus.Error) ||
-            revalidated.Any(o =>
-                !o.StudentId.HasValue ||
-                !o.StudentAssignmentId.HasValue ||
-                !o.StudentSubjectAssignmentId.HasValue ||
-                !o.AcademicYearId.HasValue ||
-                !o.TrimesterId.HasValue ||
-                !IsPersistableMark(o.NewScore, o.NewStatus) ||
-                o.AcademicYearId != year.Id))
-        {
+        if (revalidated.Count == 0)
             return RevalidationFail();
-        }
 
-        var newCount = revalidated.Count(o => o.Display.Status == GradeImportStatus.Nuevo);
-        var updateCount = revalidated.Count(o => o.Display.Status == GradeImportStatus.Actualizar);
-        var unchangedCount = revalidated.Count(o => o.Display.Status == GradeImportStatus.SinCambios);
+        var split = GradeImportPersistSelector.Partition(revalidated, op => CanPersist(op, year.Id));
+        var persistable = split.Persistable;
+        var omitted = split.Omitted;
+
+        var newCount = persistable.Count(o => o.Display.Status == GradeImportStatus.Nuevo);
+        var updateCount = persistable.Count(o => o.Display.Status == GradeImportStatus.Actualizar);
+        var unchangedCount = persistable.Count(o => o.Display.Status == GradeImportStatus.SinCambios);
+        var omittedCount = omitted.Count;
         var now = DateTime.UtcNow;
         var batchId = Guid.NewGuid();
         var displayName = string.IsNullOrWhiteSpace(userName) ? userId.ToString() : userName.Trim();
@@ -248,10 +258,12 @@ public class StudentGradeImportService : IStudentGradeImportService
                 SchoolId = schoolId,
                 ImportType = ImportType,
                 FileName = entry.FileName,
-                ProcessedRows = revalidated.Count,
+                ProcessedRows = persistable.Count,
                 SuccessRows = newCount + updateCount,
-                ErrorRows = 0,
-                ErrorSummary = "Completed",
+                ErrorRows = omittedCount,
+                ErrorSummary = omittedCount == 0
+                    ? "Completed"
+                    : $"Partial: omitted {omittedCount}",
                 CreatedAt = now,
                 CreatedBy = userId,
                 AcademicYearId = year.Id,
@@ -261,7 +273,7 @@ public class StudentGradeImportService : IStudentGradeImportService
             };
             _context.CelosanBulkImportLogs.Add(batch);
 
-            foreach (var op in revalidated.Where(o => o.Display.Status == GradeImportStatus.Nuevo))
+            foreach (var op in persistable.Where(o => o.Display.Status == GradeImportStatus.Nuevo))
             {
                 _context.StudentImportedTrimesterGrades.Add(new StudentImportedTrimesterGrade
                 {
@@ -283,7 +295,7 @@ public class StudentGradeImportService : IStudentGradeImportService
                     CreatedAuditAction, schoolId, userId, displayName, userRole, batchId, op, null, null, op.NewScore, op.NewStatus));
             }
 
-            foreach (var op in revalidated.Where(o => o.Display.Status == GradeImportStatus.Actualizar))
+            foreach (var op in persistable.Where(o => o.Display.Status == GradeImportStatus.Actualizar))
             {
                 var existing = await _context.StudentImportedTrimesterGrades
                     .FirstOrDefaultAsync(g =>
@@ -316,7 +328,7 @@ public class StudentGradeImportService : IStudentGradeImportService
                 UserRole = userRole,
                 Action = BatchAuditAction,
                 Resource = "CelosanBulkImportLog",
-                Details = $"Batch={batchId}; File={entry.FileName}; Year={year.Name}; New={newCount}; Update={updateCount}; Unchanged={unchangedCount}; Errors=0",
+                Details = $"Batch={batchId}; File={entry.FileName}; Year={year.Name}; New={newCount}; Update={updateCount}; Unchanged={unchangedCount}; Omitted={omittedCount}",
                 Timestamp = now
             });
 
@@ -351,11 +363,13 @@ public class StudentGradeImportService : IStudentGradeImportService
                 ImportBatchId = batchId,
                 FileName = entry.FileName,
                 AcademicYearName = year.Name,
-                Processed = revalidated.Count,
+                Processed = persistable.Count,
                 NewCount = newCount,
                 UpdateCount = updateCount,
                 UnchangedCount = unchangedCount,
-                ErrorCount = 0,
+                ErrorCount = omittedCount,
+                OmittedCount = omittedCount,
+                OmittedOperations = omitted.Select(o => o.Display).ToList(),
                 CompletedAt = now,
                 UserName = displayName
             }
@@ -417,7 +431,7 @@ public class StudentGradeImportService : IStudentGradeImportService
         {
             return new List<GradeImportResolvedOperation>
             {
-                ErrorOp(row, displayName, string.Empty, null, "La fila no tiene notas trimestrales para importar.")
+                ErrorOp(row, displayName, string.Empty, null, GradeImportErrorFactory.InvalidScore(string.Empty))
             };
         }
 
@@ -430,7 +444,7 @@ public class StudentGradeImportService : IStudentGradeImportService
             return operations;
         }
 
-        var enrollment = await ResolveEnrollmentAsync(identity.Student!, row, year.Id, ctx);
+        var enrollment = await ResolveEnrollmentAsync(identity.Student!, row, year, ctx);
         if (enrollment.Error != null)
         {
             foreach (var score in scores)
@@ -438,7 +452,7 @@ public class StudentGradeImportService : IStudentGradeImportService
             return operations;
         }
 
-        var subject = await ResolveSubjectAsync(identity.Student!.Id, enrollment.Assignment!.Id, row.SubjectName);
+        var subject = await ResolveSubjectAsync(identity.Student!.Id, enrollment.Assignment!, row);
         if (subject.Error != null)
         {
             foreach (var score in scores)
@@ -456,17 +470,10 @@ public class StudentGradeImportService : IStudentGradeImportService
                 .Select(t => (Guid?)t.Id)
                 .Distinct()
                 .ToList();
-            if (tri.Count == 0)
+            if (tri.Count == 0 || tri.Count > 1)
             {
                 operations.Add(ErrorOp(row, identity.StudentName, score.TrimesterCode, score.Score,
-                    "No se encontró el trimestre " + score.TrimesterCode + " en la escuela.",
-                    score.RawValue, identity.Student.Id, enrollment.Assignment.Id, subject.SsaId));
-                continue;
-            }
-            if (tri.Count > 1)
-            {
-                operations.Add(ErrorOp(row, identity.StudentName, score.TrimesterCode, score.Score,
-                    "El trimestre " + score.TrimesterCode + " es ambiguo en la escuela.",
+                    GradeImportErrorFactory.InvalidTrimester(score.TrimesterCode),
                     score.RawValue, identity.Student.Id, enrollment.Assignment.Id, subject.SsaId));
                 continue;
             }
@@ -474,7 +481,7 @@ public class StudentGradeImportService : IStudentGradeImportService
             if (score.HasFormulaWithoutValue || score.ScoreError != null)
             {
                 operations.Add(ErrorOp(row, identity.StudentName, score.TrimesterCode, null,
-                    score.ScoreError ?? "La nota no es válida.",
+                    GradeImportErrorFactory.InvalidScore(score.RawValue, score.ScoreError),
                     score.RawValue, identity.Student.Id, enrollment.Assignment.Id, subject.SsaId, year.Id, tri[0]));
                 continue;
             }
@@ -482,7 +489,7 @@ public class StudentGradeImportService : IStudentGradeImportService
             if (!IsPersistableMark(score.Score, score.Status))
             {
                 operations.Add(ErrorOp(row, identity.StudentName, score.TrimesterCode, null,
-                    "La nota no es válida.",
+                    GradeImportErrorFactory.InvalidScore(score.RawValue),
                     score.RawValue, identity.Student.Id, enrollment.Assignment.Id, subject.SsaId, year.Id, tri[0]));
                 continue;
             }
@@ -565,23 +572,21 @@ public class StudentGradeImportService : IStudentGradeImportService
         if (operations.Count == 0)
         {
             operations.Add(ErrorOp(row, identity.StudentName, string.Empty, null,
-                "La fila no tiene notas trimestrales para importar.",
+                GradeImportErrorFactory.InvalidScore(string.Empty),
                 null, identity.Student.Id, enrollment.Assignment.Id, subject.SsaId));
         }
 
         return operations;
     }
 
-    private async Task<(User? Student, string StudentName, string? Error)> ResolveIdentityAsync(
+    private async Task<(User? Student, string StudentName, GradeImportValidationError? Error)> ResolveIdentityAsync(
         GradeImportParsedRow row,
         Guid schoolId)
     {
         var document = row.DocumentId.Trim();
         var email = row.Email.Trim();
-        if (string.IsNullOrWhiteSpace(document))
-            return (null, DisplayName(row), "Documento vacío.");
-        if (string.IsNullOrWhiteSpace(email))
-            return (null, DisplayName(row), "Email vacío.");
+        if (string.IsNullOrWhiteSpace(document) || string.IsNullOrWhiteSpace(email))
+            return (null, DisplayName(row), GradeImportErrorFactory.StudentNotFound(document, email));
 
         var byDocument = await _context.Users.AsNoTracking()
             .Where(u => u.SchoolId == schoolId && u.DocumentId != null && u.DocumentId.Trim() == document)
@@ -594,121 +599,144 @@ public class StudentGradeImportService : IStudentGradeImportService
             .ToListAsync();
 
         if (byDocument.Count == 0 && byEmail.Count == 0)
-            return (null, DisplayName(row), "No se encontró estudiante con ese documento ni email en esta escuela.");
+            return (null, DisplayName(row), GradeImportErrorFactory.StudentNotFound(document, email));
         if (byDocument.Count == 0 && byEmail.Count > 0)
-            return (null, DisplayName(row), "El email existe, pero el documento no corresponde a ese estudiante.");
-        if (byDocument.Count > 1)
-            return (null, DisplayName(row), "El documento es ambiguo dentro de la escuela.");
-        if (byEmail.Count > 1)
-            return (null, DisplayName(row), "El email es ambiguo dentro de la escuela.");
+            return (null, DisplayName(row), GradeImportErrorFactory.StudentIdEmailMismatch(
+                document, email, "El email existe, pero el documento no corresponde a ese estudiante."));
+        if (byDocument.Count > 1 || byEmail.Count > 1)
+            return (null, DisplayName(row), GradeImportErrorFactory.StudentIdEmailMismatch(
+                document, email, "El documento o el email son ambiguos dentro de la escuela."));
 
         var docUser = byDocument[0];
         if (byEmail.Count == 1 && byEmail[0].Id != docUser.Id)
-            return (null, DisplayName(row), "ERROR CRÍTICO: el documento y el email corresponden a personas diferentes.");
+            return (null, DisplayName(row), GradeImportErrorFactory.StudentIdEmailMismatch(
+                document, email, "El documento y el email corresponden a estudiantes distintos."));
         if (!string.Equals(docUser.Email?.Trim(), email, StringComparison.OrdinalIgnoreCase))
-            return (null, DisplayName(row), "El documento existe, pero el email no coincide.");
+            return (null, DisplayName(row), GradeImportErrorFactory.StudentIdEmailMismatch(
+                document, email, "El documento existe, pero el email no coincide."));
 
         var user = await _context.Users.AsNoTracking().FirstAsync(u => u.Id == docUser.Id);
         return (user, $"{user.Name} {user.LastName}".Trim(), null);
     }
 
-    private async Task<(StudentAssignment? Assignment, string? Error)> ResolveEnrollmentAsync(
+    private async Task<(StudentAssignment? Assignment, GradeImportValidationError? Error)> ResolveEnrollmentAsync(
         User student,
         GradeImportParsedRow row,
-        Guid yearId,
+        AcademicYear year,
         SchoolImportContext ctx)
     {
+        var gradeRaw = row.GradeRaw.Trim();
+        var groupRaw = row.GroupRaw.Trim();
+        var shiftRaw = row.ShiftRaw.Trim();
+        var yearName = year.Name;
+
         var gradeNumber = StudentGradeImportExcelParser.NormalizeGradeNumber(row.GradeRaw);
         if (!gradeNumber.HasValue)
-            return (null, "El nivel/grado del Excel no es válido.");
+            return (null, GradeImportErrorFactory.GradeNotFound(gradeRaw));
 
         var gradeIds = ctx.Grades.Where(g => g.Number == gradeNumber.Value).Select(g => g.Id).Distinct().ToList();
-        if (gradeIds.Count == 0)
-            return (null, "El nivel/grado no existe en la escuela.");
-        if (gradeIds.Count > 1)
-            return (null, "El nivel/grado es ambiguo en la escuela.");
+        if (gradeIds.Count == 0 || gradeIds.Count > 1)
+            return (null, GradeImportErrorFactory.GradeNotFound(gradeRaw));
 
         var groupKey = StudentGradeImportExcelParser.NormalizeKey(row.GroupRaw);
         if (string.IsNullOrWhiteSpace(groupKey))
-            return (null, "El grupo está vacío.");
+            return (null, GradeImportErrorFactory.GroupNotFound(groupRaw, gradeRaw));
         var groupIds = ctx.Groups
             .Where(g => StudentGradeImportExcelParser.NormalizeKey(g.Name) == groupKey)
             .Select(g => g.Id)
             .Distinct()
             .ToList();
-        if (groupIds.Count == 0)
-            return (null, "El grupo no existe en la escuela.");
-        if (groupIds.Count > 1)
-            return (null, "El grupo es ambiguo en la escuela.");
+        if (groupIds.Count == 0 || groupIds.Count > 1)
+            return (null, GradeImportErrorFactory.GroupNotFound(groupRaw, gradeRaw));
 
         var shiftKey = StudentGradeImportExcelParser.NormalizeKey(row.ShiftRaw);
         if (string.IsNullOrWhiteSpace(shiftKey))
-            return (null, "La jornada está vacía.");
+            return (null, GradeImportErrorFactory.ShiftNotFound(shiftRaw));
         var shiftIds = ctx.Shifts
             .Where(s => StudentGradeImportExcelParser.NormalizeKey(s.Name) == shiftKey)
             .Select(s => s.Id)
             .Distinct()
             .ToList();
-        if (shiftIds.Count == 0)
-            return (null, "La jornada no existe en la escuela.");
-        if (shiftIds.Count > 1)
-            return (null, "La jornada es ambigua en la escuela.");
+        if (shiftIds.Count == 0 || shiftIds.Count > 1)
+            return (null, GradeImportErrorFactory.ShiftNotFound(shiftRaw));
 
         var matches = await _context.StudentAssignments.AsNoTracking()
             .Where(sa =>
                 sa.StudentId == student.Id &&
-                sa.AcademicYearId == yearId &&
+                sa.AcademicYearId == year.Id &&
                 sa.GradeId == gradeIds[0] &&
                 sa.GroupId == groupIds[0])
             .ToListAsync();
 
-        if (matches.Count == 0)
-            return (null, "No hay una matrícula válida para ese año, grado, grupo y jornada.");
-
         var withShift = matches.Where(sa => sa.ShiftId == shiftIds[0]).ToList();
-        if (withShift.Count == 1)
-            return (withShift[0], null);
-        if (withShift.Count > 1)
-            return (null, "Hay más de una matrícula válida para ese año, grado, grupo y jornada.");
+        List<StudentAssignment> candidates;
+        if (withShift.Count > 0)
+        {
+            candidates = withShift;
+        }
+        else if (matches.Count == 1 && matches[0].ShiftId == null)
+        {
+            candidates = matches;
+        }
+        else if (matches.Count == 0)
+        {
+            return (null, GradeImportErrorFactory.EnrollmentNotFound(yearName, gradeRaw, groupRaw, shiftRaw, string.Empty));
+        }
+        else
+        {
+            return (null, GradeImportErrorFactory.EnrollmentNotFound(
+                yearName, gradeRaw, groupRaw, shiftRaw,
+                "Hay matrícula en ese grado y grupo, pero en otra jornada."));
+        }
 
-        var withoutShift = matches.Where(sa => sa.ShiftId == null).ToList();
-        if (matches.Count == 1 && withoutShift.Count == 1)
-            return (withoutShift[0], null);
+        var selected = GradeImportHistoryResolver.SelectEnrollment(
+            candidates,
+            sa => sa.IsActive,
+            sa => sa.EndDate);
+        if (selected.ErrorCode == GradeImportErrorCodes.EnrollmentAmbiguous)
+            return (null, GradeImportErrorFactory.EnrollmentAmbiguous(
+                candidates.Count, yearName, gradeRaw, groupRaw, shiftRaw));
+        if (selected.ErrorCode != null)
+            return (null, GradeImportErrorFactory.EnrollmentNotFound(yearName, gradeRaw, groupRaw, shiftRaw, string.Empty));
 
-        return (null, "El estudiante está matriculado en otra jornada o la matrícula no tiene jornada resoluble.");
+        return (selected.Selected, null);
     }
 
-    private async Task<(Guid? SsaId, string? Error)> ResolveSubjectAsync(
+    private async Task<(Guid? SsaId, GradeImportValidationError? Error)> ResolveSubjectAsync(
         Guid studentId,
-        Guid assignmentId,
-        string subjectName)
+        StudentAssignment assignment,
+        GradeImportParsedRow row)
     {
+        var subjectName = row.SubjectName.Trim();
         var key = StudentGradeImportExcelParser.NormalizeKey(subjectName);
         if (string.IsNullOrWhiteSpace(key))
-            return (null, "La asignatura está vacía.");
+            return (null, GradeImportErrorFactory.SubjectNotFound(subjectName));
 
         var enrolled = await (
             from ssa in _context.StudentSubjectAssignments.AsNoTracking()
             join sa in _context.SubjectAssignments.AsNoTracking() on ssa.SubjectAssignmentId equals sa.Id
             join sub in _context.Subjects.AsNoTracking() on sa.SubjectId equals sub.Id
             where ssa.StudentId == studentId
-                  && ssa.StudentAssignmentId == assignmentId
-                  && ssa.IsActive
-            select new { ssa.Id, SubjectName = sub.Name }
+                  && ssa.StudentAssignmentId == assignment.Id
+            select new { ssa.Id, SubjectName = sub.Name, ssa.IsActive }
         ).ToListAsync();
 
-        var hits = enrolled
+        var named = enrolled
             .Where(e => StudentGradeImportExcelParser.NormalizeKey(e.SubjectName) == key)
-            .Select(e => e.Id)
-            .Distinct()
             .ToList();
 
-        if (hits.Count == 0)
-            return (null, "El estudiante no tiene una inscripción activa en esa asignatura.");
-        if (hits.Count > 1)
-            return (null, "ASIGNATURA AMBIGUA. El estudiante tiene más de una inscripción activa con ese nombre.");
+        var selected = GradeImportHistoryResolver.SelectSubject(
+            named,
+            assignment.IsActive,
+            e => e.IsActive);
+        if (selected.ErrorCode == GradeImportErrorCodes.SsaInactive)
+            return (null, GradeImportErrorFactory.SsaInactive(subjectName));
+        if (selected.ErrorCode == GradeImportErrorCodes.SubjectAmbiguous)
+            return (null, GradeImportErrorFactory.SubjectAmbiguous(subjectName));
+        if (selected.ErrorCode != null)
+            return (null, GradeImportErrorFactory.SsaNotFound(subjectName, row.GradeRaw, row.GroupRaw));
 
-        return (hits[0], null);
+        return (selected.Selected!.Id, null);
     }
 
     private static void MarkFileDuplicates(List<GradeImportResolvedOperation> operations)
@@ -723,8 +751,8 @@ public class StudentGradeImportService : IStudentGradeImportService
                 continue;
             foreach (var op in group)
             {
-                op.Display.Status = GradeImportStatus.Error;
-                op.Display.Message = "Nota duplicada para estudiante/asignatura/trimestre dentro del archivo.";
+                ApplyError(op.Display, GradeImportErrorFactory.DuplicateExcelRow(
+                    op.Display.SubjectName, op.Display.Trimester));
             }
         }
     }
@@ -734,7 +762,7 @@ public class StudentGradeImportService : IStudentGradeImportService
         string studentName,
         string trimester,
         decimal? newScore,
-        string message,
+        GradeImportValidationError error,
         string? rawValue = null,
         Guid? studentId = null,
         Guid? assignmentId = null,
@@ -743,10 +771,7 @@ public class StudentGradeImportService : IStudentGradeImportService
         Guid? trimesterId = null)
     {
         var display = BaseDisplay(row, studentName, trimester, newScore);
-        display.Status = GradeImportStatus.Error;
-        display.Message = message;
-        if (!string.IsNullOrWhiteSpace(rawValue) && !newScore.HasValue)
-            display.Message = message;
+        ApplyError(display, error);
         return new GradeImportResolvedOperation
         {
             StudentId = studentId,
@@ -757,6 +782,16 @@ public class StudentGradeImportService : IStudentGradeImportService
             NewScore = newScore,
             Display = display
         };
+    }
+
+    private static void ApplyError(GradeImportOperationDto display, GradeImportValidationError error)
+    {
+        display.Status = GradeImportStatus.Error;
+        display.Message = error.Message;
+        display.ErrorCode = error.Code;
+        display.ExcelValue = error.ExcelValue;
+        display.FoundValue = error.Found;
+        display.ReviewHint = error.Review;
     }
 
     private static GradeImportOperationDto BaseDisplay(
@@ -852,8 +887,7 @@ public class StudentGradeImportService : IStudentGradeImportService
                 StudentGradeImportExcelParser.NormalizeTrimester(current.Display.Trimester));
             if (previous == null)
             {
-                current.Display.Status = GradeImportStatus.Error;
-                current.Display.Message = GradeImportConfirmMessages.AcademicChanged;
+                ApplyError(current.Display, GradeImportErrorFactory.ImportConflict());
                 continue;
             }
 
@@ -863,10 +897,23 @@ public class StudentGradeImportService : IStudentGradeImportService
                 previous.AcademicYearId.HasValue && current.AcademicYearId != previous.AcademicYearId ||
                 previous.TrimesterId.HasValue && current.TrimesterId != previous.TrimesterId)
             {
-                current.Display.Status = GradeImportStatus.Error;
-                current.Display.Message = GradeImportConfirmMessages.AcademicChanged;
+                ApplyError(current.Display, GradeImportErrorFactory.ImportConflict());
             }
         }
+    }
+
+    private static bool CanPersist(GradeImportResolvedOperation op, Guid yearId)
+    {
+        if (!GradeImportPersistSelector.IsPersistableStatus(op.Display.Status))
+            return false;
+        if (!op.StudentId.HasValue ||
+            !op.StudentAssignmentId.HasValue ||
+            !op.StudentSubjectAssignmentId.HasValue ||
+            !op.AcademicYearId.HasValue ||
+            !op.TrimesterId.HasValue ||
+            op.AcademicYearId != yearId)
+            return false;
+        return op.Display.Status == GradeImportStatus.SinCambios || IsPersistableMark(op.NewScore, op.NewStatus);
     }
 
     private static bool IsPersistableMark(decimal? score, string? status)
