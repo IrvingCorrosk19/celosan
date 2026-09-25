@@ -359,7 +359,7 @@ public class ModularEnrollmentService : IModularEnrollmentService
             return new ModularSubjectEnrollmentResult(false, false, "No hay malla modular activa para esta materia; usar flujo legacy.", null);
 
         if (!request.TrimesterId.HasValue || request.TrimesterId.Value == Guid.Empty)
-            return new ModularSubjectEnrollmentResult(true, false, "Debe seleccionar un trimestre para la matricula modular.", null);
+            return new ModularSubjectEnrollmentResult(false, false, "No hay trimestre; usar flujo anual legacy.", null);
 
         var trimester = await _context.Trimesters.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == request.TrimesterId.Value && t.SchoolId == student.SchoolId);
