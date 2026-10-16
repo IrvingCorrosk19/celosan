@@ -4,23 +4,31 @@ using Microsoft.Extensions.Configuration;
 namespace SchoolManager.Infrastructure;
 
 /// <summary>
-/// Resuelve la cadena Npgsql: appsettings, variable ConnectionStrings__DefaultConnection o DATABASE_URL (Render).
+/// Resuelve la cadena Npgsql desde appsettings o variables de entorno de Render:
+/// ConnectionStrings__DefaultConnection o DATABASE_URL.
 /// </summary>
 public static class PostgresConnectionResolver
 {
     public static string? Resolve(IConfiguration configuration)
     {
-        var fromConfig = configuration.GetConnectionString("DefaultConnection");
-        if (!string.IsNullOrWhiteSpace(fromConfig))
-            return fromConfig;
+        var candidates = new[]
+        {
+            configuration.GetConnectionString("DefaultConnection"),
+            configuration["ConnectionStrings:DefaultConnection"],
+            configuration["ConnectionStrings__DefaultConnection"],
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"),
+            configuration["DATABASE_URL"],
+            Environment.GetEnvironmentVariable("DATABASE_URL"),
+            configuration["POSTGRES_URL"],
+            Environment.GetEnvironmentVariable("POSTGRES_URL")
+        };
 
-        var fromEnv = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
-        if (!string.IsNullOrWhiteSpace(fromEnv))
-            return fromEnv;
-
-        var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
-        if (!string.IsNullOrWhiteSpace(databaseUrl))
-            return ConvertDatabaseUrlToNpgsql(databaseUrl);
+        foreach (var candidate in candidates)
+        {
+            var normalized = Normalize(candidate);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                return normalized;
+        }
 
         return null;
     }
@@ -92,6 +100,19 @@ public static class PostgresConnectionResolver
         }
 
         throw new InvalidOperationException("No se encontró appsettings.json para DefaultConnection.");
+    }
+
+    public static string? Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+            return ConvertDatabaseUrlToNpgsql(trimmed);
+
+        return trimmed;
     }
 
     public static string ConvertDatabaseUrlToNpgsql(string databaseUrl)
