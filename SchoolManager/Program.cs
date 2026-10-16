@@ -183,11 +183,11 @@ builder.Services.AddAntiforgery(options =>
     options.HeaderName = "RequestVerificationToken";
 });
 
-// Conexión a PostgreSQL: appsettings vacío en el repo; Render debe inyectar
-// ConnectionStrings__DefaultConnection o DATABASE_URL. No se leen secretos del código.
+// Conexión a PostgreSQL: DefaultConnection está vacío a propósito.
+// No se usa localhost embebido ni DATABASE_URL de Render.
 var npgsqlConnectionString = PostgresConnectionResolver.Resolve(builder.Configuration)
     ?? throw new InvalidOperationException(
-        "Falta cadena de base de datos. En Render defina ConnectionStrings__DefaultConnection o DATABASE_URL. Localmente puede usar ConnectionStrings:DefaultConnection.");
+        "Falta cadena de base de datos. ConnectionStrings:DefaultConnection está vacío y las variables de Render están desactivadas.");
 builder.Services.AddDbContext<SchoolDbContext>(options =>
 {
     options.UseNpgsql(npgsqlConnectionString);

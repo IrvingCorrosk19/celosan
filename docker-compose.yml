@@ -8,7 +8,8 @@ services:
     environment:
       POSTGRES_DB: schoolmanagement_5uke
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: s5zPGRTcqiDhbNfiVsJcRj28TPtanwNX
+      # POSTGRES_PASSWORD comentado — no commitear secretos ni apuntar a un host fijo
+      POSTGRES_PASSWORD: ""
     ports:
       - "5432:5432"
     volumes:

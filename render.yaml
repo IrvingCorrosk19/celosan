@@ -10,10 +10,11 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
-      - key: ConnectionStrings__DefaultConnection
-        sync: false
-      - key: DATABASE_URL
-        sync: false
+      # Conexiones comentadas: no se inyectan desde este archivo.
+      # - key: ConnectionStrings__DefaultConnection
+      #   sync: false
+      # - key: DATABASE_URL
+      #   sync: false
       # Cloudinary (una sola vez en dashboard.cloudinary.com). Válido cualquiera de los dos formatos:
       # - Cloudinary__CloudName / __ApiKey / __ApiSecret  (.NET)
       # - CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET  (alias soportado por la app)
