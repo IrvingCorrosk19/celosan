@@ -11,18 +11,18 @@ public static class PostgresConnectionResolver
 {
     public static string? Resolve(IConfiguration configuration)
     {
-        // Conexiones comentadas / vacías: no se usa localhost embebido ni Render.
-        // DATABASE_URL, POSTGRES_URL y ConnectionStrings__DefaultConnection quedan desactivados
-        // para no apuntar a producción desde este entorno.
+        // El repo no guarda cadenas. En local appsettings va vacío.
+        // En Render se usa solo lo que inyecte el entorno (DATABASE_URL / ConnectionStrings__*).
         var candidates = new[]
         {
             configuration.GetConnectionString("DefaultConnection"),
             configuration["ConnectionStrings:DefaultConnection"],
-            // Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"),
-            // configuration["DATABASE_URL"],
-            // Environment.GetEnvironmentVariable("DATABASE_URL"),
-            // configuration["POSTGRES_URL"],
-            // Environment.GetEnvironmentVariable("POSTGRES_URL")
+            configuration["ConnectionStrings__DefaultConnection"],
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"),
+            configuration["DATABASE_URL"],
+            Environment.GetEnvironmentVariable("DATABASE_URL"),
+            configuration["POSTGRES_URL"],
+            Environment.GetEnvironmentVariable("POSTGRES_URL")
         };
 
         foreach (var candidate in candidates)

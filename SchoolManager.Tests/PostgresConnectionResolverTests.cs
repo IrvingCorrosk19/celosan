@@ -22,7 +22,7 @@ public class PostgresConnectionResolverTests
     }
 
     [Fact]
-    public void Resolve_ignores_database_url_when_appsettings_is_empty()
+    public void Resolve_skips_empty_appsettings_and_uses_database_url()
     {
         var previous = Environment.GetEnvironmentVariable("DATABASE_URL");
         Environment.SetEnvironmentVariable(
@@ -38,7 +38,11 @@ public class PostgresConnectionResolverTests
                 .Build();
 
             var resolved = PostgresConnectionResolver.Resolve(config);
-            Assert.Null(resolved);
+            Assert.NotNull(resolved);
+            Assert.Contains("Host=dpg-example.oregon-postgres.render.com", resolved);
+            Assert.Contains("Database=schoolmanager_daqf", resolved);
+            Assert.Contains("Username=admin", resolved);
+            Assert.Contains("SSL Mode=Require", resolved);
         }
         finally
         {
@@ -47,7 +51,7 @@ public class PostgresConnectionResolverTests
     }
 
     [Fact]
-    public void Resolve_ignores_connectionstrings_environment_variable()
+    public void Resolve_uses_connectionstrings_environment_variable()
     {
         var previous = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
         Environment.SetEnvironmentVariable(
@@ -57,7 +61,8 @@ public class PostgresConnectionResolverTests
         {
             var config = new ConfigurationBuilder().AddInMemoryCollection().Build();
             var resolved = PostgresConnectionResolver.Resolve(config);
-            Assert.Null(resolved);
+            Assert.NotNull(resolved);
+            Assert.Contains("Host=render-host", resolved);
         }
         finally
         {
