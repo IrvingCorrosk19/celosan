@@ -71,6 +71,33 @@ public class PostgresConnectionResolverTests
     }
 
     [Fact]
+    public void Resolve_finds_postgres_url_in_alternate_environment_variable()
+    {
+        var previous = Environment.GetEnvironmentVariable("RENDER_DATABASE_URL");
+        Environment.SetEnvironmentVariable(
+            "RENDER_DATABASE_URL",
+            "postgresql://admin:secret@dpg-internal/schoolmanager_daqf");
+        try
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:DefaultConnection"] = ""
+                })
+                .Build();
+
+            var resolved = PostgresConnectionResolver.Resolve(config);
+            Assert.NotNull(resolved);
+            Assert.Contains("Host=dpg-internal", resolved);
+            Assert.Contains("Database=schoolmanager_daqf", resolved);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("RENDER_DATABASE_URL", previous);
+        }
+    }
+
+    [Fact]
     public void Normalize_converts_postgres_url_in_connection_string()
     {
         var npgsql = PostgresConnectionResolver.Normalize(

@@ -9,27 +9,76 @@ namespace SchoolManager.Infrastructure;
 /// </summary>
 public static class PostgresConnectionResolver
 {
+    public static readonly string[] KnownEnvKeys =
+    {
+        "ConnectionStrings__DefaultConnection",
+        "DATABASE_URL",
+        "POSTGRES_URL",
+        "POSTGRES_CONNECTION",
+        "DATABASE_INTERNAL_URL",
+        "RENDER_DATABASE_URL"
+    };
+
     public static string? Resolve(IConfiguration configuration)
     {
-        // El repo no guarda cadenas. En local appsettings va vacío.
-        // En Render se usa solo lo que inyecte el entorno (DATABASE_URL / ConnectionStrings__*).
-        var candidates = new[]
+        // El repo no guarda cadenas. appsettings vacío se ignora.
+        // En Render se usa lo que inyecte el entorno, con nombres flexibles.
+        var candidates = new List<string?>
         {
             configuration.GetConnectionString("DefaultConnection"),
             configuration["ConnectionStrings:DefaultConnection"],
             configuration["ConnectionStrings__DefaultConnection"],
-            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"),
             configuration["DATABASE_URL"],
-            Environment.GetEnvironmentVariable("DATABASE_URL"),
-            configuration["POSTGRES_URL"],
-            Environment.GetEnvironmentVariable("POSTGRES_URL")
+            configuration["POSTGRES_URL"]
         };
+
+        foreach (var key in KnownEnvKeys)
+            candidates.Add(GetEnvironmentVariableIgnoreCase(key));
 
         foreach (var candidate in candidates)
         {
             var normalized = Normalize(candidate);
             if (!string.IsNullOrWhiteSpace(normalized))
                 return normalized;
+        }
+
+        return FindPostgresUrlInEnvironment();
+    }
+
+    public static string DescribeAvailableKeys()
+    {
+        var parts = KnownEnvKeys.Select(key =>
+            $"{key}={(string.IsNullOrWhiteSpace(GetEnvironmentVariableIgnoreCase(key)) ? "ausente" : "presente")}");
+        return string.Join(", ", parts);
+    }
+
+    private static string? GetEnvironmentVariableIgnoreCase(string name)
+    {
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            var key = entry.Key?.ToString();
+            if (key != null && key.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return entry.Value?.ToString();
+        }
+
+        return null;
+    }
+
+    private static string? FindPostgresUrlInEnvironment()
+    {
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            var normalized = Normalize(entry.Value?.ToString());
+            if (!string.IsNullOrWhiteSpace(normalized)
+                && (normalized.Contains("Host=", StringComparison.OrdinalIgnoreCase)
+                    || normalized.Contains("Username=", StringComparison.OrdinalIgnoreCase)))
+            {
+                var key = entry.Key?.ToString() ?? "";
+                if (key.Contains("DATABASE", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("POSTGRES", StringComparison.OrdinalIgnoreCase)
+                    || key.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase))
+                    return normalized;
+            }
         }
 
         return null;

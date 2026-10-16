@@ -183,10 +183,12 @@ builder.Services.AddAntiforgery(options =>
     options.HeaderName = "RequestVerificationToken";
 });
 
-// El repo no guarda cadenas. Render debe inyectar DATABASE_URL o ConnectionStrings__DefaultConnection.
+builder.Configuration.AddEnvironmentVariables();
+// El repo no guarda cadenas. Render debe inyectar DATABASE_URL (Add from Database) u otra variable de entorno.
 var npgsqlConnectionString = PostgresConnectionResolver.Resolve(builder.Configuration)
     ?? throw new InvalidOperationException(
-        "Falta cadena de base de datos. En Render defina DATABASE_URL o ConnectionStrings__DefaultConnection.");
+        "Falta cadena de base de datos. En Render: Environment → Add Environment Variable → Add from Database, y cree DATABASE_URL. "
+        + PostgresConnectionResolver.DescribeAvailableKeys());
 builder.Services.AddDbContext<SchoolDbContext>(options =>
 {
     options.UseNpgsql(npgsqlConnectionString);

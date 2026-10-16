@@ -10,6 +10,8 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      # En el dashboard: Environment → Add from Database (Postgres) → DATABASE_URL.
+      # sync:false evita borrar el valor que ya esté en Render.
       - key: ConnectionStrings__DefaultConnection
         sync: false
       - key: DATABASE_URL
